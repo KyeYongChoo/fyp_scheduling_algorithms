@@ -1,1 +1,4 @@
-import FypSchedulingAlgorithms.Basic
+import FypSchedulingAlgorithms.Process
+import FypSchedulingAlgorithms.SchedState
+import FypSchedulingAlgorithms.Step
+import FypSchedulingAlgorithms.Test
