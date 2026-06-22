@@ -1,0 +1,19 @@
+name = "fyp_scheduling_algorithms"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["FypSchedulingAlgorithms"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+maxSynthPendingDepth = 3
+weak.linter.style.whitespace = false
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.32.0-rc1"
+
+[[lean_lib]]
+name = "FypSchedulingAlgorithms"
