@@ -1,9 +1,9 @@
 import FypSchedulingAlgorithms.SchedState
-import FypSchedulingAlgorithms.Step
+import FypSchedulingAlgorithms.AperiodicSchedulers.Step
 import Std.Data.String
 
 -- Test data: processes arriving at different times with different burst times
-def testProcesses : List Process := [
+def testProcesses : List ProcessGicProcess := [
   { id := 1, arrival := 0, burst := 8, remaining := 8 },
   { id := 2, arrival := 1, burst := 4, remaining := 4 },
   { id := 3, arrival := 2, burst := 2, remaining := 2 },
@@ -20,13 +20,13 @@ def initState : SchedState := {
 }
 
 -- Helper: add processes that have arrived by a given time to ready queue
-def addArrivals (s : SchedState) (processes : List Process) : SchedState := {
+def addArrivals (s : SchedState) (processes : List ProcessGicProcess) : SchedState := {
   s with ready := s.ready ++ (processes.filter fun p => p.arrival = s.time)
 }
 
 -- Run scheduler for n steps, adding arrivals dynamically
 def runSteps (scheduler : SchedState → SchedState) (n : Nat)
-             (processes : List Process) : List SchedState :=
+             (processes : List ProcessGicProcess) : List SchedState :=
   let rec loop (steps : Nat) (state : SchedState) (states : List SchedState) : List SchedState :=
     if steps = 0 then states
     else
@@ -36,7 +36,7 @@ def runSteps (scheduler : SchedState → SchedState) (n : Nat)
   loop n initState [initState]
 
 -- Calculate how many ticks this process has used
-def ticksUsed (p : Process) : Nat :=
+def ticksUsed (p : ProcessGicProcess) : Nat :=
   p.burst - p.remaining
 
 -- Display state with tick counts
@@ -91,12 +91,12 @@ def writeCSV (filename : String) (content : String) : IO Unit := do
 -- For RR, need to track quantum usage, so there is a separate function
 
 -- Add arrivals to the SchedState inside RRState
-def addArrivalsRR (rs : RRState) (processes : List Process) : RRState :=
+def addArrivalsRR (rs : RRState) (processes : List ProcessGicProcess) : RRState :=
   let newSched := addArrivals rs.sched processes
   { rs with sched := newSched }
 
 def runStepsRR (quantum : Nat) (n : Nat)
-               (processes : List Process) : List SchedState :=
+               (processes : List ProcessGicProcess) : List SchedState :=
   let rec loop (steps : Nat) (rrState : RRState) (states : List SchedState) : List SchedState :=
     if steps = 0 then states
     else
