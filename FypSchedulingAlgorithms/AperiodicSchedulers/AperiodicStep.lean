@@ -1,70 +1,18 @@
+/-
+Copyright (c) 2026 Choo Kye Yong. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Choo Kye Yong
+-/
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
-
--- Assumes these exist:
--- structure Process where name : String; remaining : Nat
--- structure SchedState where time : Nat; running : Option Process; ready : List Process; completed : List Process
--- deriving BEq on Process
-
--- ─── Vanilla (non-preemptive, policy chosen by `select`) ─────────────────────
-def non_preemptive_step (select : List AperiodicProcess → Option AperiodicProcess) : SchedState → SchedState :=
-  fun s =>
-    match s.running with
-    | none =>
-      match select s.ready with          -- ask the policy for a choice
-      | none   => { s with time := s.time + 1 }   -- idle tick (ready is empty)
-      | some p => { s with time    := s.time + 1,
-                           running := some p,
-                           ready   := s.ready.removeFirst p }
-    | some p =>
-      if p.remaining ≤ 1 then
-        { s with time      := s.time + 1,
-                 running   := none,
-                 completed := s.completed ++ [{ p with remaining := 0 }] }
-      else
-        { s with time    := s.time + 1,
-                 running := some { p with remaining := p.remaining - 1 } }
+import FypSchedulingAlgorithms.Step
 
 -- ─── SRTF (preemptive: on every tick, pick shortest remaining time) ───────────
-def stepSRTF : SchedState → SchedState :=
-  fun s =>
-    -- gather all candidates: currently running (if any) + ready queue
-    let candidates : List AperiodicProcess :=
-      s.ready ++ (s.running.toList)
-    let shortest : Option AperiodicProcess :=
-      candidates.foldl (fun best p =>
-        match best with
-        | none   => some p
-        | some b => if p.remaining < b.remaining then some p else some b)
-        none
-    match shortest with
-    | none =>                                        -- nothing to run
-      { s with time := s.time + 1 }
-    | some p =>
-      -- preempt: put the old runner back in ready (if it's different)
-      let newReady : List AperiodicProcess :=
-        match s.running with
-        | none      => s.ready.removeFirst p
-        | some curr =>
-          if curr == p then s.ready                 -- same process keeps running
-          else s.ready.removeFirst p ++ [curr]      -- preempt: evict curr
-      if p.remaining ≤ 1 then
-        { s with time      := s.time + 1,
-                 running   := none,
-                 ready     := newReady,
-                 completed := s.completed ++ [{ p with remaining := 0 }] }
-      else
-        { s with time    := s.time + 1,
-                 running := some { p with remaining := p.remaining - 1 },
-                 ready   := newReady }
+def stepSRTF : SchedState -> SchedState:=
+  stepPreemptive AperiodicProcess (fun p => 1/(p.remaining))
 
 -- ─── Round Robin ─────────────────────────────────────────────────────────────
 -- RR needs a quantum counter; extend SchedState or use a wrapper
-structure RRState where
-  sched      : SchedState
-  quantum    : Nat          -- max ticks per slice
-  ticksUsed  : Nat          -- ticks the current process has used this slice
-  deriving Repr
 
 def stepRR (q : Nat) : RRState → RRState :=
   fun rs =>
@@ -108,7 +56,7 @@ def selectFCFS : List AperiodicProcess → Option AperiodicProcess
   | p :: _ => some p
 
 def stepFCFS : SchedState → SchedState :=
-  non_preemptive_step selectFCFS
+  stepNonPreemptive selectFCFS
 
 def selectSJF : List AperiodicProcess → Option AperiodicProcess :=
   fun ps =>
@@ -119,4 +67,4 @@ def selectSJF : List AperiodicProcess → Option AperiodicProcess :=
       none
 
 def stepSJF : SchedState → SchedState :=
-  non_preemptive_step selectSJF
+  stepNonPreemptive selectSJF

@@ -1,8 +1,31 @@
+/-
+Copyright (c) 2026 Choo Kye Yong. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Choo Kye Yong
+-/
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
+import Mathlib
+
+/-!
+# Scheduling Generic Functions
+
+This file defines `stepNonPreemptive` and `stepPreemptive`,
+which are used to define more specific scheduling algorithms and takes
+an argument `select` or `priority_fun`.
+
+`select` is used for `stepNonPreemptive` rather than `priority_fun`
+because FCFS priority is not dependent on the processes but rather the
+order in which it arrives.
+
+The preemptive version of FCFS, which is Round Robin, differs enough from
+other preemptive algorithms that it is built independently from
+`stepNonPreemptive` and `stepPreemptive`
+-/
 
 -- Non-preemptive schedulers
-def step (select : List AperiodicProcess → Option AperiodicProcess) : SchedState → SchedState :=
+def stepNonPreemptive (select : List AperiodicProcess → Option AperiodicProcess) :
+  SchedState → SchedState :=
   fun s =>
     match s.running with
     | none =>
@@ -21,7 +44,10 @@ def step (select : List AperiodicProcess → Option AperiodicProcess) : SchedSta
                  running := some { p with remaining := p.remaining - 1 } }
 
 -- preemptive schedulers:
-def stepPreemptive (process_type : Type) [Process process_type] (priority_func : process_type -> Nat): SchedStateG process_type -> SchedStateG process_type :=
+-- Higher periority number means execute first
+def stepPreemptive (process_type : Type) [Process process_type]
+  (priority_func : process_type → ℚ) :
+  SchedStateG process_type → SchedStateG process_type :=
   fun state_before =>
     let candidates := state_before.ready ++ (state_before.running.toList)
     let next_run := candidates.foldl (fun best p =>
@@ -46,48 +72,24 @@ def stepPreemptive (process_type : Type) [Process process_type] (priority_func :
               time := state_before.time + 1
               ready := newReady
               running := none
-              completed := Process.onComplete p state_before.completed
+              completed := state_before.completed ++ [Process.tick p]
           }
         else
           {
             state_before with
               time := state_before.time + 1
               ready := newReady
-              running := some p
+              running := some (Process.tick p)
           }
 
-
-
-
--- ─── SRTF (preemptive: on every tick, pick shortest remaining time) ───────────
-def stepSRTF : SchedState → SchedState :=
-  fun s =>
-    -- gather all candidates: currently running (if any) + ready queue
-    let candidates : List AperiodicProcess :=
-      s.ready ++ (s.running.toList)
-    let shortest : Option AperiodicProcess :=
-      candidates.foldl (fun best p =>
-        match best with
-        | none   => some p
-        | some b => if p.remaining < b.remaining then some p else some b)
-        none
-    match shortest with
-    | none =>                                        -- nothing to run
-      { s with time := s.time + 1 }
-    | some p =>
-      -- preempt: put the old runner back in ready (if it's different)
-      let newReady : List AperiodicProcess :=
-        match s.running with
-        | none      => s.ready.removeFirst p
-        | some curr =>
-          if curr == p then s.ready                 -- same process keeps running
-          else s.ready.removeFirst p ++ [curr]      -- preempt: evict curr
-      if p.remaining ≤ 1 then
-        { s with time      := s.time + 1,
-                 running   := none,
-                 ready     := newReady,
-                 completed := s.completed ++ [{ p with remaining := 0 }] }
-      else
-        { s with time    := s.time + 1,
-                 running := some { p with remaining := p.remaining - 1 },
-                 ready   := newReady }
+-- Run scheduler for n steps, adding arrivals dynamically
+def runSteps {α} [SchedStateMethods α] (scheduler : SchedStateG α → SchedStateG α) (n : Nat)
+             (processes : List α) : List (SchedStateG α) :=
+  let state_type := SchedStateG α
+  let rec loop (steps : Nat) (state : state_type) (states : List state_type) : List state_type :=
+    if steps = 0 then states
+    else
+      let newState := SchedStateMethods.add_arrival state processes
+      let nextState := scheduler newState
+      loop (steps - 1) nextState (states ++ [nextState])
+  loop n SchedStateMethods.init [SchedStateMethods.init]
