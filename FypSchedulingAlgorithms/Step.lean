@@ -83,8 +83,8 @@ def stepPreemptive (process_type : Type) [Process process_type]
           }
 
 -- Run scheduler for n steps, adding arrivals dynamically
-def runSteps {α} [SchedStateMethods α] (scheduler : SchedStateG α → SchedStateG α) (n : Nat)
-             (processes : List α) : List (SchedStateG α) :=
+def runSteps {α} [SchedStateMethods α] (processes : List α)
+  (scheduler : SchedStateG α → SchedStateG α) (n : Nat): List (SchedStateG α) :=
   let state_type := SchedStateG α
   let rec loop (steps : Nat) (state : state_type) (states : List state_type) : List state_type :=
     if steps = 0 then states
