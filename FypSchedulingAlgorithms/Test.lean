@@ -51,8 +51,8 @@ def bothFail : List PeriodicProcess := [
   { id := 2, arrival := 0, period := 5, burst := 3, deadline := 5, remaining := 3 }
 ]
 
--- run SRTF for 30 ticks
-#eval (runSteps stepSRTF 30 aperiodicArrivals).map fun s =>
+-- run SRTF for 30 (default 30) ticks
+#eval (runSteps aperiodicArrivals stepSRTF).map fun s =>
   (s.time, s.running.map (·.id), s.ready.map (·.id), s.completed.length)
 
 -- # CSV output
@@ -82,44 +82,27 @@ def outputCSV {α} [Process α] [SchedStateMethods α] (states : List (SchedStat
   let rows := states.map stateToCSV
   (header :: rows) |> "\n".intercalate
 
-def writeCSV (filename : String) (content : String) : IO Unit := do
-  IO.FS.writeFile filename content
+def writeCSV (filename : String) (content : String) (dir: String := "SampleSchedules/") (subdir: String := ""): IO Unit := do
+  IO.FS.createDirAll (dir ++ subdir)
+  IO.FS.writeFile (dir ++ subdir ++ "/" ++ filename) content
 
 set_option linter.hashCommand false
 
-#eval writeCSV "SRTFschedule.csv" (outputCSV (runSteps stepSRTF 30 aperiodicArrivals))
+#eval writeCSV "SRTFschedule.csv" (outputCSV (runSteps aperiodicArrivals stepSRTF))
 
-#eval writeCSV "SJFschedule.csv" (outputCSV (runSteps stepSJF 30 aperiodicArrivals))
+#eval writeCSV "SJFschedule.csv" (outputCSV (runSteps aperiodicArrivals stepSJF))
 
-#eval writeCSV "FCFSschedule.csv" (outputCSV (runSteps stepFCFS 30 aperiodicArrivals))
+#eval writeCSV "FCFSschedule.csv" (outputCSV (runSteps aperiodicArrivals stepFCFS))
 
--- # For RR, need to track quantum usage, so there is a separate function
-
--- Add arrivals to the SchedState inside RRState
-def addArrivalsRR [SchedStateMethods AperiodicProcess] (rs : RRState) (processes : List AperiodicProcess): RRState :=
-  let newSched := SchedStateMethods.add_arrival rs.sched processes
-  { rs with sched := newSched }
-
-def runStepsRR (quantum : Nat) (n : Nat) [SchedStateMethods AperiodicProcess]
-               (processes : List AperiodicProcess) : List SchedState :=
-  let rec loop (steps : Nat) (rrState : RRState) (states : List SchedState) : List SchedState :=
-    if steps = 0 then states
-    else
-      let newRRState := addArrivalsRR rrState processes
-      let nextRRState := stepRR quantum newRRState
-      loop (steps - 1) nextRRState (states ++ [nextRRState.sched])
-  let initialRR : RRState := { sched := SchedStateMethods.init, quantum := quantum, ticksUsed := 0 }
-  loop n initialRR [SchedStateMethods.init]
-
-#eval writeCSV "RRschedule_q3.csv" (outputCSV (runStepsRR 3 30 aperiodicArrivals))
+#eval writeCSV "RRschedule_q3.csv" (outputCSV (runStepsRR (quantum:=3) (processes := aperiodicArrivals)))
 
 -- # Periodic Schedulers
-#eval writeCSV "EDFscheduleSingleRecurrent.csv" (outputCSV (runSteps (α := PeriodicProcess) stepEDF 30 singleRecurrentProcess))
-#eval writeCSV "EDFscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runSteps stepEDF 30 rmsSucceedsEdfSucceeds))
-#eval writeCSV "EDFscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runSteps stepEDF 30 rmsFailsEdfSucceeds))
-#eval writeCSV "EDFscheduleBothFail.csv" (outputCSV (runSteps stepEDF 30 bothFail))
+#eval writeCSV "EDFscheduleSingleRecurrent.csv" (outputCSV (runSteps (α := PeriodicProcess) singleRecurrentProcess stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runSteps rmsSucceedsEdfSucceeds stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runSteps rmsFailsEdfSucceeds stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleBothFail.csv" (outputCSV (runSteps bothFail stepEDF)) (subdir := "EDF")
 
-#eval writeCSV "RMSscheduleSingleRecurrent.csv" (outputCSV (runSteps (α := PeriodicProcess) stepRMS 30 singleRecurrentProcess))
-#eval writeCSV "RMSscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runSteps (α := PeriodicProcess) stepRMS 30 rmsSucceedsEdfSucceeds))
-#eval writeCSV "RMSscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runSteps stepRMS 30 rmsFailsEdfSucceeds))
-#eval writeCSV "RMSscheduleBothFail.csv" (outputCSV (runSteps stepRMS 30 bothFail))
+#eval writeCSV "RMSscheduleSingleRecurrent.csv" (outputCSV (runSteps (α := PeriodicProcess) singleRecurrentProcess stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runSteps (α := PeriodicProcess) rmsSucceedsEdfSucceeds stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runSteps rmsFailsEdfSucceeds stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleBothFail.csv" (outputCSV (runSteps bothFail stepRMS)) (subdir := "RMS")

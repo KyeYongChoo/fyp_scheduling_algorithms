@@ -23,6 +23,8 @@ other preemptive algorithms that it is built independently from
 `stepNonPreemptive` and `stepPreemptive`
 -/
 
+def default_num_steps := 30
+
 -- Non-preemptive schedulers
 def stepNonPreemptive (select : List AperiodicProcess → Option AperiodicProcess) :
   SchedState → SchedState :=
@@ -84,7 +86,7 @@ def stepPreemptive (process_type : Type) [Process process_type]
 
 -- Run scheduler for n steps, adding arrivals dynamically
 def runSteps {α} [SchedStateMethods α] (processes : List α)
-  (scheduler : SchedStateG α → SchedStateG α) (n : Nat): List (SchedStateG α) :=
+  (scheduler : SchedStateG α → SchedStateG α) (num_steps := default_num_steps): List (SchedStateG α) :=
   let state_type := SchedStateG α
   let rec loop (steps : Nat) (state : state_type) (states : List state_type) : List state_type :=
     if steps = 0 then states
@@ -92,4 +94,4 @@ def runSteps {α} [SchedStateMethods α] (processes : List α)
       let newState := SchedStateMethods.add_arrival state processes
       let nextState := scheduler newState
       loop (steps - 1) nextState (states ++ [nextState])
-  loop n SchedStateMethods.init [SchedStateMethods.init]
+  loop num_steps SchedStateMethods.init [SchedStateMethods.init]

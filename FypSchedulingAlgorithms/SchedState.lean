@@ -46,11 +46,18 @@ instance : SchedStateMethods PeriodicProcess where
     let tickField := ",".intercalate tickInfo
     s!",{tickField}"
 
+-- # For RR, need to track quantum usage, so there is a separate function
+
 structure RRState where
   sched      : SchedState
   quantum    : Nat          -- max ticks per slice
   ticksUsed  : Nat          -- ticks the current process has used this slice
   deriving Repr
+
+-- Add arrivals to the SchedState inside RRState
+def addArrivalsRR [SchedStateMethods AperiodicProcess] (rs : RRState) (processes : List AperiodicProcess): RRState :=
+  let newSched := SchedStateMethods.add_arrival rs.sched processes
+  { rs with sched := newSched }
 
 -- remove the first matching element from a list - Used for preemptive scheduling
 def List.removeFirst [BEq α] (a : α) : List α → List α

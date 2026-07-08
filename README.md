@@ -2,10 +2,6 @@
 
 ## TODO
 
-organise the csv files
-
-refactor the Process and Schedstate to just use Typeclasses more consistently
-
 1. generalise to periodic/recurrent processes that arrive repeatedly infinitely
 1.1 Rate Monotonic Scheduler
 1.2 Earliest Deadline First Scheduler
@@ -77,5 +73,5 @@ refactor the Process and Schedstate to just use Typeclasses more consistently
 
 Maybe could act on these ideas later
 
-\-- show that a priority function is static or dynamic 
+\-- show that a priority function is static or dynamic
 

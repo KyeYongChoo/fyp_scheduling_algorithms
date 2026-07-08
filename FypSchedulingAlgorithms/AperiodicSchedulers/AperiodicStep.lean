@@ -51,6 +51,17 @@ def stepRR (q : Nat) : RRState → RRState :=
                                                             p.remaining - 1 } },
                   ticksUsed := rs.ticksUsed + 1 }
 
+def runStepsRR (quantum : Nat) (num_steps := default_num_steps) [SchedStateMethods AperiodicProcess]
+               (processes : List AperiodicProcess) : List SchedState :=
+  let rec loop (steps : Nat) (rrState : RRState) (states : List SchedState) : List SchedState :=
+    if steps = 0 then states
+    else
+      let newRRState := addArrivalsRR rrState processes
+      let nextRRState := stepRR quantum newRRState
+      loop (steps - 1) nextRRState (states ++ [nextRRState.sched])
+  let initialRR : RRState := { sched := SchedStateMethods.init, quantum := quantum, ticksUsed := 0 }
+  loop num_steps initialRR [SchedStateMethods.init]
+
 def selectFCFS : List AperiodicProcess → Option AperiodicProcess
   | [] => none
   | p :: _ => some p
