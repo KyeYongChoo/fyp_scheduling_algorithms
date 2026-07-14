@@ -19,40 +19,50 @@ intended.
 -- # Test Data
 
 -- Aperiodic Test data
-def aperiodicArrivals : List AperiodicProcess := [
-  { id := 1, arrival := 0, burst := 8, remaining := 8 },
-  { id := 2, arrival := 1, burst := 4, remaining := 4 },
-  { id := 3, arrival := 2, burst := 2, remaining := 2 },
-  { id := 4, arrival := 3, burst := 6, remaining := 6 },
-  { id := 5, arrival := 5, burst := 3, remaining := 3 },
-]
+def aperiodicArrivals [Process AperiodicProcess]: Nat → List AperiodicProcess :=
+  Process.convert_to_arrival_stream
+  [
+    { id := 1, arrival := 0, burst := 8, remaining := 8 },
+    { id := 2, arrival := 1, burst := 4, remaining := 4 },
+    { id := 3, arrival := 2, burst := 2, remaining := 2 },
+    { id := 4, arrival := 3, burst := 6, remaining := 6 },
+    { id := 5, arrival := 5, burst := 3, remaining := 3 },
+  ]
 
 -- Periodic Test data
-def singleRecurrentProcess : List PeriodicProcess := [
-  { id := 1, arrival := 0, period := 6,  burst := 3, deadline := 4,  remaining := 3 }
-]
+def singleRecurrentProcess [Process PeriodicProcess]: Nat → List PeriodicProcess :=
+  Process.convert_to_arrival_stream
+  [
+    { id := 1, arrival := 0, period := 6,  burst := 3, deadline := 4,  remaining := 3 }
+  ]
 
 -- Utilization = 1/4 + 2/6 ≈ 0.583, under the 2-task RM bound (2(2^(1/2)−1) ≈ 0.828)
-def rmsSucceedsEdfSucceeds : List PeriodicProcess := [
-  { id := 1, arrival := 0, period := 4,  burst := 1, deadline := 4,  remaining := 1 },
-  { id := 2, arrival := 0, period := 6,  burst := 2, deadline := 6,  remaining := 2 }
-]
+def rmsSucceedsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProcess :=
+  Process.convert_to_arrival_stream
+  [
+    { id := 1, arrival := 0, period := 4,  burst := 1, deadline := 4,  remaining := 1 },
+    { id := 2, arrival := 0, period := 6,  burst := 2, deadline := 6,  remaining := 2 }
+  ]
 
 -- Utilization = 2/5 + 4/7 ≈ 0.971, above the 2-task RM bound (2(2^(1/2)−1) ≈ 0.828)
 -- and will trigger rms deadline miss
-def rmsFailsEdfSucceeds : List PeriodicProcess := [
-  { id := 1, arrival := 0, period := 5, burst := 2, deadline := 5, remaining := 2 },
-  { id := 2, arrival := 0, period := 7, burst := 4, deadline := 7, remaining := 4 }
-]
+def rmsFailsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProcess :=
+  Process.convert_to_arrival_stream
+  [
+    { id := 1, arrival := 0, period := 5, burst := 2, deadline := 5, remaining := 2 },
+    { id := 2, arrival := 0, period := 7, burst := 4, deadline := 7, remaining := 4 }
+  ]
 
 -- Utilization = 3/4 + 3/5 = 1.35 > 1, impossible to schedule
-def bothFail : List PeriodicProcess := [
-  { id := 1, arrival := 0, period := 4, burst := 3, deadline := 4, remaining := 3 },
-  { id := 2, arrival := 0, period := 5, burst := 3, deadline := 5, remaining := 3 }
-]
+def bothFail [Process PeriodicProcess]: Nat → List PeriodicProcess :=
+  Process.convert_to_arrival_stream
+  [
+    { id := 1, arrival := 0, period := 4, burst := 3, deadline := 4, remaining := 3 },
+    { id := 2, arrival := 0, period := 5, burst := 3, deadline := 5, remaining := 3 }
+  ]
 
 -- run SRTF for 30 (default 30) ticks
-#eval (runSteps aperiodicArrivals stepSRTF).map fun s =>
+#eval (runStepsAccumulateResults aperiodicArrivals stepSRTF).map fun s =>
   (s.time, s.running.map (·.id), s.ready.map (·.id), s.completed.length)
 
 -- # CSV output
@@ -88,21 +98,21 @@ def writeCSV (filename : String) (content : String) (dir: String := "SampleSched
 
 set_option linter.hashCommand false
 
-#eval writeCSV "SRTFschedule.csv" (outputCSV (runSteps aperiodicArrivals stepSRTF))
+#eval writeCSV "SRTFschedule.csv" (outputCSV (runStepsAccumulateResults aperiodicArrivals stepSRTF))
 
-#eval writeCSV "SJFschedule.csv" (outputCSV (runSteps aperiodicArrivals stepSJF))
+#eval writeCSV "SJFschedule.csv" (outputCSV (runStepsAccumulateResults aperiodicArrivals stepSJF))
 
-#eval writeCSV "FCFSschedule.csv" (outputCSV (runSteps aperiodicArrivals stepFCFS))
+#eval writeCSV "FCFSschedule.csv" (outputCSV (runStepsAccumulateResults aperiodicArrivals stepFCFS))
 
-#eval writeCSV "RRschedule_q3.csv" (outputCSV (runStepsRR (quantum:=3) (processes := aperiodicArrivals)))
+#eval writeCSV "RRschedule_q3.csv" (outputCSV (runStepsRRAccumulateResults (quantum:=3) (arrivalStream := aperiodicArrivals) (num_steps:= 30)))
 
 -- # Periodic Schedulers
-#eval writeCSV "EDFscheduleSingleRecurrent.csv" (outputCSV (runSteps (α := PeriodicProcess) singleRecurrentProcess stepEDF)) (subdir := "EDF")
-#eval writeCSV "EDFscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runSteps rmsSucceedsEdfSucceeds stepEDF)) (subdir := "EDF")
-#eval writeCSV "EDFscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runSteps rmsFailsEdfSucceeds stepEDF)) (subdir := "EDF")
-#eval writeCSV "EDFscheduleBothFail.csv" (outputCSV (runSteps bothFail stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleSingleRecurrent.csv" (outputCSV (runStepsAccumulateResults singleRecurrentProcess stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsSucceedsEdfSucceeds stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsFailsEdfSucceeds stepEDF)) (subdir := "EDF")
+#eval writeCSV "EDFscheduleBothFail.csv" (outputCSV (runStepsAccumulateResults bothFail stepEDF)) (subdir := "EDF")
 
-#eval writeCSV "RMSscheduleSingleRecurrent.csv" (outputCSV (runSteps (α := PeriodicProcess) singleRecurrentProcess stepRMS)) (subdir := "RMS")
-#eval writeCSV "RMSscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runSteps (α := PeriodicProcess) rmsSucceedsEdfSucceeds stepRMS)) (subdir := "RMS")
-#eval writeCSV "RMSscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runSteps rmsFailsEdfSucceeds stepRMS)) (subdir := "RMS")
-#eval writeCSV "RMSscheduleBothFail.csv" (outputCSV (runSteps bothFail stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleSingleRecurrent.csv" (outputCSV (runStepsAccumulateResults singleRecurrentProcess stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsSucceedsEdfSucceeds stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsFailsEdfSucceeds stepRMS)) (subdir := "RMS")
+#eval writeCSV "RMSscheduleBothFail.csv" (outputCSV (runStepsAccumulateResults bothFail stepRMS)) (subdir := "RMS")

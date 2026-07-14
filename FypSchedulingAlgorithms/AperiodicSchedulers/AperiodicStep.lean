@@ -12,7 +12,7 @@ def stepSRTF : SchedState -> SchedState:=
   stepPreemptive AperiodicProcess (fun p => 1/(p.remaining))
 
 -- ─── Round Robin ─────────────────────────────────────────────────────────────
--- RR needs a quantum counter; extend SchedState or use a wrapper
+-- RR needs a quantum counter; hence the repeated code
 
 def stepRR (q : Nat) : RRState → RRState :=
   fun rs =>
@@ -20,47 +20,67 @@ def stepRR (q : Nat) : RRState → RRState :=
     match s.running with
     | none =>
       match s.ready with
-      | []      => { rs with sched := { s with time := s.time + 1 } }   -- idle
-      | p :: ps => { rs with sched     := { s with time    := s.time + 1,
-                                                   running := some p,
-                                                   ready   := ps },
-                             ticksUsed := 1 }
+      | []      => { rs with sched := { s with time := s.time + 1 } }
+      | p :: ps =>
+        { rs with
+            sched     := { s with time := s.time + 1, running := some p, ready := ps }
+            ticksUsed := 0 }
     | some p =>
-      if p.remaining ≤ 1 then                           -- process finishes
-        { rs with sched     := { s with time      := s.time + 1,
-                                        running   := none,
-                                        completed := s.completed ++
-                                                       [{ p with remaining := 0 }] },
-                  ticksUsed := 0 }
-      else if rs.ticksUsed ≥ q then                     -- quantum expired → preempt
+      if p.remaining ≤ 1 then
+        -- process finishes: immediately dispatch next, no idle gap
+        let completedProcess := { p with remaining := 0 }
         match s.ready with
-        | []      =>                                     -- no one else: keep running
-          { rs with sched     := { s with time    := s.time + 1,
-                                          running := some { p with remaining :=
-                                                              p.remaining - 1 } },
-                    ticksUsed := 1 }
-        | nx :: ps =>                                    -- rotate
-          { rs with sched     := { s with time    := s.time + 1,
-                                          running := some nx,
-                                          ready   := ps ++ [{ p with remaining :=
-                                                                p.remaining - 1 }] },
-                    ticksUsed := 1 }
-      else                                               -- normal tick
-        { rs with sched     := { s with time    := s.time + 1,
-                                        running := some { p with remaining :=
-                                                            p.remaining - 1 } },
-                  ticksUsed := rs.ticksUsed + 1 }
+        | []      =>
+          { rs with
+              sched     := { s with
+                              time      := s.time + 1
+                              running   := none
+                              completed := s.completed ++ [completedProcess] }
+              ticksUsed := 0 }
+        | nx :: ps =>
+          { rs with
+              sched     := { s with
+                              time      := s.time + 1
+                              running   := some nx
+                              ready     := ps
+                              completed := s.completed ++ [completedProcess] }
+              ticksUsed := 0 }
+      else if rs.ticksUsed ≥ q - 1 then
+        match s.ready with
+        | [] =>
+          { rs with
+              sched     := { s with
+                              time    := s.time + 1
+                              running := some { p with remaining := p.remaining - 1 } }
+              ticksUsed := 1 }
+        | nx :: ps =>
+          { rs with
+              sched     := { s with
+                              time    := s.time + 1
+                              running := some nx
+                              ready   := ps ++ [{ p with remaining := p.remaining - 1 }] }
+              ticksUsed := 0 }
+      else
+        { rs with
+            sched     := { s with
+                            time    := s.time + 1
+                            running := some { p with remaining := p.remaining - 1 } }
+            ticksUsed := rs.ticksUsed + 1 }
 
-def runStepsRR (quantum : Nat) (num_steps := default_num_steps) [SchedStateMethods AperiodicProcess]
-               (processes : List AperiodicProcess) : List SchedState :=
-  let rec loop (steps : Nat) (rrState : RRState) (states : List SchedState) : List SchedState :=
-    if steps = 0 then states
-    else
-      let newRRState := addArrivalsRR rrState processes
-      let nextRRState := stepRR quantum newRRState
-      loop (steps - 1) nextRRState (states ++ [nextRRState.sched])
-  let initialRR : RRState := { sched := SchedStateMethods.init, quantum := quantum, ticksUsed := 0 }
-  loop num_steps initialRR [SchedStateMethods.init]
+def runStepsRR [SchedStateMethods AperiodicProcess] (quantum : Nat)
+               (arrivalStream : ℕ → List AperiodicProcess)
+               (num_steps: ℕ): RRState :=
+  match num_steps with
+  | 0     =>
+    {sched := SchedStateMethods.init, quantum := quantum, ticksUsed := 0 }
+  | n + 1 =>
+    let prev := runStepsRR quantum arrivalStream n
+    stepRR quantum {prev with sched := {prev.sched with ready := prev.sched.ready ++ arrivalStream (n + 1)} }
+
+def runStepsRRAccumulateResults [SchedStateMethods AperiodicProcess] (quantum : Nat)
+  (num_steps := default_num_steps)
+  (arrivalStream : ℕ → List AperiodicProcess): List (SchedState) :=
+  ((List.range (num_steps + 1)).map (runStepsRR quantum arrivalStream)).map fun rr_state: RRState => rr_state.sched
 
 def selectFCFS : List AperiodicProcess → Option AperiodicProcess
   | [] => none
