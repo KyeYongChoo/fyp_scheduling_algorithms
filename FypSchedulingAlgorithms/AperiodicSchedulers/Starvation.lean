@@ -10,45 +10,92 @@ import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 
-theorem stepFCFS_completes_head_of_queue(s : SchedState) (p : AperiodicProcess):
-  -- if p is at the front of the FCFS ordering and has been running for p.burst ticks, it ends up in .completed
-  ∃ rest_of_list, s.ready == p :: rest_of_list →
-  ∀ arrival_stream : (Nat → List AperiodicProcess),
-  p ∈ (runSteps arrival_stream stepFCFS p.burst).completed
-  := by
-    use []
-    intro p_is_start_of_ready_list
-    intro arrival_stream
-    unfold runSteps
-    unfold stepFCFS
-    unfold selectFCFS
-  --   ⊢ p ∈
-  -- (match p.burst with
-  --   | 0 =>
-  --     have __src := SchedStateMethods.init;
-  --     { time := __src.time, ready := arrival_stream 0, running := __src.running, completed := __src.completed }
-  --   | n.succ =>
-  --     have prev :=
-  --       runSteps arrival_stream
-  --         (stepNonPreemptive fun x ↦
-  --           match x with
-  --           | [] => none
-  --           | p :: tail => some p)
-  --         n;
-  --     stepNonPreemptive
-  --       (fun x ↦
-  --         match x with
-  --         | [] => none
-  --         | p :: tail => some p)
-  --       { time := prev.time, ready := prev.ready ++ arrival_stream (n + 1), running := prev.running,
-  --         completed := prev.completed }).completed
+theorem stepNonPreemptive_completes_head_of_queue
+    {select}
+    (state_before : SchedState) (p : AperiodicProcess)
+    (h_running : state_before.running = some p)
+    (h_finishes : Process.remaining p ≤ 1) :
+    (stepNonPreemptive select state_before).running = select state_before.ready ∧
+    Process.tick p ∈ (stepNonPreemptive select state_before).completed := by
+    apply And.intro
+    · unfold stepNonPreemptive
+      simp only [h_running]
+      split
+      · split
+        · rename_i heq
+          rw [heq]
+        · rename_i heq
+          rw [heq]
+      · rename_i h_contradiction
+        exfalso
+        rw [Process.tick_decrements p] at h_contradiction
+        omega
+    · unfold stepNonPreemptive
+      simp only [h_running]
+      split
+      · split
+        · simp
+        · simp
+      · rename_i h_contradiction
+        exfalso
+        rw [Process.tick_decrements p] at h_contradiction
+        omega
+
+theorem stepNonPreemptive_continues_running
+    {select} [Process AperiodicProcess]
+    (s : SchedState) (p : AperiodicProcess)
+    (h_running : s.running = some p) (h_not_finished : Process.remaining p > 1) :
+    (stepNonPreemptive select s).running = some (Process.tick p) := by
+    unfold stepNonPreemptive
+    simp only [h_running]
+    rw [Process.tick_decrements p]
+    split
+    · omega
+    · rfl
+
+theorem stepNonPreemptive_runs_until_complete
+    {select}
+    (s : SchedState) (process : AperiodicProcess)
+    (h_running : s.running = some process) (h_non_zero_remaining_time : process.remaining > 0) :
+    ∃ completed_process: AperiodicProcess, completed_process.id = process.id ∧
+    ((stepNonPreemptive select)^[process.remaining] s |>.completed.contains completed_process):= by
+    -- induct over remaining time
+
+    -- If remaining was 0 then (stepNonPreemptive select)^[process.remaining] s would be ill defined
+    -- need to induct over remaining_minus_one rather than remaining
+    -- need to convert the problem to be written over remaining_minus_one rather than remaining
+    let remain_minus_one := process.remaining - 1
+    have h_remain_minus_one : process.remaining = remain_minus_one + 1 := by omega
+    rw [h_remain_minus_one]
+
+    induction remain_minus_one with
+    | zero =>
+        simp
+        have h_finishing : process.remaining ≤ 1 := by omega
+        have ticked_process_in_completed_queue := stepNonPreemptive_completes_head_of_queue s process h_running h_finishing |> And.right
+
+    | succ remain_minus_two ih =>
 
 
+theorem stepNonPreemptive_is_non_preemptive
+    (arrivalStream : ℕ → List AperiodicProcess) (t k : ℕ) :
+    runSteps arrivalStream stepNonPreemptive (t + k) =
+      (stepNonPreemptive select)^[k] (runSteps arrivalStream stepNonPreemptive t)
+    -- likely needs a side condition, e.g. arrivals in the window don't
+    -- change who's *running*, only append to `ready`
+    := by
+  induction k with
+  | zero => rfl
+  | succ n ih =>
+    simp [runSteps, ih]
+    -- key fact needed: appending arrivals to `ready` doesn't change `.running`
+    sorry
 
 theorem FCFSStarvationFree
   (arrival_stream : Nat → List AperiodicProcess):
   ∀ arrival_time process, process ∈ arrival_stream arrival_time →
-  ∃ completion_time, process ∈ (runSteps arrival_stream stepFCFS completion_time).completed
+  ∃ completion_time, ∃ finished_process ∈ (runSteps arrival_stream stepFCFS completion_time).completed,
+    finished_process.id = process.id -- cannot directly compare a process via == since the `remaining` field changes
   := by
     intro arrival_time
     intro process
@@ -66,27 +113,9 @@ theorem FCFSStarvationFree
       [process]
     let time_taken := processes_executed_up_to_target_process.foldl (fun running_total p => running_total + p.burst) 0
     use time_taken
+
     -- process ∈ (runSteps arrival_stream stepFCFS time_taken).completed
     -- unfold runSteps
-
-
-
--- def runSteps {process_type} [SchedStateMethods process_type] (arrivalStream : ℕ → List process_type)
---     (scheduler : SchedStateG process_type → SchedStateG process_type) : ℕ → SchedStateG process_type
---   | 0     => {SchedStateMethods.init with ready := arrivalStream 0 }
---   | n + 1 =>
---     let prev := runSteps arrivalStream scheduler n
---     scheduler { prev with ready := prev.ready ++ arrivalStream (n + 1) }
-
-    -- cases arrival_time with
-    --   | zero =>
-    --     use process.burst
-    --     apply And.intro
-    --     -- case h.left: process.burst ≥ 0, note that process.burst ∈ Nat
-    --     omega
-    --     -- case h.right: process ∈ (runSteps arrival_stream stepFCFS process.burst).completed
-
-    --   | succ n =>
 
 -- Proof that Starvation occurs in Shortest Job First, Shortest Remaining Time First schedulers
 

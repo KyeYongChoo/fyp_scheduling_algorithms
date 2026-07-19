@@ -37,6 +37,7 @@ class Process (α : Type) extends BEq α where
   deadline_info : α → String
   -- Let arrival stream be a function that takes time as argument and returns list of arriving processes
   convert_to_arrival_stream : List α → Nat → List α
+  tick_decrements : ∀ p, remaining (tick p) = remaining p - 1
 
 instance : Process AperiodicProcess where
   id p := p.id
@@ -49,6 +50,7 @@ instance : Process AperiodicProcess where
   convert_to_arrival_stream original_process_list :=
     fun current_time =>
       original_process_list.filter (fun p => current_time = p.arrival)
+  tick_decrements _p := rfl
 
 instance : Process PeriodicProcess where
   id p := p.id
@@ -61,3 +63,4 @@ instance : Process PeriodicProcess where
   convert_to_arrival_stream original_process_list :=
     fun current_time =>
       original_process_list.filter (fun p => current_time % p.arrival = 0)
+  tick_decrements _p := rfl
