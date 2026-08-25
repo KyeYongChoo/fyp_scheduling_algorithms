@@ -22,26 +22,26 @@ intended.
 def aperiodicArrivals [Process AperiodicProcess]: Nat → List AperiodicProcess :=
   Process.convert_to_arrival_stream
   [
-    { id := 1, arrival := 0, burst := 8, remaining := 8 },
-    { id := 2, arrival := 1, burst := 4, remaining := 4 },
-    { id := 3, arrival := 2, burst := 2, remaining := 2 },
-    { id := 4, arrival := 3, burst := 6, remaining := 6 },
-    { id := 5, arrival := 5, burst := 3, remaining := 3 },
+    { id := 1, arrival := 0, burst := 8, remaining := 8, burst_exceed_zero := (by omega) },
+    { id := 2, arrival := 1, burst := 4, remaining := 4, burst_exceed_zero := (by omega)  },
+    { id := 3, arrival := 2, burst := 2, remaining := 2, burst_exceed_zero := (by omega)  },
+    { id := 4, arrival := 3, burst := 6, remaining := 6, burst_exceed_zero := (by omega)  },
+    { id := 5, arrival := 5, burst := 3, remaining := 3, burst_exceed_zero := (by omega)  },
   ]
 
 -- Periodic Test data
 def singleRecurrentProcess [Process PeriodicProcess]: Nat → List PeriodicProcess :=
   Process.convert_to_arrival_stream
   [
-    { id := 1, arrival := 0, period := 6,  burst := 3, deadline := 4,  remaining := 3 }
+    { id := 1, arrival := 0, period := 6,  burst := 3, deadline := 4,  remaining := 3, burst_exceed_zero := (by omega)  }
   ]
 
 -- Utilization = 1/4 + 2/6 ≈ 0.583, under the 2-task RM bound (2(2^(1/2)−1) ≈ 0.828)
 def rmsSucceedsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProcess :=
   Process.convert_to_arrival_stream
   [
-    { id := 1, arrival := 0, period := 4,  burst := 1, deadline := 4,  remaining := 1 },
-    { id := 2, arrival := 0, period := 6,  burst := 2, deadline := 6,  remaining := 2 }
+    { id := 1, arrival := 0, period := 4,  burst := 1, deadline := 4,  remaining := 1, burst_exceed_zero := (by omega)  },
+    { id := 2, arrival := 0, period := 6,  burst := 2, deadline := 6,  remaining := 2, burst_exceed_zero := (by omega)  }
   ]
 
 -- Utilization = 2/5 + 4/7 ≈ 0.971, above the 2-task RM bound (2(2^(1/2)−1) ≈ 0.828)
@@ -49,16 +49,16 @@ def rmsSucceedsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProce
 def rmsFailsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProcess :=
   Process.convert_to_arrival_stream
   [
-    { id := 1, arrival := 0, period := 5, burst := 2, deadline := 5, remaining := 2 },
-    { id := 2, arrival := 0, period := 7, burst := 4, deadline := 7, remaining := 4 }
+    { id := 1, arrival := 0, period := 5, burst := 2, deadline := 5, remaining := 2, burst_exceed_zero := (by omega)  },
+    { id := 2, arrival := 0, period := 7, burst := 4, deadline := 7, remaining := 4, burst_exceed_zero := (by omega)  }
   ]
 
 -- Utilization = 3/4 + 3/5 = 1.35 > 1, impossible to schedule
 def bothFail [Process PeriodicProcess]: Nat → List PeriodicProcess :=
   Process.convert_to_arrival_stream
   [
-    { id := 1, arrival := 0, period := 4, burst := 3, deadline := 4, remaining := 3 },
-    { id := 2, arrival := 0, period := 5, burst := 3, deadline := 5, remaining := 3 }
+    { id := 1, arrival := 0, period := 4, burst := 3, deadline := 4, remaining := 3, burst_exceed_zero := (by omega)  },
+    { id := 2, arrival := 0, period := 5, burst := 3, deadline := 5, remaining := 3, burst_exceed_zero := (by omega)  }
   ]
 
 -- run SRTF for 30 (default 30) ticks
