@@ -9,6 +9,7 @@ import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
+import Mathlib.Tactic.Linarith
 
 theorem stepNonPreemptive_ready_nonempty_implies_running
     (select : List AperiodicProcess → Option AperiodicProcess)
@@ -112,10 +113,12 @@ theorem stepNonPreemptive_runs_until_complete
         rfl
       exact result
 
+-- FCFS won't pick q while p (earlier) is still waiting
 theorem selectFCFS_serves_earliest_arrival
-    (ready : List AperiodicProcess) (p q : AperiodicProcess)
-    (h_p_in : p ∈ ready) (h_q_in : q ∈ ready) (h_order : <p arrived before q in ready's ordering>) :
-    selectFCFS ready ≠ some q  -- or similar: FCFS won't pick q while p (earlier) is still waiting
+    (state : SchedState) (p q : AperiodicProcess)
+    (h_p_in : p ∈ state.ready) (h_q_in : q ∈ state.ready)
+    (h_order : ill work on this later figure out if characterizing in terms of ready queue or arrival stream better  <p arrived before q in ready's ordering>) :
+    selectFCFS ready ≠ some q
 
 theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
   (select : List AperiodicProcess → Option AperiodicProcess)
@@ -149,7 +152,47 @@ def FCFSCompletionTime (process_list : List AperiodicProcess): ℕ :=
   -- to arrive
   -- process_list.foldl (fun running_total p => running_total + p.burst) 0
   process_list.foldl
-    (fun completion_so_far p => max completion_so_far p.arrival + p.burst) 0
+    (fun completion_so_far p => max completion_so_far (Process.arrival p) + Process.burst p) 0
+
+theorem foldl_ge_init
+  {α}
+  (f : ℕ → α → ℕ)
+  (h_mono : ∀ acc x, acc ≤ f acc x)
+  (l : List α) (init : ℕ) :
+  init ≤ l.foldl f init := by
+  induction l generalizing init with
+  | nil => simp
+  | cons hd tl ih =>
+    simp only [List.foldl]
+    exact le_trans (h_mono init hd) (ih (f init hd))
+
+theorem foldl_prefix_le
+  {α}
+  (f : ℕ → α → ℕ)
+  (h_mono : ∀ acc x, acc ≤ f acc x)
+  (l : List α) (n : ℕ) (init : ℕ) :
+  (l.take n).foldl f init ≤ l.foldl f init := by
+  induction l generalizing n init with
+  | nil => simp
+  | cons hd tl ih =>
+    cases n with
+    | zero =>
+      simp only [List.foldl]
+      exact le_trans (h_mono init hd) (foldl_ge_init f h_mono tl (f init hd))
+    | succ n =>
+      simp only [List.take, List.foldl]
+      apply ih
+
+theorem FCFSCompletionTime_take_le_FCFSCompletionTime_whole
+  (processes : List AperiodicProcess)
+  (n : ℕ) :
+  FCFSCompletionTime (processes.take n) ≤ FCFSCompletionTime processes
+    := by
+      unfold FCFSCompletionTime
+      apply foldl_prefix_le
+      -- prove each step is non-decreasing
+      intro acc p
+      omega  -- max acc p.arrival + p.burst ≥ acc
 
 theorem FCFS_completed_matches_prefix
   (select : List AperiodicProcess → Option AperiodicProcess)
@@ -157,33 +200,34 @@ theorem FCFS_completed_matches_prefix
   -- process must be part of the stream
   (h_processes_from_stream : ∀ p ∈ processes, ∃ arrival_time, p ∈ arrival_stream arrival_time)
   (time : ℕ) :
-  ∃ num_processes_completed, ∀ process_arrival_stream ∈ processes.take num_processes_completed,
+  ∃ num_processes_completed, (∀ process_arrival_stream ∈ processes.take num_processes_completed,
     ∃ process_completed ∈ (runSteps arrival_stream stepFCFS time).completed,
-    Process.id process_completed = Process.id process_arrival_stream ∧
+    Process.id process_completed = Process.id process_arrival_stream) ∧
     FCFSCompletionTime (processes.take num_processes_completed) ≤ time ∧
     (num_processes_completed < processes.length →
-      time < FCFSCompletionTime (processes.take (num_processes_completed + 1))) := by
+      time < FCFSCompletionTime (processes.take (num_processes_completed + 1))) ∧
+    num_processes_completed ≤ processes.length
+      := by
   induction time with
   | zero =>
     unfold runSteps
     simp only [Nat.le_zero_eq]
     use 0
     simp only [List.take_zero, zero_add]
-    tauto
-    -- apply And.intro
-    -- · rfl
-    -- apply And.intro
-    -- · unfold FCFSCompletionTime
-    --   rfl
-    -- induction processes with
-    -- | nil =>
-    --   simp
-    -- | cons head tails ih =>
-    --   simp only [List.length_cons, Nat.zero_lt_succ, List.take_succ_cons, List.take_zero, forall_const]
-    --   unfold FCFSCompletionTime
-    --   simp
-    --   have h_process_burst_exceed_zero : head.burst > 0 := Process.burst_exceed_zero head
-    --   omega
+    apply And.intro
+    · tauto
+    apply And.intro
+    · unfold FCFSCompletionTime
+      rfl
+    induction processes with
+    | nil =>
+      simp
+    | cons head tails ih =>
+      simp only [List.length_cons, Nat.zero_lt_succ, List.take_succ_cons, List.take_zero, forall_const]
+      unfold FCFSCompletionTime
+      simp
+      have h_process_burst_exceed_zero : head.burst > 0 := Process.burst_exceed_zero head
+      omega
   | succ t_minus_one ih =>
     obtain ⟨num_completed_processes_at_t_minus_one, h_completed_eq, h_lower, h_upper⟩ := ih
     set prev := runSteps arrival_stream stepFCFS t_minus_one with h_prev_def
@@ -233,16 +277,13 @@ theorem FCFS_completed_matches_prefix
         use num_completed_processes_at_t_minus_one
         sorry
 
-
 theorem FCFSStarvationFree
   (arrival_stream : Nat → List AperiodicProcess):
   ∀ arrival_time process, process ∈ arrival_stream arrival_time →
   ∃ completion_time, ∃ finished_process ∈ (runSteps arrival_stream stepFCFS completion_time).completed,
     Process.id finished_process = Process.id process -- cannot directly compare a process via == since the `remaining` field changes
   := by
-    intro arrival_time
-    intro process
-    intro hyp_process_is_member_of_arrival_stream_at_arrival_time
+    intro arrival_time process hyp_process_is_member_of_arrival_stream_at_arrival_time
     -- completion time number is the sum of run duration of that process + all preceding processes
     -- note that even at t = 0 there may be multiple processes arriving
     let processes_arrived_up_to_target_process :=
@@ -250,7 +291,7 @@ theorem FCFSStarvationFree
       ((List.range arrival_time).flatMap arrival_stream)
       ++
       -- processes in same tick's list, strictly before target process
-      (arrival_stream arrival_time).takeWhile (. != process)
+      (arrival_stream arrival_time).takeWhile (· != process)
       ++
       -- target process itself
       [process]
@@ -280,18 +321,6 @@ theorem FCFSStarvationFree
       unfold processes_arrived_up_to_target_process
       simp
 
-    -- -- cries in spaghetti code
-    -- have process_generated_from_arrival_stream :
-    --   ∃ arrival_time, process ∈ arrival_stream arrival_time
-    --   := by
-    --     sorry
-
-    -- have processes_either_ready_running_completed_unarrived := non_preemptive_processes_are_ready_running_completed_or_unarrived
-    --       selectFCFS
-    --       arrival_stream
-    --       process
-    --       process_generated_from_arrival_stream
-
     have match_prefix_theorem :=
       FCFS_completed_matches_prefix
         selectFCFS
@@ -301,29 +330,46 @@ theorem FCFSStarvationFree
         time_taken
 
     obtain ⟨num_processes_completed, match_prefix_theorem⟩ := match_prefix_theorem
-    obtain ⟨h_process_in_completed_queue, h_completion_time_no_less_than_time_taken, _h_next_process_yet_to_run⟩ := match_prefix_theorem
+    obtain ⟨h_process_in_completed_queue, h_completion_time_no_less_than_time_taken, h_next_process_yet_to_run, h_num_processes_completed_le_processes_arrived_up_to_target_process⟩ := match_prefix_theorem
+    -- h_process_in_completed_queue has the answer, just need to prove
+    -- process ∈ List.take num_processes_completed processes_arrived_up_to_target_process
+    -- Note already proved h_target_process_in_processes : process ∈ processes_arrived_up_to_target_process
+    -- prove processes_arrived_up_to_target_process = List.take num_processes_completed processes_arrived_up_to_target_process
+    -- need to squeeze with h_completion_time_no_less_than_time_taken, h_next_process_yet_to_run
 
+    -- idea:
+    -- show contradiction with postcondition of h_next_process_yet_to_run, thereby prove num_processes_completed ≥ processes_arrived_up_to_target_process.length
+    -- time_taken < FCFSCompletionTime (take (n+1) processes_arrived_up_to_target_process) ≤ FCFSCompletionTime processes_arrived_up_to_target_process = time_taken
+    -- num_processes_completed ≥ processes_arrived_up_to_target_process
+    -- take will cap at length so num_processes_completed = processes_arrived_up_to_target_process
 
+    -- num_processes_completed must be the full list length
+    have h_all_completed : num_processes_completed = processes_arrived_up_to_target_process.length := by
+      rcases Nat.lt_or_ge num_processes_completed processes_arrived_up_to_target_process.length with h_lt | h_ge
+      · have h_time_lt := h_next_process_yet_to_run h_lt
+        have h_mono := FCFSCompletionTime_take_le_FCFSCompletionTime_whole
+                        processes_arrived_up_to_target_process
+                        (num_processes_completed + 1)
+        -- h_time_lt  : time_taken < FCFSCompletionTime (take (n+1) ps)
+        -- h_mono     : FCFSCompletionTime (take (n+1) ps) ≤ FCFSCompletionTime ps
+        -- time_taken = FCFSCompletionTime ps by definition
+        linarith
+      · omega  -- n ≤ length from the match_prefix_theorem
 
+    -- now the take is the full list
+    have h_take_full : List.take num_processes_completed processes_arrived_up_to_target_process
+                      = processes_arrived_up_to_target_process := by
+      rw [h_all_completed]
+      simp
 
--- theorem FCFS_completed_matches_prefix
---   (arrival_stream : Nat → List AperiodicProcess) (processes : List AperiodicProcess)
---   -- process must be part of the stream
---   (h_processes_from_stream : ∀ p ∈ processes, ∃ arrival_time, p ∈ arrival_stream arrival_time)
---   -- if the system is idle at time t, no arrived-but-unprocessed process exists, so anyone still to come must arrive after t
---   (h_idle : ∀t, (runSteps arrival_stream stepFCFS t).running = none → ∀p ∈ processes,
---     p ∈ (runSteps arrival_stream stepFCFS t).completed
---     ∨ (∀arrival_time, p ∈ (arrival_stream arrival_time) → arrival_time > t) )
---   (time : ℕ) :
---   ∃ num_processes_completed,
---     (runSteps arrival_stream stepFCFS time).completed = processes.take num_processes_completed ∧
---     FCFSCompletionTime (processes.take num_processes_completed) ≤ time ∧
---     (num_processes_completed < processes.length →
---       time < FCFSCompletionTime (processes.take (num_processes_completed + 1))) := by
+    -- process is a member of the take
+    have h_process_in_take : process ∈ List.take num_processes_completed processes_arrived_up_to_target_process := by
+      rw [h_take_full]
+      exact h_target_process_in_processes
 
+    -- now apply h_process_in_completed_queue
+    exact h_process_in_completed_queue process h_process_in_take
 
-    -- process ∈ (runSteps arrival_stream stepFCFS time_taken).completed
-    -- unfold runSteps
 
 -- Proof that Starvation occurs in Shortest Job First, Shortest Remaining Time First schedulers
 
