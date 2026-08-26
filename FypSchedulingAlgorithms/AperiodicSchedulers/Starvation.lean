@@ -226,10 +226,10 @@ theorem FCFS_completed_matches_prefix
       simp only [List.length_cons, Nat.zero_lt_succ, List.take_succ_cons, List.take_zero, forall_const]
       unfold FCFSCompletionTime
       simp
-      have h_process_burst_exceed_zero : head.burst > 0 := Process.burst_exceed_zero head
+      have h_process_burst_exceed_zero : Process.burst head > 0 := Process.burst_exceed_zero head
       omega
   | succ t_minus_one ih =>
-    obtain ⟨num_completed_processes_at_t_minus_one, h_completed_eq, h_lower, h_upper⟩ := ih
+    obtain ⟨num_completed_processes_at_t_minus_one, h_completed_eq, h_lower, h_upper, h_num_processes_completed_le_processes_length⟩ := ih
     set prev := runSteps arrival_stream stepFCFS t_minus_one with h_prev_def
     match h_running_state : prev.running with
     | none =>
@@ -248,12 +248,13 @@ theorem FCFS_completed_matches_prefix
             split
             · rfl
             · rfl
-          rw [h_next, h_completed_eq]
+          rw [h_next]
+          omega
         apply And.intro
         -- time just increased without new processes added, use h lower
         · omega
-        -- unfold FCFSCompletionTime
-        -- unfold FCFSCompletionTime at h_upper
+
+        apply And.intro
         intro h_exists_unarrived_processes
         have h_prev_bound := h_upper h_exists_unarrived_processes
         let next_process := processes[num_completed_processes_at_t_minus_one]
@@ -262,9 +263,39 @@ theorem FCFS_completed_matches_prefix
           h_processes_from_stream next_process
           (List.getElem_mem h_exists_unarrived_processes)
         have process_status_choices := non_preemptive_processes_are_ready_running_completed_or_unarrived selectFCFS arrival_stream next_process h_next_arrives (t_minus_one + 1)
-        sorry
-        -- rcases process_status_choices with h_ready | h_running | h_completed | h_unarrived
-        -- · sorry -- argue by contradiction with ready nonempty and running empty -- if noone arrived this tick, anything in ready queue must have arrived earlier! If it had arrived earlier, then it should have been running now!
+        rcases process_status_choices with h_ready | h_running | h_completed | h_unarrived
+        -- ⊢ t_minus_one + 1 < FCFSCompletionTime (List.take (num_completed_processes_at_t_minus_one + 1) processes)
+        · -- next_process in ready - next_process is the immediate next process which arrived, not the arbitrarily future process.
+          -- All previous processes are in the completed list, so the process to be run must be next_process so it cant still be in ready
+          sorry
+        · -- since its running then it means its tick for FCFSCompletionTime is more than 1 then use h_prev_bound to show.
+
+          -- next_process just started running at t_minus_one + 1 (since prev.running = none)
+          -- so it finishes at (t_minus_one + 1) + burst ≥ t_minus_one + 2
+          have h_burst_pos := Process.burst_exceed_zero next_process
+          -- FCFSCompletionTime (take (n+1) ps) = foldl over take n ps then next_process
+          -- which equals max (FCFSCompletionTime (take n ps)) next_process.arrival + next_process.burst
+          -- either way it's ≥ next_process.burst ≥ 1
+          -- we know it started at t_minus_one + 1, so arrival ≤ t_minus_one + 1
+          -- and FCFSCompletionTime (take n ps) ≤ t_minus_one (from h_lower + prev had none running)
+          -- so max of those two ≤ t_minus_one, plus burst ≥ 1 gives ≥ t_minus_one + 1
+          -- but we need strict, which burst ≥ 1 gives us since (t_minus_one) + burst ≥ t_minus_one + 1
+          unfold FCFSCompletionTime
+
+        · -- next_process in completed
+          -- but next_process is processes[n], which is outside take n, contradiction
+          have h_not_in_take : next_process ∉ (processes.take num_completed_processes_at_t_minus_one) := by
+            simp [next_process]
+            exact List.getElem_not_mem_take (by omega)
+          -- h_completed_eq says completed = take n processes
+          -- so next_process ∉ completed
+          rw [← h_completed_eq] at h_not_in_take  -- wait, h_completed_eq is about ids not membership
+          sorry
+        · -- next_process unarrived - need to unfold FCFSCompletionTime - it takes into account the arrival time. If this has not arrived yet it means the arrival time must be more than 1
+          unfold FCFSCompletionTime
+          sorry
+
+
 
       | List.cons heads tails =>
         sorry
