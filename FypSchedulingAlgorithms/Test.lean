@@ -22,11 +22,12 @@ intended.
 def aperiodicArrivals [Process AperiodicProcess]: Nat → List AperiodicProcess :=
   Process.convert_to_arrival_stream
   [
-    { id := 1, arrival := 0, burst := 8, remaining := 8, burst_exceed_zero := (by omega) },
+    { id := 1, arrival := 0, burst := 1, remaining := 1, burst_exceed_zero := (by omega) },
     { id := 2, arrival := 1, burst := 4, remaining := 4, burst_exceed_zero := (by omega)  },
     { id := 3, arrival := 2, burst := 2, remaining := 2, burst_exceed_zero := (by omega)  },
     { id := 4, arrival := 3, burst := 6, remaining := 6, burst_exceed_zero := (by omega)  },
-    { id := 5, arrival := 5, burst := 3, remaining := 3, burst_exceed_zero := (by omega)  },
+    { id := 5, arrival :=5, burst := 3, remaining := 3, burst_exceed_zero := (by omega)  },
+    { id := 6, arrival := 27, burst := 1, remaining := 1, burst_exceed_zero := (by omega)  },
   ]
 
 -- Periodic Test data

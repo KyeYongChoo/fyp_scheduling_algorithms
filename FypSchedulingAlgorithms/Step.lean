@@ -110,7 +110,8 @@ def stepPreemptive (process_type : Type) [Process process_type]
 
 def runSteps {process_type} [SchedStateMethods process_type] (arrivalStream : ℕ → List process_type)
     (scheduler : SchedStateG process_type → SchedStateG process_type) : ℕ → SchedStateG process_type
-  | 0     => {SchedStateMethods.init with ready := arrivalStream 0 }
+  -- fold over the time stream
+  | 0     => scheduler {SchedStateMethods.init with ready := arrivalStream 0 }
   | n + 1 =>
     let prev := runSteps arrivalStream scheduler n
     scheduler { prev with ready := prev.ready ++ arrivalStream (n + 1) }

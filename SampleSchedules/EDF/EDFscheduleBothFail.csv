@@ -1,5 +1,4 @@
 time,running,ready_queue,completed,process_ticks with deadline,missed_deadlines
-0,0,"1,2","","P1:0/3d4|P2:0/3d5",
 1,2,"1","","P1:0/3d4|P2:1/3d5",
 2,2,"1","","P1:0/3d4|P2:2/3d5",
 3,1,"","2","P1:0/3d4|P2:3/3d5",
@@ -30,3 +29,4 @@ time,running,ready_queue,completed,process_ticks with deadline,missed_deadlines
 28,0,"","2,1","P1:3/3d4|P2:3/3d5",
 29,0,"","2,1","P1:3/3d4|P2:3/3d5",
 30,0,"","2,1","P1:3/3d4|P2:3/3d5",
+31,0,"","2,1","P1:3/3d4|P2:3/3d5",
