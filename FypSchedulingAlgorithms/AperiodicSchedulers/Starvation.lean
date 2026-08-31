@@ -194,16 +194,35 @@ theorem FCFSCompletionTime_take_le_FCFSCompletionTime_whole
       intro acc p
       omega  -- max acc p.arrival + p.burst ≥ acc
 
+theorem Aperiodic_running_none_next_tick_running_some_implies_arrival_at_that_tick
+  {tick_before_arrival}
+  {p}
+  {scheduler}
+  (arrival_stream : Nat → List AperiodicProcess)
+  (h_running_none : (runSteps arrival_stream scheduler tick_before_arrival).running = none)
+  (h_running_some : (runSteps arrival_stream scheduler (tick_before_arrival + 1)).running = some p):
+  p ∈ arrival_stream (tick_before_arrival + 1)
+  := by
+    sorry
+
+
+-- for all time
 theorem FCFS_completed_matches_prefix
+  -- states that for any time, processes at the front will have completed and
+  -- the next process will not have begun
+
   (select : List AperiodicProcess → Option AperiodicProcess)
   (arrival_stream : Nat → List AperiodicProcess) (processes : List AperiodicProcess)
   -- process must be part of the stream
   (h_processes_from_stream : ∀ p ∈ processes, ∃ arrival_time, p ∈ arrival_stream arrival_time)
   (time : ℕ) :
+  -- some processes will have completed
   ∃ num_processes_completed, (∀ process_arrival_stream ∈ processes.take num_processes_completed,
     ∃ process_completed ∈ (runSteps arrival_stream stepFCFS time).completed,
     Process.id process_completed = Process.id process_arrival_stream) ∧
+    -- Current time will be no less than time taken for all processes to complete
     FCFSCompletionTime (processes.take num_processes_completed) ≤ time ∧
+    -- Current time will not be enough to complete the next process
     (num_processes_completed < processes.length →
       time < FCFSCompletionTime (processes.take (num_processes_completed + 1))) ∧
     num_processes_completed ≤ processes.length
@@ -268,19 +287,8 @@ theorem FCFS_completed_matches_prefix
         · -- next_process in ready - next_process is the immediate next process which arrived, not the arbitrarily future process.
           -- All previous processes are in the completed list, so the process to be run must be next_process so it cant still be in ready
           sorry
-        · -- since its running then it means its tick for FCFSCompletionTime is more than 1 then use h_prev_bound to show.
-
-          -- next_process just started running at t_minus_one + 1 (since prev.running = none)
-          -- so it finishes at (t_minus_one + 1) + burst ≥ t_minus_one + 2
-          have h_burst_pos := Process.burst_exceed_zero next_process
-          -- FCFSCompletionTime (take (n+1) ps) = foldl over take n ps then next_process
-          -- which equals max (FCFSCompletionTime (take n ps)) next_process.arrival + next_process.burst
-          -- either way it's ≥ next_process.burst ≥ 1
-          -- we know it started at t_minus_one + 1, so arrival ≤ t_minus_one + 1
-          -- and FCFSCompletionTime (take n ps) ≤ t_minus_one (from h_lower + prev had none running)
-          -- so max of those two ≤ t_minus_one, plus burst ≥ 1 gives ≥ t_minus_one + 1
-          -- but we need strict, which burst ≥ 1 gives us since (t_minus_one) + burst ≥ t_minus_one + 1
-          unfold FCFSCompletionTime
+        · -- next process in running
+          have next_process ∈ arrival_stream (tick_before_arrival + 1) :=  Aperiodic_running_none_next_tick_running_some_implies_arrival_at_that_tick arrival_stream
 
         · -- next_process in completed
           -- but next_process is processes[n], which is outside take n, contradiction
@@ -314,6 +322,8 @@ theorem FCFSStarvationFree
   ∃ completion_time, ∃ finished_process ∈ (runSteps arrival_stream stepFCFS completion_time).completed,
     Process.id finished_process = Process.id process -- cannot directly compare a process via == since the `remaining` field changes
   := by
+    -- Proof idea: describe the time by which the process must have completed, characterized by FCFSCompletionTime
+
     intro arrival_time process hyp_process_is_member_of_arrival_stream_at_arrival_time
     -- completion time number is the sum of run duration of that process + all preceding processes
     -- note that even at t = 0 there may be multiple processes arriving
