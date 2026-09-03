@@ -9,7 +9,7 @@ structure AperiodicProcess where
   burst     : Nat
   remaining : Nat
   burst_exceed_zero : burst > 0
-deriving BEq, Repr
+deriving DecidableEq, BEq, ReflBEq, LawfulBEq, Repr
 
 -- #eval AperiodicProcess.mk 1 0 5 5
 
