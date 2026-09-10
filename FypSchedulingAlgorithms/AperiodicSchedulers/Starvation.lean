@@ -456,7 +456,7 @@ theorem FCFSCompletionTime_last_element
   simp [List.foldl]
   rfl
 
--- for all time
+-- Links FCFSCompletionTime to FCFS completed queue
 theorem FCFS_completed_matches_prefix
   -- states that for any time, processes at the front will have completed and
   -- the next process will not have begun
@@ -465,23 +465,37 @@ theorem FCFS_completed_matches_prefix
   (processes : List AperiodicProcess)
   -- process must be part of the stream
   (h_processes_from_stream : ∀ p ∈ processes, ∃ arrival_time, p ∈ arrival_stream arrival_time)
+  -- same id implies same object --> sidesteps the problem of this being untrue during execution (remaining decrements)
+  -- by only specifying it in terms of arrival queue's processes
   (h_distinct_ids : ∀ (i j : Fin processes.length),
   processes[i].id = processes[j].id → i = j)
+  (h_arrival_consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t)
   (time : ℕ) :
-  -- some processes will have completed
-  ∃ num_processes_completed, (∀ process_arrival_stream ∈ processes.take num_processes_completed,
+
+  ∃ num_processes_completed,
+
+  -- Invariant contains 5 conjuncts, 1, 4, 5 were the main ones though 2 3 were added later when i realised its kinda important
+  -- conjunct 5 is the one that varies the most between branches, put it at the end
+
+  -- conjunct 1: some processes will have completed
+  (∀ process_arrival_stream ∈ processes.take num_processes_completed,
     ∃ process_completed ∈ (runSteps arrival_stream stepFCFS time).completed,
-    Process.id process_completed = Process.id process_arrival_stream) ∧
-    -- Current time will be no less than time taken for all processes to complete
-    FCFSCompletionTime (processes.take num_processes_completed) ≤ time ∧
-    -- Current time will not be enough to complete the next process
-    (num_processes_completed < processes.length →
-      time < FCFSCompletionTime (processes.take (num_processes_completed + 1))) ∧
+    Process.id process_completed = Process.id process_arrival_stream)  ∧
+
+  -- conjunct 2: cant complete more processes than total processes
     num_processes_completed ≤ processes.length ∧
-        -- reverse direction: everything in completed matches something in take n processes
+
+  -- conjunct 3: everything in completed matches something in take n processes
     (∀ process_completed ∈ (runSteps arrival_stream stepFCFS time).completed,
       ∃ process_arrival_stream ∈ processes.take num_processes_completed,
-      Process.id process_arrival_stream = Process.id process_completed)
+      Process.id process_arrival_stream = Process.id process_completed) ∧
+
+  -- conjunct 4: time taken bounded below by FCFSCompletionTime
+    FCFSCompletionTime (processes.take num_processes_completed) ≤ time ∧
+
+  -- conjunct 5: time taken bounded above by FCFSCompletionTime
+    (num_processes_completed < processes.length →
+      time < FCFSCompletionTime (processes.take (num_processes_completed + 1)))
       := by
   induction time with
   | zero =>
@@ -490,6 +504,16 @@ theorem FCFS_completed_matches_prefix
     -- split the ∧ goals
     refine ⟨?_, ?_, ?_, ?_, ?_⟩
     · intro p h; cases h
+    · omega
+    · intro p h_mem
+      simp only [runSteps, stepFCFS, stepNonPreemptive] at h_mem
+      have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
+      simp only [h_init_running] at h_mem
+      split at h_mem
+      · -- select = none, completed = init.completed = []
+        simp [SchedStateMethods.init] at h_mem
+      · -- select = some p, completed = init.completed = []
+        simp [SchedStateMethods.init] at h_mem
     · unfold FCFSCompletionTime; rfl
     · intro h
       simp only [zero_add]
@@ -502,18 +526,8 @@ theorem FCFS_completed_matches_prefix
       have h_0th_process_bounded_above_by_burst : 0 < processes[0].burst := by omega
       omega
       omega
-    · omega
-    · intro p h_mem
-      simp only [runSteps, stepFCFS, stepNonPreemptive] at h_mem
-      have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-      simp only [h_init_running] at h_mem
-      split at h_mem
-      · -- select = none, completed = init.completed = []
-        simp [SchedStateMethods.init] at h_mem
-      · -- select = some p, completed = init.completed = []
-        simp [SchedStateMethods.init] at h_mem
   | succ t_minus_one ih =>
-    obtain ⟨num_completed_processes_at_t_minus_one, h_completed_eq, h_lower, h_upper, h_num_processes_completed_le_processes_length⟩ := ih
+    obtain ⟨num_completed_processes_at_t_minus_one, h_completed_eq, h_num_processes_completed_le_processes_length, h_reverse, h_lower, h_upper⟩ := ih
     set prev := runSteps arrival_stream stepFCFS t_minus_one with h_prev_def
     match h_running_state : prev.running with
     | none =>
@@ -522,7 +536,7 @@ theorem FCFS_completed_matches_prefix
       | List.nil =>
         -- noone arrived this tick
         use num_completed_processes_at_t_minus_one
-        apply And.intro
+        refine ⟨?_, ?_, ?_, ?_, ?_⟩
         · have h_next : (runSteps arrival_stream stepFCFS (t_minus_one + 1)).completed = prev.completed := by
             change (stepFCFS { prev with ready := prev.ready ++ arrival_stream (t_minus_one + 1) }).completed = prev.completed
             rw [arrival_list_during_t]
@@ -534,11 +548,26 @@ theorem FCFS_completed_matches_prefix
             · rfl
           rw [h_next]
           omega
-        apply And.intro
+
+        -- num_completed_processes_at_t_minus_one ≤ processes.length
+        omega
+
+        -- the completed queue did not expand due to running state none
+        have h_completed_queue_did_not_expand : (runSteps arrival_stream stepFCFS (t_minus_one + 1)).completed = prev.completed := by
+          simp only [runSteps, stepFCFS, stepNonPreemptive]
+          rw [h_prev_def, stepFCFS] at h_running_state
+          simp only [h_running_state]
+          rw [h_prev_def, stepFCFS]
+          split
+          · simp
+          · simp
+
+        rwa [h_completed_queue_did_not_expand]
+
         -- time just increased without new processes added, use h lower
         · omega
 
-        apply And.intro
+
         intro h_exists_unarrived_processes
         have h_prev_bound := h_upper h_exists_unarrived_processes
         let next_process := processes[num_completed_processes_at_t_minus_one]
@@ -578,7 +607,6 @@ theorem FCFS_completed_matches_prefix
             -- Let np_processes be the next process's counterpart in the processes queue generated from arrival list
 
             obtain ⟨np_completed, h_np_completed_in_completed_queue, h_np_completed_has_same_id_as_next_process⟩ := h_completed
-            obtain ⟨_, h_reverse⟩ := h_num_processes_completed_le_processes_length
             obtain ⟨np_in_processes, h_np_in_take, h_np_id⟩ := h_reverse np_completed h_np_completed_in_completed_queue
             -- np_in_processes ∈ take n processes and np_in_processes.id = np_completed.id = next_process.id
             -- but next_process = processes[n] which has a distinct id from all processes in take n
@@ -659,9 +687,8 @@ theorem FCFS_completed_matches_prefix
         -- ⊢ t_minus_one + 1 < FCFSCompletionTime (List.take (num_completed_processes_at_t_minus_one + 1) processes)
         have h_arrival_late : next_process.arrival > t_minus_one + 1 := by
           obtain ⟨arrival_time, h_gt, h_mem⟩ := h_unarrived
-          -- arrival_time is when it arrives, and arrival_time > t_minus_one + 1
-          -- need: next_process.arrival = arrival_time
-          sorry
+          have h_arrival_eq := h_arrival_consistent next_process arrival_time h_mem
+          omega
         have h_foldl := FCFSCompletionTime_last_element
                           processes
                           num_completed_processes_at_t_minus_one
@@ -677,18 +704,8 @@ theorem FCFS_completed_matches_prefix
           exact Nat.le_max_right _ _
         linarith [Process.burst_exceed_zero next_process]
 
-        /- num_completed_processes_at_t_minus_one ≤ processes.length ∧
-          ∀ process_completed ∈ (runSteps arrival_stream stepFCFS (t_minus_one + 1)).completed,
-            ∃ process_arrival_stream ∈ List.take num_completed_processes_at_t_minus_one processes,
-              Process.id process_arrival_stream = Process.id process_completed
-        -/
-
       | List.cons heads tails =>
-        -- ready: same proof as above
-        -- running
-        -- completed same proof as above
-        -- unarrived same proof as above
-        sorry
+
     | some p =>
       by_cases h_finishes : p.remaining ≤ 1
       · -- p uses this tick: num_processes_completed becomes k + 1
@@ -697,36 +714,6 @@ theorem FCFS_completed_matches_prefix
       · -- p continues running: num_processes_completed stays k
         use num_completed_processes_at_t_minus_one
         sorry
-        -- have process_status_choices := non_preemptive_processes_are_ready_running_completed_or_unarrived selectFCFS arrival_stream next_process h_next_arrives (t_minus_one + 1)
-        -- have h_ready_empty : prev.ready = [] := by
-        --   exact idle_implies_empty_ready arrival_stream t_minus_one h_running_state
-        -- rcases process_status_choices with h_ready | h_running | h_completed | h_unarrived
-        -- -- ⊢ t_minus_one + 1 < FCFSCompletionTime (List.take (num_completed_processes_at_t_minus_one + 1) processes)
-        -- · -- next_process in ready - next_process is the immediate next process which arrived, not the arbitrarily future process.
-        --   -- All previous processes are in the completed list, so the process to be run must be next_process so it cant still be in ready
-        --   have h_next_ready : (runSteps arrival_stream (stepNonPreemptive selectFCFS) (t_minus_one + 1)).ready = [] := by
-        --     simp only [runSteps, stepNonPreemptive]
-        --     unfold stepFCFS at h_prev_def
-        --     rw [← h_prev_def]
-        --     simp only [h_running_state, h_ready_empty, arrival_list_during_t]
-        --     simp [selectFCFS]
-        --   rw [h_next_ready] at h_ready
-        --   tauto
-
-        -- · -- next process in running
-        --   -- contradicts no new arrivals
-        --   have h_next_state : (runSteps arrival_stream (stepNonPreemptive selectFCFS) (t_minus_one + 1)).running = none := by
-        --     simp only [runSteps, stepNonPreemptive]
-        --     unfold stepFCFS at h_prev_def
-        --     rw [← h_prev_def]
-        --     simp only [h_running_state, h_ready_empty, arrival_list_during_t]
-        --     simp [selectFCFS]
-
-        --   simp [h_next_state] at h_running
-        -- · -- next_process in completed
-
-        -- · -- next_process unarrived - need to unfold FCFSCompletionTime - it takes into account the arrival time. If this has not arrived yet it means the arrival time must be more than 1
-        --   unfold FCFSCompletionTime
 
 theorem FCFSStarvationFree
   (arrival_stream : Nat → List AperiodicProcess)
