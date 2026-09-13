@@ -1,2 +1,5 @@
 /.lake
 /.rigrep
+ripgrep/
+/.mcp
+.mcp.json

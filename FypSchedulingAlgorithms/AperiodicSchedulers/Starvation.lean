@@ -113,7 +113,7 @@ theorem stepNonPreemptive_runs_until_complete
         rfl
       exact result
 
-theorem mem_removeFirst_of_ne
+theorem List.mem_removeFirst_of_ne
   [BEq α] [LawfulBEq α]
   (l : List α) (p process : α)
   (h_ne : process ≠ p)
@@ -134,6 +134,22 @@ theorem mem_removeFirst_of_ne
       rcases h_mem with rfl | h_tl
       · left; rfl
       · right; exact ih h_tl
+
+theorem List.mem_of_mem_removeFirst
+  [BEq α] {l : List α} {a q : α}
+  (h : q ∈ l.removeFirst a) : q ∈ l := by
+  induction l with
+  | nil => simp [List.removeFirst] at h
+  | cons hd tl ih =>
+    unfold List.removeFirst at h
+    split at h
+    · -- hd == a, so removeFirst returned tl
+      exact List.mem_cons_of_mem _ h
+    · -- hd != a, so removeFirst returned hd :: tl.removeFirst a
+      rcases List.mem_cons.mp h with rfl | h_tl
+      · exact List.mem_cons_self
+      · exact List.mem_cons_of_mem _ (ih h_tl)
+
 
 theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
   (select : List AperiodicProcess → Option AperiodicProcess)
@@ -201,7 +217,7 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
                   left
                 · -- process ∈ tl, so process ∈ removeFirst p tl by ih
                   right
-                  exact mem_removeFirst_of_ne tl p process h_selected_process_eq_target_process h_tl
+                  exact List.mem_removeFirst_of_ne tl p process h_selected_process_eq_target_process h_tl
       · -- process didn't arrive at time 0, it arrives later
         right; right; right
         refine ⟨arrival_time, ?_, h_arrival⟩
@@ -227,7 +243,7 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
               right; left; simp [h_eq]
             · -- different process selected, stays in ready
               left
-              simp [List.mem_append, mem_removeFirst_of_ne, h_ready, h_eq]
+              simp [List.mem_append, List.mem_removeFirst_of_ne, h_ready, h_eq]
         · -- prev.running = some q, non-preemptive so ready list unchanged
           rename_i q h_q
           split
@@ -245,7 +261,7 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
                 simp [h_eq]
               · -- different process selected, stays in ready minus r
                 left
-                apply mem_removeFirst_of_ne _ _ _ h_eq
+                apply List.mem_removeFirst_of_ne _ _ _ h_eq
                 simp [List.mem_append, h_ready]
           · -- q still running, ready completely unchanged
             left
@@ -317,7 +333,7 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
                 right; left; simp [h_eq]
               · -- different process selected, in ready
                 left
-                simp [List.mem_append, mem_removeFirst_of_ne, h_mem, h_eq]
+                simp [List.mem_append, List.mem_removeFirst_of_ne, h_mem, h_eq]
           · -- prev.running = some p, arrivals added to ready
             split
             · -- remaining ≤ 0, process completed
@@ -330,7 +346,7 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
                 by_cases h_eq : process = q
                 · right; left; simp [h_eq]
                 · left
-                  simp [List.mem_append, mem_removeFirst_of_ne, h_mem, h_eq]
+                  simp [List.mem_append, List.mem_removeFirst_of_ne, h_mem, h_eq]
             · -- remaining > 0, process in ready
               left
               simp [List.mem_append, h_mem]
@@ -456,6 +472,92 @@ theorem FCFSCompletionTime_last_element
   simp [List.foldl]
   rfl
 
+theorem selectFCFS_mem {l q}: selectFCFS l = some q → q ∈ l := by
+  unfold selectFCFS
+  grind
+
+theorem system_provenance
+  (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) :
+  (∀ q ∈ (runSteps arrival_stream stepFCFS t).ready,
+     ∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) ∧
+  (∀ q, (runSteps arrival_stream stepFCFS t).running = some q →
+     ∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) ∧
+  (∀ q ∈ (runSteps arrival_stream stepFCFS t).completed,
+     ∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) := by
+  induction t with
+  | zero =>
+    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
+    have h_init_completed : (SchedStateMethods.init : SchedStateG AperiodicProcess).completed = [] := rfl
+    simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
+    split
+    · rename_i h_select
+      refine ⟨?_, ?_, ?_⟩
+      · intro q hq; exact ⟨0, le_refl _, q, hq, rfl⟩
+      · intro q hq; simp at hq
+      · intro q hq; simp [h_init_completed] at hq
+    · rename_i q₀ h_select
+      refine ⟨?_, ?_, ?_⟩
+      · intro q hq
+        exact ⟨0, le_refl _, q, List.mem_of_mem_removeFirst hq, rfl⟩
+      · intro q hq
+        simp only [Option.some.injEq] at hq
+        rw [hq] at h_select
+        exact ⟨0, le_refl _, q, selectFCFS_mem h_select, rfl⟩ -- here
+      · intro q hq; simp [h_init_completed] at hq
+  | succ t ih =>
+    obtain ⟨ih_ready, ih_running, ih_completed⟩ := ih
+    simp only [runSteps, stepFCFS, stepNonPreemptive]
+    -- every `s ≤ t` from ih weakens to `s ≤ t + 1`
+    have weaken : ∀ (q: AperiodicProcess), (∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) →
+        ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
+      rintro q ⟨s, hs, q₀, hq₀, hid⟩
+      exact ⟨s, by omega, q₀, hq₀, hid⟩
+    -- new ready is always a sub-multiset of `prev.ready ++ arrivals`
+    have ready_src : ∀ q ∈ (runSteps arrival_stream stepFCFS t).ready ++ arrival_stream (t + 1),
+        ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
+      intro q hq
+      rcases List.mem_append.mp hq with h | h
+      · exact weaken q (ih_ready q h)
+      · exact ⟨t + 1, le_refl _, q, h, rfl⟩
+    split
+    · -- prev.running = none
+      split
+      · exact ⟨ready_src, by intro q hq; simp at hq; tauto, fun q hq => weaken q (ih_completed q hq)⟩
+      · rename_i q₀ h_select
+        refine ⟨?_, ?_, fun q hq => weaken q (ih_completed q hq)⟩
+        · intro q hq; exact ready_src q (List.mem_of_mem_removeFirst hq)
+        · intro q hq; simp only [Option.some.injEq] at hq; subst hq
+          exact ready_src q₀ (selectFCFS_mem h_select)
+    · -- prev.running = some p
+      rename_i p h_prev_running
+      split
+      · -- p finished
+        split
+        · refine ⟨ready_src, by intro q hq; simp at hq, ?_⟩
+          intro q hq
+          rcases List.mem_append.mp hq with h | h
+          · exact weaken q (ih_completed q h)
+          · simp only [List.mem_cons, List.not_mem_nil, or_false] at h; subst h
+            rw [Process.id_invariant_wrt_tick]
+            exact weaken p (ih_running p h_prev_running)
+        · rename_i q₀ h_select
+          refine ⟨?_, ?_, ?_⟩
+          · intro q hq; exact ready_src q (List.mem_of_mem_removeFirst hq)
+          · intro q hq; simp only [Option.some.injEq] at hq; subst hq
+            exact ready_src q₀ (selectFCFS_mem h_select)
+          · intro q hq
+            rcases List.mem_append.mp hq with h | h
+            · exact weaken q (ih_completed q h)
+            · simp only [List.mem_cons, List.not_mem_nil, or_false] at h; subst h
+              rw [Process.id_invariant_wrt_tick]
+              exact weaken p (ih_running p h_prev_running)
+      · -- p continues
+        refine ⟨ready_src, ?_, fun q hq => weaken q (ih_completed q hq)⟩
+        intro q hq; simp only [Option.some.injEq] at hq; subst hq
+        rw [Process.id_invariant_wrt_tick]
+        exact weaken p (ih_running p h_prev_running)
+
+
 -- Links FCFSCompletionTime to FCFS completed queue
 theorem FCFS_completed_matches_prefix
   -- states that for any time, processes at the front will have completed and
@@ -518,6 +620,18 @@ theorem FCFS_completed_matches_prefix
         (processes[num_processes_completed]'h).arrival ≤ time)
 
       := by
+  have id_eq_implies_eq : ∀ a b, a ∈ processes → b ∈ processes →
+      Process.id a = Process.id b → a = b := by
+    change ∀ a b, a ∈ processes → b ∈ processes →
+      a.id = b.id → a = b
+    intro a b ha hb hid
+    rw [List.mem_iff_getElem] at ha hb
+    obtain ⟨i, hi, hia⟩ := ha
+    obtain ⟨j, hj, hjb⟩ := hb
+    have h := h_distinct_ids ⟨i, hi⟩ ⟨j, hj⟩ (by simp [hia, hjb, hid])
+    simp [Fin.ext_iff] at h
+    subst h
+    rw [← hia, ← hjb]
   induction time with
   | zero =>
     use 0
@@ -630,38 +744,12 @@ theorem FCFS_completed_matches_prefix
 
       use num_completed_processes_at_t_minus_one
 
-      -- shared proof for both empty and nonempty arrival list cases
-      have h_prove_shared_conjuncts : ∀ h_next_process_completion_constraint : ∃ arrival_time, arrival_time > t_minus_one + 1 ∧
-            next_process ∈ arrival_stream arrival_time →
-        (num_completed_processes_at_t_minus_one < processes.length →
-          t_minus_one + 1 < FCFSCompletionTime (processes.take (num_completed_processes_at_t_minus_one + 1))) ∧
-        (∀ p, (runSteps arrival_stream stepFCFS (t_minus_one + 1)).running = some p →
-          ∃ (h : num_completed_processes_at_t_minus_one < processes.length),
-          Process.id p = Process.id processes[num_completed_processes_at_t_minus_one] ∧
-          max (FCFSCompletionTime (processes.take num_completed_processes_at_t_minus_one))
-              (processes[num_completed_processes_at_t_minus_one]'h).arrival ≤ t_minus_one + 1)
-        := fun ⟨arrival_time, h_arrival_gt, h_arrival_mem⟩ ↦ by
-        refine ⟨fun h_exists_unarrived => ?_, fun p h_p_running_contradiction => ?_⟩
-        · have h_arrival_late : next_process.arrival > t_minus_one + 1 := by
-            have h_arrival_eq := h_arrival_consistent next_process arrival_time h_arrival_mem
-            omega
-          have h_foldl_inst := FCFSCompletionTime_last_element processes
-                                num_completed_processes_at_t_minus_one h_exists_unarrived
-          have h_max : max (FCFSCompletionTime (List.take num_completed_processes_at_t_minus_one processes))
-                          processes[num_completed_processes_at_t_minus_one].arrival
-                      ≥ processes[num_completed_processes_at_t_minus_one].arrival :=
-            Nat.le_max_right _ _
-          linarith [Process.burst_exceed_zero next_process]
-        · have h_not_running : (runSteps arrival_stream stepFCFS (t_minus_one + 1)).running = none := by
-            simp only [runSteps, stepFCFS, stepNonPreemptive, h_running_state]
-            split <;> rfl
-          grind
-
       -- check if someone arrives
       match arrival_list_during_t : arrival_stream (t_minus_one + 1) with
       | List.nil =>
         -- noone arrived
         refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+
 
         · have h_next : (runSteps arrival_stream stepFCFS (t_minus_one + 1)).completed = prev.completed := by
             change (stepFCFS { prev with ready := prev.ready ++ arrival_stream (t_minus_one + 1) }).completed = prev.completed
@@ -675,15 +763,19 @@ theorem FCFS_completed_matches_prefix
           rw [h_next]
           omega
 
+        -- num_completed_processes_at_t_minus_one ≤ processes.length
         · omega
 
         · rwa [h_completed_unchanged]
 
+        -- time just increased without new processes added, use h lower
         · omega
 
-        · intro h_exists_unarrived_processes
+
+        ·
+          intro h_exists_unarrived_processes
           have h_prev_bound := h_upper h_exists_unarrived_processes
-          set next_process := processes[num_completed_processes_at_t_minus_one]
+          set next_process := processes[num_completed_processes_at_t_minus_one] with h_next_process_def
           have h_next_arrives :
             ∃ arrival_time, next_process ∈ arrival_stream arrival_time :=
             h_processes_from_stream next_process
@@ -695,49 +787,136 @@ theorem FCFS_completed_matches_prefix
                     selectFCFS arrival_stream next_process h_next_arrives t_minus_one
             obtain ⟨arrival_time, h_arrival⟩ := h_next_arrives
             refine ⟨arrival_time, ?_, h_arrival⟩
-            by_contra h_le
-            push Not at h_le
-            have h_not_current : arrival_time = t_minus_one + 1 := by omega
-            simp only [h_not_current] at h_arrival
+            -- arrival_time must be > t_minus_one + 1 because:
+            -- arrival_stream (t_minus_one + 1) = [] so arrival_time ≠ t_minus_one + 1
+            -- anything ≤ t_minus_one would have been in prev.ready, but prev.ready = []
+            have h_not_current : arrival_time ≠ t_minus_one + 1 := by
+              intro h_eq
+              simp [h_eq, arrival_list_during_t] at h_arrival
             rcases h_status with h_ready | h_running | h_completed | ⟨t, h_t_gt, h_t_mem⟩
-            · simp only [stepFCFS] at h_prev_def
+            · -- next_process in ready, but prev.ready = []
+              simp only [stepFCFS] at h_prev_def
               rw [← h_prev_def] at h_ready
               simp [h_ready_empty] at h_ready
-            · simp only [stepFCFS] at h_prev_def
+            · -- next_process running, but prev.running = none
+              simp only [stepFCFS] at h_prev_def
               rw [← h_prev_def] at h_running
               simp [h_running_state] at h_running
-            · obtain ⟨np_completed, h_np_completed_in_completed_queue, h_np_completed_has_same_id_as_next_process⟩ := h_completed
+            · -- next_process completed, but completed only contains processes
+              -- that started before next_process in FCFS order - contradiction
+              -- Let next_process be our original target process
+              -- Let np_completed be the next process's counterpart in the completed queue
+              -- Let np_processes be the next process's counterpart in the processes queue generated from arrival list
+
+              obtain ⟨np_completed, h_np_completed_in_completed_queue, h_np_completed_has_same_id_as_next_process⟩ := h_completed
               obtain ⟨np_in_processes, h_np_in_take, h_np_id⟩ := h_reverse np_completed h_np_completed_in_completed_queue
-              have h_id_eq : np_in_processes.id = next_process.id := by rw [h_np_id]; omega
+              -- np_in_processes ∈ take n processes and np_in_processes.id = np_completed.id = next_process.id
+              -- but next_process = processes[n] which has a distinct id from all processes in take n
+              -- by h_distinct_ids
+              have h_id_eq : np_in_processes.id = next_process.id := by
+
+                change Process.id np_in_processes = Process.id next_process
+                -- h_np_id : np_in_processes.id = np_completed.id
+                rw [h_np_id]
+                omega
+              -- np_in_processes ∈ take n processes means its index < n
+              have h_in_processes : np_in_processes ∈ processes :=
+                List.mem_of_mem_take h_np_in_take
+              have h_in_take : np_in_processes ∈ processes.take num_completed_processes_at_t_minus_one :=
+                h_np_in_take
+              -- next_process = processes[n] is also in processes
+              have h_next_in_processes : next_process ∈ processes :=
+                List.getElem_mem h_exists_unarrived_processes
+              -- they have the same id, so by h_distinct_ids they must be the same element
+              -- but np_in_processes ∈ take n means it appears before index n
+              -- while next_process is at index n
+              -- use NoDup or a custom lemma
+              have h_nodup : (processes.take num_completed_processes_at_t_minus_one).length =
+                  num_completed_processes_at_t_minus_one :=
+                List.length_take_of_le (by omega)
+              rw [List.mem_iff_getElem] at h_np_in_take
+
+                -- next_process appears in take n AND at index n in processes
+                -- take n is a prefix, so next_process appears before index n
+                -- but next_process is also at index n, so it appears twice
+                -- contradicting List.Nodup
               have h_next_not_in_take : next_process ∉ processes.take num_completed_processes_at_t_minus_one := by
                 intro h_in_take
                 rw [List.mem_iff_getElem] at h_in_take
                 obtain ⟨i, h_i_lt_n, h_i_eq⟩ := h_in_take
-                have h_i_lt_len : i < processes.length := omega
+                have h_i_lt_len : i < processes.length := by
+                  have h1 : i < num_completed_processes_at_t_minus_one :=
+                    Nat.lt_of_lt_of_le h_i_lt_n
+                      (List.length_take_le num_completed_processes_at_t_minus_one processes)
+                  omega  -- uses h_exists_unarrived_processes : n < processes.length
                 have h_getElem_eq : processes[i]'h_i_lt_len = next_process := by
-                  rw [← List.getElem_take (h := h_i_lt_n)]; exact h_i_eq
-                have h_fin_eq := h_distinct_ids ⟨i, h_i_lt_len⟩ ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
-                  (by simp [h_getElem_eq])
-                simp [Fin.ext_iff] at h_fin_eq; omega
-              rw [List.mem_iff_getElem] at h_np_in_take
-              obtain ⟨i, h_i_lt_n, h_i_eq⟩ := h_np_in_take
-              have h_i_lt_len : i < processes.length := omega
-              have h_getElem_eq : processes[i]'h_i_lt_len = np_in_processes := by
-                rw [← List.getElem_take (h := h_i_lt_n)]; exact h_i_eq
-              have h_fin_eq := h_distinct_ids ⟨i, h_i_lt_len⟩ ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
-                (by simp [h_getElem_eq, h_id_eq])
-              simp [Fin.ext_iff] at h_fin_eq
-              have h_eq : np_in_processes = next_process := by simp [← h_getElem_eq, h_fin_eq]
-              rw [h_eq] at h_np_in_take
-              exact absurd h_np_in_take h_next_not_in_take
-            · have h_arrival_eq : t = arrival_time :=
+                  rw [← List.getElem_take (h := h_i_lt_n)]
+                  exact h_i_eq
+                have h_fin_eq := h_distinct_ids
+                  ⟨i, h_i_lt_len⟩
+                  ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
+                  (by simp [h_getElem_eq, next_process])
+                -- h_fin_eq : (⟨i, _⟩ : Fin _) = ⟨num_completed_processes_at_t_minus_one, _⟩
+                -- so i = num_completed_processes_at_t_minus_one
+                -- but h_i_lt_n : i < num_completed_processes_at_t_minus_one
+                simp [Fin.ext_iff] at h_fin_eq
+                omega
+              have h_eq : np_in_processes = next_process := by
+                obtain ⟨i, h_i_lt_n, h_i_eq⟩ := h_np_in_take
+                have h_i_lt_len : i < processes.length := by
+                  have h1 : i < num_completed_processes_at_t_minus_one :=
+                    Nat.lt_of_lt_of_le h_i_lt_n
+                      (List.length_take_le num_completed_processes_at_t_minus_one processes)
+                  omega
+                have h_getElem_eq : processes[i]'h_i_lt_len = np_in_processes := by
+                  rw [← List.getElem_take (h := h_i_lt_n)]
+                  exact h_i_eq
+                have h_fin_eq := h_distinct_ids
+                  ⟨i, h_i_lt_len⟩
+                  ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
+                  (by simp [h_getElem_eq, next_process, h_id_eq])
+                simp [Fin.ext_iff] at h_fin_eq
+                rw [← h_getElem_eq]
+                simp [next_process, h_fin_eq]
+              rw [h_eq] at h_in_take
+              exact absurd h_in_take h_next_not_in_take
+            · -- next_process unarrived at t_minus_one, so arrival_time > t_minus_one
+              -- combined with h_not_current gives arrival_time > t_minus_one + 1
+              have h_arrival_eq : t = arrival_time :=
                 h_arrival_unique next_process next_process t arrival_time h_t_mem h_arrival rfl
               omega
 
-          exact (h_prove_shared_conjuncts h_unarrived).1 h_exists_unarrived_processes
+          -- ⊢ t_minus_one + 1 < FCFSCompletionTime (List.take (num_completed_processes_at_t_minus_one + 1) processes)
+          have h_arrival_late : next_process.arrival > t_minus_one + 1 := by
+            obtain ⟨arrival_time, h_gt, h_mem⟩ := h_unarrived
+            have h_arrival_eq := h_arrival_consistent next_process arrival_time h_mem
+            omega
+          have h_foldl := FCFSCompletionTime_last_element
+                            processes
+                            num_completed_processes_at_t_minus_one
+          -- FCFSCompletionTime (take (n+1)) ≥ next_process.arrival + burst
+          have h_foldl_inst := h_foldl h_exists_unarrived_processes
+          -- h_foldl_inst : FCFSCompletionTime (take (n+1) ps) = max (...) next_process.arrival + next_process.burst
+          -- h_arrival_late : next_process.arrival > t_minus_one + 1
+          -- max (...) next_process.arrival ≥ next_process.arrival > t_minus_one + 1
+          -- so FCFSCompletionTime (take (n+1) ps) ≥ next_process.arrival + burst > t_minus_one + 1
+          have h_max : max (FCFSCompletionTime (List.take num_completed_processes_at_t_minus_one processes))
+                          processes[num_completed_processes_at_t_minus_one].arrival
+                      ≥ processes[num_completed_processes_at_t_minus_one].arrival := by
+            exact Nat.le_max_right _ _
 
-        · intro p h_p_running
-          exact (h_prove_shared_conjuncts ⟨_, by omega, sorry⟩).2 p h_p_running
+          linarith [Process.burst_exceed_zero next_process]
+
+        · intro p h_p_running_contradiction
+          have h_not_running : (runSteps arrival_stream stepFCFS (t_minus_one + 1)).running = none := by
+            simp [runSteps, stepFCFS]
+            simp [arrival_list_during_t]
+            simp [h_prev_def, stepFCFS] at h_ready_empty h_running_state
+            simp [h_ready_empty, h_running_state]
+            rfl
+          grind
+
+
 
       | List.cons arrival_head arrival_tails =>
         -- someone arrived
@@ -755,57 +934,119 @@ theorem FCFS_completed_matches_prefix
           rw [h_next]
           omega
 
+        -- num_completed_processes_at_t_minus_one ≤ processes.length
         · omega
 
         · rwa [h_completed_unchanged]
 
+        -- time just increased without new processes added, use h lower
         · omega
+
 
         · intro h_exists_unarrived_processes
           have h_prev_bound := h_upper h_exists_unarrived_processes
-          set next_process := processes[num_completed_processes_at_t_minus_one]
+          set next_process := processes[num_completed_processes_at_t_minus_one] with h_next_process_def
           have h_next_arrives :
             ∃ arrival_time, next_process ∈ arrival_stream arrival_time :=
             h_processes_from_stream next_process
             (List.getElem_mem h_exists_unarrived_processes)
 
-          have h_unarrived_or_arrives_now : next_process.arrival ≥ t_minus_one + 1 := by
+          have h_unarrived_or_arrives_now :
+              next_process.arrival ≥ t_minus_one + 1 := by
             have h_status := non_preemptive_processes_are_ready_running_completed_or_unarrived
                     selectFCFS arrival_stream next_process h_next_arrives t_minus_one
             have h_ready_empty : prev.ready = [] :=
               idle_implies_empty_ready arrival_stream t_minus_one h_running_state
             rcases h_status with h_ready | h_running | h_completed | ⟨t, h_t_gt, h_t_mem⟩
-            · rw [← stepFCFS, ← h_prev_def] at h_ready
+            · -- ready at t_minus_one means in prev.ready = [], contradiction
+              rw [← stepFCFS, ← h_prev_def] at h_ready
               simp [h_ready_empty] at h_ready
-            · rw [← stepFCFS, ← h_prev_def] at h_running
+            · -- running at t_minus_one but prev.running = none, contradiction
+              rw [← stepFCFS, ← h_prev_def] at h_running
               simp [h_running_state] at h_running
-            · obtain ⟨np_completed, h_np_completed_in_completed_queue, h_np_completed_has_same_id_as_next_process⟩ := h_completed
+            · -- next_process completed, but completed only contains processes
+              -- that started before next_process in FCFS order - contradiction
+              -- Let next_process be our original target process
+              -- Let np_completed be the next process's counterpart in the completed queue
+              -- Let np_processes be the next process's counterpart in the processes queue generated from arrival list
+
+              obtain ⟨np_completed, h_np_completed_in_completed_queue, h_np_completed_has_same_id_as_next_process⟩ := h_completed
               obtain ⟨np_in_processes, h_np_in_take, h_np_id⟩ := h_reverse np_completed h_np_completed_in_completed_queue
-              have h_id_eq : np_in_processes.id = next_process.id := by rw [h_np_id]; omega
+              -- np_in_processes ∈ take n processes and np_in_processes.id = np_completed.id = next_process.id
+              -- but next_process = processes[n] which has a distinct id from all processes in take n
+              -- by h_distinct_ids
+              have h_id_eq : np_in_processes.id = next_process.id := by
+
+                change Process.id np_in_processes = Process.id next_process
+                -- h_np_id : np_in_processes.id = np_completed.id
+                rw [h_np_id]
+                omega
+              -- np_in_processes ∈ take n processes means its index < n
+              have h_in_processes : np_in_processes ∈ processes :=
+                List.mem_of_mem_take h_np_in_take
+              have h_in_take : np_in_processes ∈ processes.take num_completed_processes_at_t_minus_one :=
+                h_np_in_take
+              -- next_process = processes[n] is also in processes
+              have h_next_in_processes : next_process ∈ processes :=
+                List.getElem_mem h_exists_unarrived_processes
+              -- they have the same id, so by h_distinct_ids they must be the same element
+              -- but np_in_processes ∈ take n means it appears before index n
+              -- while next_process is at index n
+              -- use NoDup or a custom lemma
+              have h_nodup : (processes.take num_completed_processes_at_t_minus_one).length =
+                  num_completed_processes_at_t_minus_one :=
+                List.length_take_of_le (by omega)
+              rw [List.mem_iff_getElem] at h_np_in_take
+
+                -- next_process appears in take n AND at index n in processes
+                -- take n is a prefix, so next_process appears before index n
+                -- but next_process is also at index n, so it appears twice
+                -- contradicting List.Nodup
               have h_next_not_in_take : next_process ∉ processes.take num_completed_processes_at_t_minus_one := by
                 intro h_in_take
                 rw [List.mem_iff_getElem] at h_in_take
                 obtain ⟨i, h_i_lt_n, h_i_eq⟩ := h_in_take
-                have h_i_lt_len : i < processes.length := omega
+                have h_i_lt_len : i < processes.length := by
+                  have h1 : i < num_completed_processes_at_t_minus_one :=
+                    Nat.lt_of_lt_of_le h_i_lt_n
+                      (List.length_take_le num_completed_processes_at_t_minus_one processes)
+                  omega  -- uses h_exists_unarrived_processes : n < processes.length
                 have h_getElem_eq : processes[i]'h_i_lt_len = next_process := by
-                  rw [← List.getElem_take (h := h_i_lt_n)]; exact h_i_eq
-                have h_fin_eq := h_distinct_ids ⟨i, h_i_lt_len⟩ ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
-                  (by simp [h_getElem_eq])
-                simp [Fin.ext_iff] at h_fin_eq; omega
-              rw [List.mem_iff_getElem] at h_np_in_take
-              obtain ⟨i, h_i_lt_n, h_i_eq⟩ := h_np_in_take
-              have h_i_lt_len : i < processes.length := omega
-              have h_getElem_eq : processes[i]'h_i_lt_len = np_in_processes := by
-                rw [← List.getElem_take (h := h_i_lt_n)]; exact h_i_eq
-              have h_fin_eq := h_distinct_ids ⟨i, h_i_lt_len⟩ ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
-                (by simp [h_getElem_eq, h_id_eq])
-              simp [Fin.ext_iff] at h_fin_eq
-              have h_eq : np_in_processes = next_process := by simp [← h_getElem_eq, h_fin_eq]
-              rw [h_eq] at h_np_in_take
-              exact absurd h_np_in_take h_next_not_in_take
-            · have h_arr := h_arrival_consistent next_process t h_t_mem
+                  rw [← List.getElem_take (h := h_i_lt_n)]
+                  exact h_i_eq
+                have h_fin_eq := h_distinct_ids
+                  ⟨i, h_i_lt_len⟩
+                  ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
+                  (by simp [h_getElem_eq, next_process])
+                -- h_fin_eq : (⟨i, _⟩ : Fin _) = ⟨num_completed_processes_at_t_minus_one, _⟩
+                -- so i = num_completed_processes_at_t_minus_one
+                -- but h_i_lt_n : i < num_completed_processes_at_t_minus_one
+                simp [Fin.ext_iff] at h_fin_eq
+                omega
+              have h_eq : np_in_processes = next_process := by
+                obtain ⟨i, h_i_lt_n, h_i_eq⟩ := h_np_in_take
+                have h_i_lt_len : i < processes.length := by
+                  have h1 : i < num_completed_processes_at_t_minus_one :=
+                    Nat.lt_of_lt_of_le h_i_lt_n
+                      (List.length_take_le num_completed_processes_at_t_minus_one processes)
+                  omega
+                have h_getElem_eq : processes[i]'h_i_lt_len = np_in_processes := by
+                  rw [← List.getElem_take (h := h_i_lt_n)]
+                  exact h_i_eq
+                have h_fin_eq := h_distinct_ids
+                  ⟨i, h_i_lt_len⟩
+                  ⟨num_completed_processes_at_t_minus_one, h_exists_unarrived_processes⟩
+                  (by simp [h_getElem_eq, next_process, h_id_eq])
+                simp [Fin.ext_iff] at h_fin_eq
+                rw [← h_getElem_eq]
+                simp [next_process, h_fin_eq]
+              rw [h_eq] at h_in_take
+              exact absurd h_in_take h_next_not_in_take
+            · -- unarrived: There should be a contradiction here but then we dont need a contradiction to show that arrival_time > t_minus_one
+              have h_arr := h_arrival_consistent next_process t h_t_mem
               omega
-
+          -- now next_process.arrival ≥ t_minus_one + 1
+          -- so FCFSCompletionTime (take (n+1)) ≥ (t_minus_one+1) + burst ≥ t_minus_one + 2
           have h_foldl_inst := FCFSCompletionTime_last_element processes
                                 num_completed_processes_at_t_minus_one h_exists_unarrived_processes
           have h_max := Nat.le_max_right
@@ -817,8 +1058,64 @@ theorem FCFS_completed_matches_prefix
             omega
           linarith [h_goal, h_max, h_foldl_inst]
 
-        · intro p h_p_running
-          sorry
+        · intro p h_running
+          have h_p_eq_head : p = arrival_head
+            := by
+            simp only [runSteps, stepFCFS, stepNonPreemptive] at h_running
+            have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
+            simp [h_prev_def, stepFCFS] at h_running_state
+            simp only [h_running_state] at h_running
+            split at h_running
+            · simp at h_running  -- select = none contradicts running = some p
+            · rename_i q h_select
+              -- selectFCFS picked q from arrival_stream 0, and running = some q = some p
+              simp at h_running
+              subst h_running
+              -- q ∈ arrival_stream 0 since selectFCFS returns a member
+              simp [h_prev_def, stepFCFS] at h_ready_empty
+              rw [arrival_list_during_t, h_ready_empty] at h_select
+              simp at h_select
+              unfold selectFCFS at h_select
+              grind
+          have h_p_in_processes : p ∈ processes :=
+            h_stream_in_processes p (t_minus_one + 1)
+              (by rw [arrival_list_during_t, h_p_eq_head]; exact List.mem_cons_self)
+          have h_lt : num_completed_processes_at_t_minus_one < processes.length := by
+            rcases Nat.lt_or_ge num_completed_processes_at_t_minus_one processes.length with h | h
+            · exact h
+            · -- n ≥ length, so with h_num_processes_completed_le_processes_length, n = length
+              have h_eq : num_completed_processes_at_t_minus_one = processes.length := by omega
+              -- then take n processes = processes, so p ∈ take n processes
+              -- h_completed_eq puts a matching id into prev.completed
+              -- but p is running at t_minus_one + 1 — contradiction
+              exfalso
+              have h_p_in_take : p ∈ List.take num_completed_processes_at_t_minus_one processes := by
+                rw [h_eq, List.take_length]; exact h_p_in_processes
+              obtain ⟨q, h_q_completed, h_q_id⟩ := h_completed_eq p h_p_in_take
+              obtain ⟨-, -, h_prov⟩ := system_provenance arrival_stream t_minus_one
+              obtain ⟨s, h_s_le, q₀, h_q₀_mem, h_q₀_id⟩ := h_prov q h_q_completed
+              -- q₀.id = q.id = p.id, and both live in processes
+              have h_q₀_eq : q₀ = p :=
+                id_eq_implies_eq q₀ p
+                  (h_stream_in_processes q₀ s h_q₀_mem) h_p_in_processes
+                  (by rw [h_q₀_id, h_q_id])
+              -- so p arrives at s ≤ t_minus_one and at t_minus_one + 1
+              have h_p_arr : p ∈ arrival_stream (t_minus_one + 1) := by
+                rw [arrival_list_during_t, h_p_eq_head]; exact List.mem_cons_self
+              have := h_arrival_unique p p s (t_minus_one + 1)
+                (h_q₀_eq ▸ h_q₀_mem) h_p_arr rfl
+              omega
+
+          refine ⟨h_lt, ?_, ?_⟩
+          · sorry
+          · rw [← h_index h_lt] at *   -- or however you land processes[n] = p
+            have h_arr : processes[n].arrival = t_minus_one + 1 := by
+              rw [h_index h_lt, ← h_p_eq_head]
+              exact h_arrival_consistent p (t_minus_one + 1) h_p_arr
+            rw [h_arr]
+            simp only [Nat.max_def]
+            split <;> omega
+
 
 
 
@@ -865,7 +1162,9 @@ theorem FCFS_completed_matches_prefix
         -- time just increased without new processes added, use h lower
         · omega
 
-        · have t_minus_one + 1 <  FCFSCompletionTime (List.take num_completed_processes_at_t_minus_one processes) ≤ t_minus_one
+        ·
+
+          have t_minus_one + 1 <  FCFSCompletionTime (List.take num_completed_processes_at_t_minus_one processes) ≤ t_minus_one
 
           intro h_exists_unarrived_processes
           have h_prev_bound := h_upper h_exists_unarrived_processes
