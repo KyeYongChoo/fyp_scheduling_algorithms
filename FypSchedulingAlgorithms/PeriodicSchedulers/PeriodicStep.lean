@@ -29,10 +29,10 @@ def stepRMS : PeriodicSchedState → PeriodicSchedState :=
 --       -- preempt: put the old runner back in ready (if it's different)
 --       let newReady : List PeriodicProcess :=
 --         match s.running with
---         | none      => s.ready.removeFirst p
+--         | none      => s.ready.erase p
 --         | some curr =>
 --           if curr == p then s.ready                 -- same process keeps running
---           else s.ready.removeFirst p ++ [curr]      -- preempt: evict curr
+--           else s.ready.erase p ++ [curr]      -- preempt: evict curr
 --       if p.remaining ≤ 1 then
 --         { s with time      := s.time + 1,
 --                  running   := none,

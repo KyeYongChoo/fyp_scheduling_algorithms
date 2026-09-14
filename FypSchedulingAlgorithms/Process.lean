@@ -41,6 +41,7 @@ class Process (α : Type) extends BEq α where
   convert_to_arrival_stream : List α → Nat → List α
   tick_decrements : ∀ p, remaining (tick p) = remaining p - 1
   id_invariant_wrt_tick : ∀ p, id (tick p) = id (p)
+  arrival_invariant_wrt_tick : ∀ p, arrival (tick p) = arrival (p)
   burst_exceed_zero : ∀ p, burst (p) > 0
 
 instance : Process AperiodicProcess where
@@ -56,6 +57,7 @@ instance : Process AperiodicProcess where
       original_process_list.filter (fun p => current_time = p.arrival)
   tick_decrements _p := rfl
   id_invariant_wrt_tick _p := rfl
+  arrival_invariant_wrt_tick _p := rfl
   burst_exceed_zero p := p.burst_exceed_zero
 
 instance : Process PeriodicProcess where
@@ -71,4 +73,5 @@ instance : Process PeriodicProcess where
       original_process_list.filter (fun p => current_time % p.arrival = 0)
   tick_decrements _p := rfl
   id_invariant_wrt_tick _p := rfl
+  arrival_invariant_wrt_tick _p := rfl
   burst_exceed_zero p := p.burst_exceed_zero

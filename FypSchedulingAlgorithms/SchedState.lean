@@ -58,8 +58,3 @@ structure RRState where
 def addArrivalsRR [SchedStateMethods AperiodicProcess] (rs : RRState) (processes : List AperiodicProcess): RRState :=
   let newSched := SchedStateMethods.add_arrival rs.sched processes
   { rs with sched := newSched }
-
--- remove the first matching element from a list - Used for preemptive scheduling
-def List.removeFirst [BEq α] (a : α) : List α → List α
-  | []      => []
-  | x :: xs => if x == a then xs else x :: xs.removeFirst a

@@ -43,7 +43,7 @@ def stepNonPreemptive [Process AperiodicProcess] (select : List AperiodicProcess
       | none   => { s with time := s.time + 1 }   -- idle tick (ready is empty)
       | some p => { s with time    := s.time + 1,
                            running := some p,
-                           ready   := s.ready.removeFirst p }
+                           ready   := s.ready.erase p }
     | some p =>
       let p := Process.tick p
       if Process.remaining p ≤ 0 then
@@ -57,7 +57,7 @@ def stepNonPreemptive [Process AperiodicProcess] (select : List AperiodicProcess
         | some q => { s with
                       time := s.time + 1
                       running := some q
-                      ready   := s.ready.removeFirst q
+                      ready   := s.ready.erase q
                       completed := s.completed ++ [p]
                     }
       else
@@ -78,11 +78,11 @@ def stepPreemptive (process_type : Type) [Process process_type]
       | some p =>
         let newReady :=
           match state_before.running with
-            | none => state_before.ready.removeFirst p
+            | none => state_before.ready.erase p
             | some b =>
               if b == p then state_before.ready
               else
-                state_before.ready.removeFirst p ++ [b]
+                state_before.ready.erase p ++ [b]
         let p := Process.tick p
         if Process.remaining p ≤ 0 then
           -- immediately look for next process - no context switch time
@@ -97,7 +97,7 @@ def stepPreemptive (process_type : Type) [Process process_type]
           | some q =>
             { state_before with
                 time      := state_before.time + 1
-                ready     := newReady.removeFirst q
+                ready     := newReady.erase q
                 running   := some q
                 completed := state_before.completed ++ [p] }
         else
