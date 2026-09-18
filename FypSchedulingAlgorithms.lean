@@ -5,4 +5,3 @@ import FypSchedulingAlgorithms.Test
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.AperiodicSchedulers.Starvation
 import FypSchedulingAlgorithms.PeriodicSchedulers.PeriodicStep
-import FypSchedulingAlgorithms.PeriodicSchedulers.Starvation
