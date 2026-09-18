@@ -791,84 +791,42 @@ theorem arrived_is_ready_or_running
 theorem running_eventually_completes
   (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (p : AperiodicProcess)
   (h_running : (runSteps arrival_stream stepFCFS t).running = some p)
-  (h_wf : WellFormedStream arrival_stream):
+  (h_wf : WellFormedStream arrival_stream) :
   ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p := by
-    have process_tick_mt_1 : (Process.tick p).remaining ≥ 1 := by
-      have := system_provenance -- doesnt work provenance talks about id but not remaining
-      -- have to induct over how running executes and deduce its remaining more than 0 Check if this is in another theorem later
-      sorry
-    use p.remaining - 1
-    induction h_p_remaining : (Process.tick p).remaining with
-    | zero =>
-
-      cases t with
-      | zero =>
-        have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := by rfl
-        simp [runSteps, stepFCFS, stepNonPreemptive, h_init_running] at h_running ⊢
-        rcases h_arrival_stream: selectFCFS (arrival_stream 0) with _ | p_selected
-        · simp only [h_arrival_stream] at h_running
-          grind
-        · simp only [h_arrival_stream] at h_running
-          have selected_eq_p: p = p_selected := by exact Option.some_inj.mp (symm h_running)
-          subst selected_eq_p; clear h_running
-          have p_mem_of_arrival_0 : p ∈ arrival_stream 0 := by exact selectFCFS_mem h_arrival_stream
-          have p_remaining_eq_burst :=h_wf.fresh p 0 p_mem_of_arrival_0
-          have p_burst_mt_0 := Process.burst_exceed_zero p
-          simp at p_burst_mt_0 h_p_remaining
-          rw [h_p_remaining]
-          simp [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
-
-
-
-      | succ n =>
-        use p
-        simp only [runSteps, stepFCFS, stepNonPreemptive]
-        simp only [stepFCFS] at h_running
-        rw [h_running]
-
-        a
-    | succ n ih=>
-      a
-      -- induct over remaining time
-
-    -- If remaining was 0 then (stepNonPreemptive select)^[process.remaining] s would be ill defined
-    -- need to induct over remaining_minus_one rather than remaining
-    -- need to convert the problem to be written over remaining_minus_one rather than remaining
-    obtain ⟨remain_minus_one, h_remain_minus_one⟩ : ∃ remain_minus_one, process.remaining = remain_minus_one + 1 := ⟨process.remaining - 1, by omega⟩
-    rw [h_remain_minus_one]
-
-    induction remain_minus_one generalizing s process with
-    | zero =>
-    -- remain minus one = 0 meaning last tick
-        simp only [zero_add, Function.iterate_one]
-        have h_finishing : process.remaining ≤ 1 := by omega
-        have ticked_process_in_completed_queue := stepNonPreemptive_completes_head_of_queue (select := select) s process h_running h_finishing |> And.right
-        use Process.tick process
-        apply And.intro
-        · rw [Process.id_invariant_wrt_tick process]
-        exact ticked_process_in_completed_queue
-    | succ remain_minus_two ih =>
-    -- remain minus one ≠ 0 meaning more than 1 tick left
-      rw [Function.iterate_succ, Function.comp_apply]
-      let one_step_state := stepNonPreemptive select s
-      -- before ticking, the remaining seconds > 1
-      have h_remaining_more_than_one : process.remaining > 1 := by omega -- from h_remain_minus_one : process.remaining = (remain_minus_two + 1) + 1
-
-      -- After 1 tick, still running same process
-      have h_next_running := stepNonPreemptive_continues_running (select := select) s process h_running h_remaining_more_than_one
-      -- After 1 tick, running process's remaining >= 1
-      have h_one_step_state_run_more_steps_remaining : one_step_state.running = some { process with remaining := remain_minus_two + 1 } := by
-        unfold one_step_state
-        -- same as tick_decrements -- just that tick_decrements defined in terms of Process.remaining process rather than process.remaining directly
-        have h_tick_eq : Process.tick process = { process with remaining := process.remaining - 1 } := rfl
-        rw [h_next_running, h_tick_eq, h_remain_minus_one]
-        congr 1
-      -- apply ih at h_one_step_state_run_more_steps_remaining
-      have result := ih one_step_state { process with remaining := remain_minus_two + 1 }
-        h_one_step_state_run_more_steps_remaining
-        (by simp)
-        rfl
-      exact result
+  suffices H : ∀ (n t : ℕ) (p : AperiodicProcess),
+      (runSteps arrival_stream stepFCFS t).running = some p →
+      Process.remaining p ≤ n + 1 →
+      ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p by
+    have h_pos := (ready_running_remaining_pos arrival_stream h_wf t).2 p h_running
+    exact H (Process.remaining p - 1) t p h_running (by omega)
+  intro n
+  induction n with
+  | zero =>
+    intro t p h_running h_remaining
+    have h_tick_p := Process.tick_decrements p
+    have h_tick_le : Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
+    have h_running' : (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
+    refine ⟨1, by omega, Process.tick p, ?_, Process.id_invariant_wrt_tick p⟩
+    simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_le, ↓reduceIte]
+    split <;> simp [List.mem_append]
+  | succ n ih =>
+    intro t p h_running h_remaining
+    have h_tick_p := Process.tick_decrements p
+    have h_running' : (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
+    by_cases h_finish : Process.remaining p ≤ 1
+    · have h_tick_le : Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
+      refine ⟨1, by omega, Process.tick p, ?_, Process.id_invariant_wrt_tick p⟩
+      simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_le, ↓reduceIte]
+      split <;> simp [List.mem_append]
+    · push Not at h_finish
+      have h_tick_not_le : ¬ Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
+      have h_next_running : (runSteps arrival_stream stepFCFS (t + 1)).running = some (Process.tick p) := by
+        simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_not_le, ↓reduceIte]
+      have h_remaining' : Process.remaining (Process.tick p) ≤ n + 1 := by rw [h_tick_p]; omega
+      obtain ⟨k, h_k_pos, q, hq, hid⟩ := ih (t + 1) (Process.tick p) h_next_running h_remaining'
+      refine ⟨1 + k, by omega, q, ?_, ?_⟩
+      · rwa [show t + (1 + k) = t + 1 + k by omega]
+      · rwa [Process.id_invariant_wrt_tick] at hid
 
 
 theorem target_eventually_runs
@@ -896,9 +854,11 @@ theorem FCFSStarvationFree
   rcases arrived_is_ready_or_running arrival_stream arrival_time process h_arrived h_wf with
     ⟨pre, suf, h_split, h_notin⟩ | h_running
   · obtain ⟨k, h_running⟩ := target_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
-    obtain ⟨k', q, h_q_mem, h_q_id⟩ := running_eventually_completes arrival_stream (arrival_time + k) process h_running
+    obtain ⟨k', h_k'_pos, q, h_q_mem, h_q_id⟩ :=
+      running_eventually_completes arrival_stream (arrival_time + k) process h_running h_wf
     exact ⟨arrival_time + k + k', q, h_q_mem, h_q_id⟩
-  · obtain ⟨k, q, h_q_mem, h_q_id⟩ := running_eventually_completes arrival_stream arrival_time process h_running
+  · obtain ⟨k, h_k_pos, q, h_q_mem, h_q_id⟩ :=
+      running_eventually_completes arrival_stream arrival_time process h_running h_wf
     exact ⟨arrival_time + k, q, h_q_mem, h_q_id⟩
 
 
