@@ -329,14 +329,14 @@ theorem ready_nonempty_implies_running_nonempty
 
 lemma ready_running_remaining_pos
   (arrival_stream : ℕ → List AperiodicProcess)
-  (h_arrival_fresh : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.remaining = p.burst)
+  (h_wf : WellFormedStream arrival_stream)
   (t : ℕ) :
   (∀ q ∈ (runSteps arrival_stream stepFCFS t).ready, Process.remaining q > 0) ∧
   (∀ q, (runSteps arrival_stream stepFCFS t).running = some q → Process.remaining q > 0) := by
   have fresh_pos : ∀ (p : AperiodicProcess) (s : ℕ), p ∈ arrival_stream s → Process.remaining p > 0 := by
     intro p s hp
     simp only [AperiodicProcess.process_remaining, gt_iff_lt]
-    rw [h_arrival_fresh p s hp]
+    rw [h_wf.fresh p s hp]
     exact Process.burst_exceed_zero p
   induction t with
   | zero =>
@@ -380,7 +380,7 @@ lemma ready_running_remaining_pos
 
 theorem system_arrival_bound
   (arrival_stream : ℕ → List AperiodicProcess)
-  (h_arrival_consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t)
+  (h_wf : WellFormedStream arrival_stream)
   (t : ℕ) :
   (∀ q ∈ (runSteps arrival_stream stepFCFS t).ready, Process.arrival q ≤ t) ∧
   (∀ q, (runSteps arrival_stream stepFCFS t).running = some q → Process.arrival q ≤ t) := by
@@ -390,14 +390,14 @@ theorem system_arrival_bound
     simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
     split
     · refine ⟨?_, ?_⟩
-      · intro q hq; exact le_of_eq (h_arrival_consistent q 0 hq)
+      · intro q hq; exact le_of_eq (h_wf.consistent q 0 hq)
       · intro q hq; simp at hq
     · rename_i q₀ h_select
       refine ⟨?_, ?_⟩
       · intro q hq
-        exact le_of_eq (h_arrival_consistent q 0 (List.mem_of_mem_erase hq))
+        exact le_of_eq (h_wf.consistent q 0 (List.mem_of_mem_erase hq))
       · intro q hq; simp only [Option.some.injEq] at hq; subst hq
-        exact le_of_eq (h_arrival_consistent q₀ 0 (selectFCFS_mem h_select))
+        exact le_of_eq (h_wf.consistent q₀ 0 (selectFCFS_mem h_select))
   | succ t ih =>
     obtain ⟨ih_ready, ih_running⟩ := ih
     simp only [runSteps, stepFCFS, stepNonPreemptive]
@@ -406,7 +406,7 @@ theorem system_arrival_bound
       intro q hq
       rcases List.mem_append.mp hq with h | h
       · exact le_trans (ih_ready q h) (by omega)
-      · exact le_of_eq (h_arrival_consistent q (t + 1) h)
+      · exact le_of_eq (h_wf.consistent q (t + 1) h)
     split
     · split
       · exact ⟨ready_src, by intro q hq; simp at hq; tauto⟩
@@ -512,7 +512,7 @@ theorem system_provenance
 
 theorem ready_ordered
   (arrival_stream : ℕ → List AperiodicProcess)
-  (h_arrival_consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t)
+  (h_wf : WellFormedStream arrival_stream)
   (t : ℕ) :
   List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b)
     (runSteps arrival_stream stepFCFS t).ready
@@ -528,7 +528,7 @@ theorem ready_ordered
       intro b hb
       rw [h hd (List.mem_cons_self), h b (List.mem_cons_of_mem _ hb)]
 
-  have stream_sorted t := uniform_pairwise _ t (fun p hp => h_arrival_consistent p t hp)
+  have stream_sorted t := uniform_pairwise _ t (fun p hp => h_wf.consistent p t hp)
 
   induction t with
   | zero =>
@@ -545,8 +545,8 @@ theorem ready_ordered
       rw [List.pairwise_append]
       refine ⟨ih, stream_sorted (t + 1), ?_⟩
       intro a ha b hb
-      have h_a : Process.arrival a ≤ t := (system_arrival_bound arrival_stream h_arrival_consistent t).1 a ha
-      have h_b : Process.arrival b = t + 1 := h_arrival_consistent b (t + 1) hb
+      have h_a : Process.arrival a ≤ t := (system_arrival_bound arrival_stream h_wf t).1 a ha
+      have h_b : Process.arrival b = t + 1 := h_wf.consistent b (t + 1) hb
       omega
     split
     · split
@@ -642,7 +642,7 @@ theorem target_index_decreases_one_step
 
 theorem target_progresses
   (arrival_stream : ℕ → List AperiodicProcess)
-  (h_arrival_fresh : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.remaining = p.burst)
+  (h_wf : WellFormedStream arrival_stream)
   (target : AperiodicProcess) (t : ℕ) (pre suf : List AperiodicProcess)
   (h_split : (runSteps arrival_stream stepFCFS t).ready = pre ++ target :: suf)
   (h_target_not_in_pre : target ∉ pre):
@@ -670,7 +670,7 @@ theorem target_progresses
     induction n with
     | zero =>
       intro t' pre' suf' q h_running h_ready h_remaining h_notin
-      have := (ready_running_remaining_pos arrival_stream h_arrival_fresh t').2 q h_running
+      have := (ready_running_remaining_pos arrival_stream h_wf t').2 q h_running
       omega
 
     | succ n ih =>
@@ -707,208 +707,179 @@ theorem mem_split_canonical {α} {l : List α} {p : α} (h : p ∈ l) :
       obtain ⟨pre, suf, h_split, h_notin⟩ := ih h_tl
       exact ⟨hd :: pre, suf, by rw [h_split]; rfl, by simp [h_notin, Ne.symm h_eq]⟩
 
-lemma erase_head_split {α : Type*} [DecidableEq α] {l pre suf : List α} {p : α}
-    (h_split : l = pre ++ p :: suf) (h_notin : p ∉ pre) (h_ne : l ≠ []) :
-    (pre = [] ∧ l.head h_ne = p)
-    ∨ (∃ pre', l.erase (l.head h_ne) = pre' ++ p :: suf ∧ p ∉ pre' ∧ pre'.length < pre.length) := by
+lemma erase_head_split {α : Type*} {rest pre suf : List α} {hd p : α}
+    (h_split : hd :: rest = pre ++ p :: suf) (h_notin : p ∉ pre) :
+    (pre = [] ∧ hd = p)
+    ∨ (∃ pre', rest = pre' ++ p :: suf ∧ p ∉ pre' ∧ pre'.length < pre.length) := by
   cases pre with
-  | nil => left; exact ⟨rfl, by simp [h_split]⟩
-  | cons hd tl =>
+  | nil => left; simp only [List.nil_append, List.cons.injEq] at h_split; exact ⟨rfl, h_split.1⟩
+  | cons a tl =>
     right
-    refine ⟨tl, ?_, List.not_mem_of_not_mem_cons h_notin, by simp⟩
-    subst h_split
-    simp
+    simp only [List.cons_append, List.cons.injEq] at h_split
+    exact ⟨tl, h_split.2, List.not_mem_of_not_mem_cons h_notin, by simp⟩
 
 theorem arrived_is_ready_or_running
   (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (p : AperiodicProcess)
   (h_arrived : p ∈ arrival_stream t)
-  (h_arrival_consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t):
+  (h_wf : WellFormedStream arrival_stream) :
   (∃ pre suf, (runSteps arrival_stream stepFCFS t).ready = pre ++ p :: suf ∧ p ∉ pre)
-  ∨ (runSteps arrival_stream stepFCFS t).running = some p
-  := by
-    obtain ⟨pre, suf, arrival_t_composition, h_p_not_pre⟩ := mem_split_canonical h_arrived
-    cases t with
-    | zero =>
-      cases pre with
-      | nil =>
-        right
-        simp only [runSteps, stepFCFS, stepNonPreemptive]
-        simp only [SchedStateMethods.init]
-        rw [arrival_t_composition]
-        simp only [selectFCFS]
-        simp
-      | cons pre_hd pre_tl =>
-        left
-        use pre_tl, suf
-        simp only [runSteps, stepFCFS, stepNonPreemptive]
-        simp only [SchedStateMethods.init]
-        rw [arrival_t_composition]
-        simp only [selectFCFS]
-        grind
-    | succ n =>
-      have h_p_not_prev_ready : p ∉ (runSteps arrival_stream (stepNonPreemptive selectFCFS) n).ready := by
-        intro h_mem
-        have h_le := (system_arrival_bound arrival_stream h_arrival_consistent n).1 p h_mem
-        have h_eq := h_arrival_consistent p (n + 1) h_arrived
-        simp at h_le
-        omega
-      simp only [runSteps, stepFCFS, stepNonPreemptive]
+  ∨ (runSteps arrival_stream stepFCFS t).running = some p := by
+  obtain ⟨pre, suf, arrival_t_composition, h_p_not_pre⟩ := mem_split_canonical h_arrived
+  cases t with
+  | zero =>
+    simp only [runSteps, stepFCFS, stepNonPreemptive, SchedStateMethods.init]
+    have h_comb : arrival_stream 0 = ([] ++ pre) ++ p :: suf := by
+      simpa using arrival_t_composition
+    have h_ne : arrival_stream 0 ≠ [] := by
+      rw [arrival_t_composition]; simp
+    split
+    · rename_i h_sel
+      rw [selectFCFS_none_iff_empty] at h_sel
+      exact absurd h_sel h_ne
+    · rename_i sel h_sel
+      obtain ⟨rest, h_cons⟩ := selectFCFS_head.mp h_sel
+      rw [h_cons] at h_comb
+      rcases erase_head_split h_comb (by simpa using h_p_not_pre) with
+        ⟨h_pre_nil, h_head⟩ | ⟨pre', h_erase, h_notin', _⟩
+      · right; simp [← h_head]
+      · left; exact ⟨pre', suf, by simpa [h_cons] using h_erase, h_notin'⟩
+  | succ n =>
+    have h_p_not_prev_ready : p ∉ (runSteps arrival_stream stepFCFS n).ready := by
+      intro h_mem
+      have h_le := (system_arrival_bound arrival_stream h_wf n).1 p h_mem
+      have h_eq := h_wf.consistent p (n + 1) h_arrived
+      simp at h_le; omega
+    have h_p_not_comb : p ∉ (runSteps arrival_stream stepFCFS n).ready ++ pre := by
+      simp [h_p_not_prev_ready, h_p_not_pre]
+    have h_comb : (runSteps arrival_stream stepFCFS n).ready ++ arrival_stream (n + 1)
+        = ((runSteps arrival_stream stepFCFS n).ready ++ pre) ++ p :: suf := by
+      rw [arrival_t_composition, List.append_assoc]
+    have h_ne : (runSteps arrival_stream stepFCFS n).ready ++ arrival_stream (n + 1) ≠ [] := by
+      rw [h_comb]; simp
+    simp only [runSteps, stepFCFS, stepNonPreemptive]
+    split
+    · -- prev.running = none
       split
-      · rename_i h_running_none
-        have h_ready_empty := idle_implies_empty_ready arrival_stream n h_running_none
-        simp only [stepFCFS] at h_ready_empty
-        rw [h_ready_empty]
-        simp only [List.nil_append, exists_and_right]
-
-        cases pre with
-        | nil =>
-          simp at arrival_t_composition
-          have selectFCFS_decision_p : selectFCFS (arrival_stream (n + 1)) = p
-            := by
-            rw [selectFCFS_head]
-            use suf
-          rw [selectFCFS_decision_p]
-          simp
-        | cons pre_hd pre_tl =>
-          simp only [List.cons_append] at arrival_t_composition
-          have selectFCFS_decision_pre_hd : selectFCFS (arrival_stream (n + 1)) = pre_hd
-            := by
-            rw [selectFCFS_head]
-            use (pre_tl ++ p :: suf)
-          rw [selectFCFS_decision_pre_hd]
-          simp only [Option.some.injEq]
-          left
-          rw [arrival_t_composition]
-          use pre_tl
-          refine ⟨?_, ?_⟩
-          · use suf
-            simp
-          · apply List.not_mem_of_not_mem_cons at h_p_not_pre
-            assumption
-      · rename_i prev_running_process h_running_some
+      · rename_i h_sel
+        rw [selectFCFS_none_iff_empty] at h_sel
+        exact absurd h_sel h_ne
+      · rename_i sel h_sel
+        obtain ⟨rest, h_cons⟩ := selectFCFS_head.mp h_sel
+        simp only [stepFCFS] at h_comb; rw [h_cons] at h_comb
+        rcases erase_head_split h_comb h_p_not_comb with
+          ⟨h_pre_nil, h_head⟩ | ⟨pre', h_rest, h_notin', _⟩
+        · right; simp [h_head]
+        · left; exact ⟨pre', suf, by rw [h_cons]; simpa using h_rest, h_notin'⟩
+    · -- prev.running = some q
+      split
+      · -- q finished, select fires
         split
-        · rename_i prev_process_remaining_zero
-          split
-          · rename_i ready_plus_arrival_selected_none
-            exfalso
-            have ready_plus_arrival_none : ((runSteps arrival_stream (stepNonPreemptive selectFCFS) n).ready ++ arrival_stream (n + 1)) = []
-              := by
-                rw [selectFCFS_none_iff_empty] at ready_plus_arrival_selected_none
-                exact ready_plus_arrival_selected_none
-            rw [arrival_t_composition] at ready_plus_arrival_none
-            simp at ready_plus_arrival_none
-          · rename_i selected_process ready_plus_arrival_selected_some
-            simp only [exists_and_right, Option.some.injEq]
-            cases pre with
-            | nil =>
-              cases h_prev_ready : (runSteps arrival_stream (stepNonPreemptive selectFCFS) n).ready with
-              | nil =>
-                right
-                rw [h_prev_ready, List.nil_append] at ready_plus_arrival_selected_some
-                rw [selectFCFS_head] at ready_plus_arrival_selected_some
-                obtain ⟨_rest, ready_plus_arrival_selected_some ⟩ := ready_plus_arrival_selected_some
-                simp only [List.nil_append] at arrival_t_composition
-                rw [arrival_t_composition] at ready_plus_arrival_selected_some
-                simp at ready_plus_arrival_selected_some
-                tauto
-
-              | cons rh rt =>
-                left
-                rw [arrival_t_composition]
-                use rt
-                constructor
-                · use suf
-                  simp
-                  rw [h_prev_ready] at ready_plus_arrival_selected_some
-                  rw [selectFCFS_head] at ready_plus_arrival_selected_some
-                  obtain ⟨_rest, h_selected_process_eq_rh⟩ := ready_plus_arrival_selected_some
-                  simp at h_selected_process_eq_rh
-                  simp [h_selected_process_eq_rh.left]
-                · rw [h_prev_ready] at h_p_not_prev_ready
-                  clear * - h_p_not_prev_ready
-                  grind
-            | cons pre_hd pre_tl =>
-              left
-              simp only [List.cons_append] at arrival_t_composition
-              have selectFCFS_decision_pre_hd : selectFCFS (arrival_stream (n + 1)) = pre_hd
-                := by
-                rw [selectFCFS_head]
-                use (pre_tl ++ p :: suf)
-              rw [arrival_t_composition] at ready_plus_arrival_selected_some ⊢
-              cases h_prev_ready : (runSteps arrival_stream (stepNonPreemptive selectFCFS) n).ready with
-              | nil =>
-                use pre_tl
-                rw [h_prev_ready, List.nil_append] at ready_plus_arrival_selected_some
-                rw [selectFCFS_head] at ready_plus_arrival_selected_some
-                obtain ⟨_rest, ready_plus_arrival_selected_some ⟩ := ready_plus_arrival_selected_some
-                simp at ready_plus_arrival_selected_some
-                rw [← ready_plus_arrival_selected_some.left]
-                constructor
-                · use suf
-                  simp
-                · apply List.not_mem_of_not_mem_cons at h_p_not_pre
-                  assumption
-              | cons rh rt =>
-                use rt ++ pre_hd :: pre_tl
-                constructor
-                · use suf
-                  rw [h_prev_ready] at ready_plus_arrival_selected_some
-                  rw [selectFCFS_head] at ready_plus_arrival_selected_some
-                  obtain ⟨_rest, h_selected_process_eq_rh⟩ := ready_plus_arrival_selected_some
-                  simp only [List.cons_append, List.cons.injEq] at h_selected_process_eq_rh
-                  obtain ⟨rh_is_selected_process, contents_of_rest_of_ready⟩ := h_selected_process_eq_rh
-                  simp [rh_is_selected_process]
-                · grind
-        · rename_i no_complete_this_tick
-          left
-          cases pre with
-          | nil =>
-            cases h_prev_ready : (runSteps arrival_stream (stepNonPreemptive selectFCFS) n).ready with
-            | nil =>
-              use []
-              rw [arrival_t_composition]
-              simp
-            | cons rh rt =>
-              rw [arrival_t_composition]
-              use rh :: rt, suf
-              apply And.intro
-              · simp
-              · rw [h_prev_ready] at h_p_not_prev_ready
-                exact h_p_not_prev_ready
-          | cons pre_hd pre_tl =>
-            simp only [List.cons_append] at arrival_t_composition
-            have selectFCFS_decision_pre_hd : selectFCFS (arrival_stream (n + 1)) = pre_hd
-              := by
-              rw [selectFCFS_head]
-              use (pre_tl ++ p :: suf)
-            rw [arrival_t_composition]
-            cases h_prev_ready : (runSteps arrival_stream (stepNonPreemptive selectFCFS) n).ready with
-            | nil =>
-              use pre_hd :: pre_tl, suf
-              constructor
-              · simp
-              · assumption
-            | cons rh rt =>
-              use rh :: rt ++ pre_hd :: pre_tl
-              use suf
-              constructor
-              · simp
-              · grind
+        · rename_i h_sel
+          rw [selectFCFS_none_iff_empty] at h_sel
+          exact absurd h_sel h_ne
+        · rename_i sel h_sel
+          obtain ⟨rest, h_cons⟩ := selectFCFS_head.mp h_sel
+          simp only [stepFCFS] at h_comb; rw [h_cons] at h_comb
+          rcases erase_head_split h_comb h_p_not_comb with
+            ⟨h_pre_nil, h_head⟩ | ⟨pre', h_rest, h_notin', _⟩
+          · right; simp [← h_head]
+          · left; exact ⟨pre', suf, by simpa [h_cons] using h_rest, h_notin'⟩
+      · -- q continues: ready is the combined list untouched
+        left
+        exact ⟨(runSteps arrival_stream stepFCFS n).ready ++ pre, suf, h_comb, h_p_not_comb⟩
 
 theorem running_eventually_completes
   (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (p : AperiodicProcess)
-  (h_running : (runSteps arrival_stream stepFCFS t).running = some p) :
-  ∃ k, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p
+  (h_running : (runSteps arrival_stream stepFCFS t).running = some p)
+  (h_wf : WellFormedStream arrival_stream):
+  ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p := by
+    have process_tick_mt_1 : (Process.tick p).remaining ≥ 1 := by
+      have := system_provenance -- doesnt work provenance talks about id but not remaining
+      -- have to induct over how running executes and deduce its remaining more than 0 Check if this is in another theorem later
+      sorry
+    use p.remaining - 1
+    induction h_p_remaining : (Process.tick p).remaining with
+    | zero =>
+
+      cases t with
+      | zero =>
+        have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := by rfl
+        simp [runSteps, stepFCFS, stepNonPreemptive, h_init_running] at h_running ⊢
+        rcases h_arrival_stream: selectFCFS (arrival_stream 0) with _ | p_selected
+        · simp only [h_arrival_stream] at h_running
+          grind
+        · simp only [h_arrival_stream] at h_running
+          have selected_eq_p: p = p_selected := by exact Option.some_inj.mp (symm h_running)
+          subst selected_eq_p; clear h_running
+          have p_mem_of_arrival_0 : p ∈ arrival_stream 0 := by exact selectFCFS_mem h_arrival_stream
+          have p_remaining_eq_burst :=h_wf.fresh p 0 p_mem_of_arrival_0
+          have p_burst_mt_0 := Process.burst_exceed_zero p
+          simp at p_burst_mt_0 h_p_remaining
+          rw [h_p_remaining]
+          simp [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
+
+
+
+      | succ n =>
+        use p
+        simp only [runSteps, stepFCFS, stepNonPreemptive]
+        simp only [stepFCFS] at h_running
+        rw [h_running]
+
+        a
+    | succ n ih=>
+      a
+      -- induct over remaining time
+
+    -- If remaining was 0 then (stepNonPreemptive select)^[process.remaining] s would be ill defined
+    -- need to induct over remaining_minus_one rather than remaining
+    -- need to convert the problem to be written over remaining_minus_one rather than remaining
+    obtain ⟨remain_minus_one, h_remain_minus_one⟩ : ∃ remain_minus_one, process.remaining = remain_minus_one + 1 := ⟨process.remaining - 1, by omega⟩
+    rw [h_remain_minus_one]
+
+    induction remain_minus_one generalizing s process with
+    | zero =>
+    -- remain minus one = 0 meaning last tick
+        simp only [zero_add, Function.iterate_one]
+        have h_finishing : process.remaining ≤ 1 := by omega
+        have ticked_process_in_completed_queue := stepNonPreemptive_completes_head_of_queue (select := select) s process h_running h_finishing |> And.right
+        use Process.tick process
+        apply And.intro
+        · rw [Process.id_invariant_wrt_tick process]
+        exact ticked_process_in_completed_queue
+    | succ remain_minus_two ih =>
+    -- remain minus one ≠ 0 meaning more than 1 tick left
+      rw [Function.iterate_succ, Function.comp_apply]
+      let one_step_state := stepNonPreemptive select s
+      -- before ticking, the remaining seconds > 1
+      have h_remaining_more_than_one : process.remaining > 1 := by omega -- from h_remain_minus_one : process.remaining = (remain_minus_two + 1) + 1
+
+      -- After 1 tick, still running same process
+      have h_next_running := stepNonPreemptive_continues_running (select := select) s process h_running h_remaining_more_than_one
+      -- After 1 tick, running process's remaining >= 1
+      have h_one_step_state_run_more_steps_remaining : one_step_state.running = some { process with remaining := remain_minus_two + 1 } := by
+        unfold one_step_state
+        -- same as tick_decrements -- just that tick_decrements defined in terms of Process.remaining process rather than process.remaining directly
+        have h_tick_eq : Process.tick process = { process with remaining := process.remaining - 1 } := rfl
+        rw [h_next_running, h_tick_eq, h_remain_minus_one]
+        congr 1
+      -- apply ih at h_one_step_state_run_more_steps_remaining
+      have result := ih one_step_state { process with remaining := remain_minus_two + 1 }
+        h_one_step_state_run_more_steps_remaining
+        (by simp)
+        rfl
+      exact result
+
 
 theorem target_eventually_runs
   (arrival_stream : ℕ → List AperiodicProcess) (target : AperiodicProcess)
-  (h_arrival_fresh : ...) (t : ℕ) (pre suf : List AperiodicProcess)
+  (h_wf : WellFormedStream arrival_stream) (t : ℕ) (pre suf : List AperiodicProcess)
   (h_split : (runSteps arrival_stream stepFCFS t).ready = pre ++ target :: suf)
   (h_notin : target ∉ pre) :
   ∃ k, (runSteps arrival_stream stepFCFS (t + k)).running = some target := by
   induction hn : pre.length using Nat.strong_induction_on generalizing t pre suf with
   | _ n ih =>
-    obtain ⟨k, h_k_pos, h_concl⟩ := target_progresses ...
+    obtain ⟨k, h_k_pos, h_concl⟩ := target_progresses arrival_stream h_wf target t pre suf h_split h_notin
     rcases h_concl with h_run | ⟨pre', suf', h_ready', h_notin', h_lt⟩
     · exact ⟨k, h_run⟩
     · obtain ⟨k', h_k'⟩ := ih pre'.length (by omega) (t + k) pre' suf' h_ready' h_notin' rfl
@@ -916,18 +887,18 @@ theorem target_eventually_runs
 
 theorem FCFSStarvationFree
   (arrival_stream : Nat → List AperiodicProcess)
-  (h_arrival_unique : ∀ p1 p2 t1 t2, p1 ∈ arrival_stream t1 → p2 ∈ arrival_stream t2 → p1 = p2 → t1 = t2):
+  (h_wf : WellFormedStream arrival_stream) :
   ∀ arrival_time process, process ∈ arrival_stream arrival_time →
   ∃ completion_time, ∃ finished_process ∈ (runSteps arrival_stream stepFCFS completion_time).completed,
     Process.id finished_process = Process.id process -- cannot directly compare a process via == since the `remaining` field changes
   := by
   intro arrival_time process h_arrived
-  rcases arrived_is_ready_or_running arrival_stream arrival_time process h_arrived with
+  rcases arrived_is_ready_or_running arrival_stream arrival_time process h_arrived h_wf with
     ⟨pre, suf, h_split, h_notin⟩ | h_running
-  · obtain ⟨k, h_running⟩ := target_eventually_runs ...
-    obtain ⟨k', q, h_q_mem, h_q_id⟩ := running_eventually_completes ... h_running
+  · obtain ⟨k, h_running⟩ := target_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
+    obtain ⟨k', q, h_q_mem, h_q_id⟩ := running_eventually_completes arrival_stream (arrival_time + k) process h_running
     exact ⟨arrival_time + k + k', q, h_q_mem, h_q_id⟩
-  · obtain ⟨k, q, h_q_mem, h_q_id⟩ := running_eventually_completes ... h_running
+  · obtain ⟨k, q, h_q_mem, h_q_id⟩ := running_eventually_completes arrival_stream arrival_time process h_running
     exact ⟨arrival_time + k, q, h_q_mem, h_q_id⟩
 
 

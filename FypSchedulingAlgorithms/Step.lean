@@ -22,7 +22,18 @@ order in which it arrives.
 The preemptive version of FCFS, which is Round Robin, differs enough from
 other preemptive algorithms that it is built independently from
 `stepNonPreemptive` and `stepPreemptive`
+
+This file also defines the runSteps function which simulates a time step and
+Arrival stream to simulate arrivals, since i'm modelling infinite processes arriving
+in total, though at any time step only a finite amount of processes arrive
 -/
+
+structure WellFormedStream (arrival_stream : ℕ → List AperiodicProcess) : Prop where
+  consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t
+  fresh : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.remaining = p.burst
+  unique : ∀ (p1 p2 : AperiodicProcess) (t1 t2 : ℕ),
+    p1 ∈ arrival_stream t1 → p2 ∈ arrival_stream t2 →
+    Process.id p1 = Process.id p2 → t1 = t2 ∧ p1 = p2
 
 def default_num_steps := 30
 
