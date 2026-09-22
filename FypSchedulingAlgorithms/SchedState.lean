@@ -50,7 +50,6 @@ instance : SchedStateMethods PeriodicProcess where
 
 structure RRState where
   sched      : SchedState
-  quantum    : Nat          -- max ticks per slice
   ticksUsed  : Nat          -- ticks the current process has used this slice
   deriving Repr
 

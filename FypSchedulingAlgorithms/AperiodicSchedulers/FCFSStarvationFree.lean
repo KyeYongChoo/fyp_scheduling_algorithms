@@ -10,6 +10,7 @@ import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import Mathlib.Tactic.Linarith
+import FypSchedulingAlgorithms.ListLemmas
 
 /-!
 # Starvation-freedom for aperiodic schedulers
@@ -29,10 +30,10 @@ arrives eventually completes. It is assembled from two chains of lemmas:
   queue as a canonical `pre ++ target :: suf` split (via `mem_split_canonical`
   and `erase_head_split`), or shows it is already running.
 * `target_index_decreases_one_step` / `target_progresses` /
-  `target_eventually_runs` show that this split's prefix strictly shrinks (or
+  `ready_eventually_runs` show that this split's prefix strictly shrinks (or
   the process starts running) every time the currently-running process
   finishes, using a measure on its `remaining` time
-  (`ready_running_remaining_pos`).
+  (`remaining_pos_of_ready_or_running`).
 * `running_eventually_completes` shows that once running, a process ticks
   down to completion within a bounded number of further steps.
 
@@ -48,16 +49,17 @@ for an arbitrary `select` rather than FCFS specifically, for reuse when
 proving facts about other non-preemptive schedulers (SJF, SRTF, Round Robin
 - see the TODOs at the bottom of the file).
 
-`foldl_ge_init` / `foldl_prefix_le` are general `List.foldl` monotonicity
-lemmas, not yet used elsewhere, intended for reasoning about priority-based
-`select` functions built with `List.foldl` (e.g. `selectByPriority`).
 -/
 
 /-- Scheduler-agnostic invariant: for any non-preemptive `select`, a process
 that is guaranteed to arrive eventually is, at every point in time, exactly
 one of: sitting in the ready queue, running (matched by `id`, since ticking
 changes `remaining`), already completed (matched by `id`), or not yet
-arrived. Nothing simply vanishes from the system. -/
+arrived. Nothing simply vanishes from the system.
+
+Not actually used for the Starvation proof but I kept in view since it seems
+useful for other proofs later on
+-/
 theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
   (select : List AperiodicProcess → Option AperiodicProcess)
   (arrival_stream : Nat → List AperiodicProcess)
@@ -241,40 +243,6 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
           right; right; right
           exact ⟨arrival_time, by omega, h_mem⟩
 
-/-- Folding a monotone accumulator function never drops below the initial
-value: if `f acc x ≥ acc` for every `acc, x`, then `l.foldl f init ≥ init`. -/
-theorem foldl_ge_init
-  {α}
-  (f : ℕ → α → ℕ)
-  (h_mono : ∀ acc x, acc ≤ f acc x)
-  (l : List α) (init : ℕ) :
-  init ≤ l.foldl f init := by
-  induction l generalizing init with
-  | nil => simp
-  | cons hd tl ih =>
-    simp only [List.foldl]
-    exact le_trans (h_mono init hd) (ih (f init hd))
-
-/-- Folding a monotone accumulator function over a prefix of a list never
-exceeds folding it over the whole list: `(l.take n).foldl f init ≤
-l.foldl f init`. -/
-theorem foldl_prefix_le
-  {α}
-  (f : ℕ → α → ℕ)
-  (h_mono : ∀ acc x, acc ≤ f acc x)
-  (l : List α) (n : ℕ) (init : ℕ) :
-  (l.take n).foldl f init ≤ l.foldl f init := by
-  induction l generalizing n init with
-  | nil => simp
-  | cons hd tl ih =>
-    cases n with
-    | zero =>
-      simp only [List.foldl]
-      exact le_trans (h_mono init hd) (foldl_ge_init f h_mono tl (f init hd))
-    | succ n =>
-      simp only [List.take, List.foldl]
-      apply ih
-
 /-- `selectFCFS` returns `none` exactly when there is nothing to pick from. -/
 theorem selectFCFS_none_iff_empty
   (l : List AperiodicProcess) :
@@ -369,7 +337,7 @@ the ready queue or running at time `t` still has positive `remaining` time
 left (it arrived with `remaining = burst > 0` and non-preemptive ticking only
 ever reduces the *running* process's `remaining`, moving it to `completed`
 once it hits zero). -/
-lemma ready_running_remaining_pos
+lemma remaining_pos_of_ready_or_running
   (arrival_stream : ℕ → List AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream)
   (t : ℕ) :
@@ -698,7 +666,7 @@ theorem target_index_decreases_one_step
         rfl
 
 /-- Repeatedly applying `target_index_decreases_one_step`, bounded by the
-running process's `remaining` time via `ready_running_remaining_pos`: a
+running process's `remaining` time via `remaining_pos_of_ready_or_running`: a
 process at a fixed position in the ready queue either starts running or
 strictly closes the distance to the front within some finite `k > 0` steps
 (it can't get stuck waiting behind the same prefix forever). -/
@@ -732,7 +700,7 @@ theorem target_progresses
     induction n with
     | zero =>
       intro t' pre' suf' q h_running h_ready h_remaining h_notin
-      have := (ready_running_remaining_pos arrival_stream h_wf t').2 q h_running
+      have := (remaining_pos_of_ready_or_running arrival_stream h_wf t').2 q h_running
       omega
 
     | succ n ih =>
@@ -875,7 +843,7 @@ theorem running_eventually_completes
       (runSteps arrival_stream stepFCFS t).running = some p →
       Process.remaining p ≤ n + 1 →
       ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p by
-    have h_pos := (ready_running_remaining_pos arrival_stream h_wf t).2 p h_running
+    have h_pos := (remaining_pos_of_ready_or_running arrival_stream h_wf t).2 p h_running
     exact H (Process.remaining p - 1) t p h_running (by omega)
   intro n
   induction n with
@@ -909,7 +877,7 @@ theorem running_eventually_completes
 
 /-- Chaining `target_progresses` by strong induction on the prefix length: a
 process sitting anywhere in the ready queue eventually gets to run. -/
-theorem target_eventually_runs
+theorem ready_eventually_runs
   (arrival_stream : ℕ → List AperiodicProcess) (target : AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream) (t : ℕ) (pre suf : List AperiodicProcess)
   (h_split : (runSteps arrival_stream stepFCFS t).ready = pre ++ target :: suf)
@@ -926,7 +894,7 @@ theorem target_eventually_runs
 /-- **Main theorem.** FCFS is starvation-free: under a well-formed arrival
 stream, every process that ever arrives is eventually found in `completed`
 (matched by `id`). Combines `arrived_is_ready_or_running`,
-`target_eventually_runs`, and `running_eventually_completes`. -/
+`ready_eventually_runs`, and `running_eventually_completes`. -/
 theorem FCFSStarvationFree
   (arrival_stream : Nat → List AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream) :
@@ -937,16 +905,10 @@ theorem FCFSStarvationFree
   intro arrival_time process h_arrived
   rcases arrived_is_ready_or_running arrival_stream arrival_time process h_arrived h_wf with
     ⟨pre, suf, h_split, h_notin⟩ | h_running
-  · obtain ⟨k, h_running⟩ := target_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
+  · obtain ⟨k, h_running⟩ := ready_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
     obtain ⟨k', h_k'_pos, q, h_q_mem, h_q_id⟩ :=
       running_eventually_completes arrival_stream (arrival_time + k) process h_running h_wf
     exact ⟨arrival_time + k + k', q, h_q_mem, h_q_id⟩
   · obtain ⟨k, h_k_pos, q, h_q_mem, h_q_id⟩ :=
       running_eventually_completes arrival_stream arrival_time process h_running h_wf
     exact ⟨arrival_time + k, q, h_q_mem, h_q_id⟩
-
-
-
--- Proof that Starvation occurs in Shortest Job First, Shortest Remaining Time First schedulers
-
--- Proof that in the First Come First Serve, Round Robin scheduler every process will run

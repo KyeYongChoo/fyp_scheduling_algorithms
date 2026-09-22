@@ -14,7 +14,7 @@ def stepSRTF : SchedState -> SchedState:=
 -- ─── Round Robin ─────────────────────────────────────────────────────────────
 -- RR needs a quantum counter; hence the repeated code
 
-def stepRR (q : Nat) : RRState → RRState :=
+def stepRR (quantum : Nat) : RRState → RRState :=
   fun rs =>
     let s := rs.sched
     match s.running with
@@ -45,7 +45,7 @@ def stepRR (q : Nat) : RRState → RRState :=
                               ready     := ps
                               completed := s.completed ++ [completedProcess] }
               ticksUsed := 0 }
-      else if rs.ticksUsed ≥ q - 1 then
+      else if rs.ticksUsed ≥ quantum - 1 then
         match s.ready with
         | [] =>
           { rs with
@@ -67,12 +67,15 @@ def stepRR (q : Nat) : RRState → RRState :=
                             running := some { p with remaining := p.remaining - 1 } }
             ticksUsed := rs.ticksUsed + 1 }
 
+-- Quantum is a property of runstepsRR, while ticksUsed is a part of RRState, which is a wrapper over SchedState
 def runStepsRR [SchedStateMethods AperiodicProcess] (quantum : Nat)
                (arrivalStream : ℕ → List AperiodicProcess)
                (num_steps: ℕ): RRState :=
   match num_steps with
-  | 0     =>
-    {sched := SchedStateMethods.init, quantum := quantum, ticksUsed := 0 }
+  | 0 =>
+    stepRR quantum
+      { sched := { SchedStateMethods.init with ready := arrivalStream 0 }
+        , ticksUsed := 0 }
   | n + 1 =>
     let prev := runStepsRR quantum arrivalStream n
     stepRR quantum {prev with sched := {prev.sched with ready := prev.sched.ready ++ arrivalStream (n + 1)} }
