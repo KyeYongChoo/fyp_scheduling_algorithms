@@ -40,8 +40,7 @@ arrives eventually completes. It is assembled from two chains of lemmas:
 Along the way: FCFS-specific facts about `stepFCFS`/`selectFCFS`
 (`selectFCFS_none_iff_empty`, `selectFCFS_mem`, `selectFCFS_head`,
 `idle_implies_empty_ready`, `ready_nonempty_implies_running_nonempty`) and
-scheduler-state invariants (`system_arrival_bound`, `system_provenance`,
-`ready_ordered`).
+scheduler-state invariants (`system_arrival_bound`, `system_provenance`).
 
 `non_preemptive_processes_are_ready_running_completed_or_unarrived` is a
 scheduler-agnostic version of the same "nothing vanishes" invariant, stated
@@ -337,7 +336,7 @@ the ready queue or running at time `t` still has positive `remaining` time
 left (it arrived with `remaining = burst > 0` and non-preemptive ticking only
 ever reduces the *running* process's `remaining`, moving it to `completed`
 once it hits zero). -/
-lemma remaining_pos_of_ready_or_running
+theorem remaining_pos_of_ready_or_running
   (arrival_stream : ℕ → List AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream)
   (t : ℕ) :
@@ -525,57 +524,6 @@ theorem system_provenance
         intro q hq; simp only [Option.some.injEq] at hq; subst hq
         rw [Process.id_invariant_wrt_tick]
         exact weaken p (ih_running p h_prev_running)
-
-/-- FCFS invariant: the ready queue is always sorted by arrival time (earlier
-arrivals precede later ones), since arrivals are appended in arrival order
-and only the front element is ever removed. -/
-theorem ready_ordered
-  (arrival_stream : ℕ → List AperiodicProcess)
-  (h_wf : WellFormedStream arrival_stream)
-  (t : ℕ) :
-  List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b)
-    (runSteps arrival_stream stepFCFS t).ready
-    := by
-  have uniform_pairwise : ∀ (l : List AperiodicProcess) (c : ℕ),
-    (∀ p ∈ l, Process.arrival p = c) →
-    List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b) l := by
-    intro l c h
-    induction l with
-    | nil => exact List.Pairwise.nil
-    | cons hd tl ih =>
-      refine List.Pairwise.cons ?_ (ih fun p hp => h p (List.mem_cons_of_mem _ hp))
-      intro b hb
-      rw [h hd (List.mem_cons_self), h b (List.mem_cons_of_mem _ hb)]
-
-  have stream_sorted t := uniform_pairwise _ t (fun p hp => h_wf.consistent p t hp)
-
-  induction t with
-  | zero =>
-    simp only [runSteps, stepFCFS, stepNonPreemptive]
-    have h_init : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [h_init]
-    split
-    · simpa using stream_sorted 0
-    · exact (stream_sorted 0).sublist (List.erase_sublist)
-  | succ t ih =>
-    simp only [runSteps, stepFCFS, stepNonPreemptive]
-    have h_append : List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b)
-        ((runSteps arrival_stream stepFCFS t).ready ++ arrival_stream (t + 1)) := by
-      rw [List.pairwise_append]
-      refine ⟨ih, stream_sorted (t + 1), ?_⟩
-      intro a ha b hb
-      have h_a : Process.arrival a ≤ t := (system_arrival_bound arrival_stream h_wf t).1 a ha
-      have h_b : Process.arrival b = t + 1 := h_wf.consistent b (t + 1) hb
-      omega
-    split
-    · split
-      · exact h_append
-      · exact h_append.sublist (List.erase_sublist)
-    · split
-      · split
-        · exact h_append
-        · exact h_append.sublist (List.erase_sublist)
-      · exact h_append
 
 /-- One FCFS step, from a state where `target` sits at position `pre.length`
 in the ready queue (`ready = pre ++ target :: suf`, `target ∉ pre`), leads to
