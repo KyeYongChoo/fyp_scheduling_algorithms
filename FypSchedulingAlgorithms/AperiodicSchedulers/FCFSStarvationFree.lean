@@ -23,7 +23,7 @@ Processes arrive via an infinite `arrival_stream : ℕ → List AperiodicProcess
 pins each process's `arrival` field to the time it actually shows up and
 requires it to be `remaining = burst`-fresh on arrival.
 
-The main result is `FCFSStarvationFree`: under FCFS, every process that ever
+The main result is `StarvationFree`: under FCFS, every process that ever
 arrives eventually completes. It is assembled from two chains of lemmas:
 
 * `arrived_is_ready_or_running` locates a just-arrived process in the ready
@@ -49,6 +49,8 @@ proving facts about other non-preemptive schedulers (SJF, SRTF, Round Robin
 - see the TODOs at the bottom of the file).
 
 -/
+
+namespace FCFSStarvation
 
 /-- Scheduler-agnostic invariant: for any non-preemptive `select`, a process
 that is guaranteed to arrive eventually is, at every point in time, exactly
@@ -671,39 +673,6 @@ theorem target_progresses
         · exact Or.inl h
         · exact Or.inr ⟨pre3, suf3, h_ready3, h_notin3, by omega⟩
 
-/-- Any membership witness `p ∈ l` can be presented canonically as
-`l = pre ++ p :: suf` with `p` not repeated anywhere in `pre` (split at `p`'s
-first occurrence). -/
-theorem mem_split_canonical {α} {l : List α} {p : α} (h : p ∈ l) :
-    ∃ pre suf, l = pre ++ p :: suf ∧ p ∉ pre := by
-  induction l with
-  | nil => simp at h
-  | cons hd tl ih =>
-    by_cases h_eq : hd = p
-    · exact ⟨[], tl, by grind, by simp⟩
-    · have h_tl : p ∈ tl := by
-        rcases List.mem_cons.mp h with rfl | h'
-        · exact absurd rfl h_eq
-        · exact h'
-      obtain ⟨pre, suf, h_split, h_notin⟩ := ih h_tl
-      exact ⟨hd :: pre, suf, by rw [h_split]; rfl, by simp [h_notin, Ne.symm h_eq]⟩
-
-/-- Removing the head of a list `hd :: rest` that canonically decomposes as
-`pre ++ p :: suf` (`p ∉ pre`) either removes `p` itself (when `pre = []` and
-`hd = p`), or leaves the same canonical split one element shorter on the
-`pre` side. This is the one-step version of the "distance to `p`" measure
-used by `target_index_decreases_one_step`. -/
-lemma erase_head_split {α : Type*} {rest pre suf : List α} {hd p : α}
-    (h_split : hd :: rest = pre ++ p :: suf) (h_notin : p ∉ pre) :
-    (pre = [] ∧ hd = p)
-    ∨ (∃ pre', rest = pre' ++ p :: suf ∧ p ∉ pre' ∧ pre'.length < pre.length) := by
-  cases pre with
-  | nil => left; simp only [List.nil_append, List.cons.injEq] at h_split; exact ⟨rfl, h_split.1⟩
-  | cons a tl =>
-    right
-    simp only [List.cons_append, List.cons.injEq] at h_split
-    exact ⟨tl, h_split.2, List.not_mem_of_not_mem_cons h_notin, by simp⟩
-
 /-- A process `p` that arrives at time `t` is, at time `t`, either sitting
 somewhere in the ready queue in canonical split form (`ready = pre ++ p ::
 suf`, `p ∉ pre`, ready for `target_progresses` to consume) or already
@@ -843,7 +812,7 @@ theorem ready_eventually_runs
 stream, every process that ever arrives is eventually found in `completed`
 (matched by `id`). Combines `arrived_is_ready_or_running`,
 `ready_eventually_runs`, and `running_eventually_completes`. -/
-theorem FCFSStarvationFree
+theorem StarvationFree
   (arrival_stream : Nat → List AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream) :
   ∀ arrival_time process, process ∈ arrival_stream arrival_time →
@@ -860,3 +829,5 @@ theorem FCFSStarvationFree
   · obtain ⟨k, h_k_pos, q, h_q_mem, h_q_id⟩ :=
       running_eventually_completes arrival_stream arrival_time process h_running h_wf
     exact ⟨arrival_time + k, q, h_q_mem, h_q_id⟩
+
+end FCFSStarvation

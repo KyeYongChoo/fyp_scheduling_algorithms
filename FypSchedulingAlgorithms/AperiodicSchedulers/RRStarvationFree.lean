@@ -1,10 +1,4 @@
 /-
-Useful invariant
-every cycle, remaining will decrease
-cycles complete in finite time
--/
-
-/-
 Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
@@ -19,7 +13,7 @@ import Mathlib.Tactic.Linarith
 import FypSchedulingAlgorithms.ListLemmas
 
 /-!
-# Starvation-freedom for aperiodic schedulers
+# Starvation-freedom for Round Robin
 
 Starvation: a process sits in the ready queue but never runs because it keeps
 losing out to newer arrivals or a scheduler's prioritisation.
@@ -29,43 +23,47 @@ Processes arrive via an infinite `arrival_stream : ℕ → List AperiodicProcess
 pins each process's `arrival` field to the time it actually shows up and
 requires it to be `remaining = burst`-fresh on arrival.
 
-The main result is `FCFSStarvationFree`: under FCFS, every process that ever
-arrives eventually completes. It is assembled from two chains of lemmas:
+The main result is `StarvationFree`: under `stepRR` with any `quantum`, every
+process that ever arrives eventually shows up in `completed` (matched by `id`,
+since `remaining` changes as a process runs).
 
-* `waiting_is_ready_or_running` locates a just-arrived process in the ready
-  queue as a canonical `pre ++ target :: suf` split (via `mem_split_canonical`
-  and `erase_head_split`), or shows it is already running.
-* `target_index_decreases_one_step` / `target_progresses` /
-  `ready_eventually_runs` show that this split's prefix strictly shrinks (or
-  the process starts running) every time the currently-running process
-  finishes, using a measure on its `remaining` time
-  (`remaining_pos_of_ready_or_running`).
-* `running_puts_at_back_or_completes` shows that once running, a process ticks
-  down to completion within a bounded number of further steps.
+Unlike a non-preemptive scheduler, a Round Robin process need not run straight
+to completion once dispatched — quantum expiry can send it back to the queue.
+So the argument alternates two phases, with `remaining` as the overall measure:
 
-Along the way: FCFS-specific facts about `stepFCFS`/`selectFCFS`
-(`selectFCFS_none_iff_empty`, `selectFCFS_mem`, `selectFCFS_head`,
-`idle_implies_empty_ready`, `ready_nonempty_implies_running_nonempty`) and
-scheduler-state invariants (`system_arrival_bound`, `system_provenance`,
-`ready_ordered`).
+* *Getting to the front.* `waiting_is_ready_or_running` locates a just-arrived
+  process as a canonical `pre ++ target :: suf` split of the ready queue (via
+  `mem_split_canonical`), or shows it is already running.
+  `target_index_decreases_one_step` shows one step either dispatches `target`,
+  strictly shrinks `pre`, or leaves `pre` alone while the running process ticks
+  down; `target_progresses` and `ready_eventually_runs` iterate that to reach
+  the front. Quantum expiry never costs `target` ground, because the preempted
+  process is appended to the *back* of the queue.
+* *Making progress once running.* `running_step_cases` enumerates what one step
+  does to the running process — finish it, preempt it to the back one tick
+  lighter, or tick it down in place. `running_puts_at_back_or_completes` iterates
+  that: within finitely many steps the process either completes or is back in
+  the queue with strictly smaller `remaining`.
 
-`non_preemptive_processes_are_ready_running_completed_or_unarrived` is a
-scheduler-agnostic version of the same "nothing vanishes" invariant, stated
-for an arbitrary `select` rather than FCFS specifically, for reuse when
-proving facts about other non-preemptive schedulers (SJF, SRTF, Round Robin
-- see the TODOs at the bottom of the file).
+`StarvationFree` then inducts on `remaining`: each turn strictly decreases it,
+so a process can be sent back to the queue only finitely often.
 
-`foldl_ge_init` / `foldl_prefix_le` are general `List.foldl` monotonicity
-lemmas, not yet used elsewhere, intended for reasoning about priority-based
-`select` functions built with `List.foldl` (e.g. `selectByPriority`).
+Supporting facts: `idle_implies_empty_ready` and its contrapositive
+`ready_nonempty_implies_running_nonempty` relate an idle CPU to an empty queue,
+and the state invariants `remaining_pos_of_ready_or_running` (nothing queued or
+running has run out of time), `system_arrival_bound` (nothing from the future is
+scheduled) and `system_provenance` (the scheduler invents no processes).
+
+Generic list helpers used throughout (`mem_split_canonical`, `erase_head_split`,
+`dispatch_preserves`, `expire_swap_preserves`) live in `ListLemmas.lean`, and are
+stated for an arbitrary element type and predicate so both this file and
+`FCFSStarvationFree.lean` can draw on them.
 -/
 
-def Waiting (arrival_stream : ℕ → List AperiodicProcess) (t quantum: ℕ) (cur : AperiodicProcess) : Prop :=
-  (∃ pre suf, (runStepsRR quantum arrival_stream t).sched.ready = pre ++ cur :: suf ∧ cur ∉ pre)
-  ∨ (runStepsRR quantum arrival_stream t).sched.running = some cur
+namespace RRStarvation
 
-/-- If the FCFS scheduler has nothing running at time `t`, the ready queue
-must be empty too (otherwise FCFS would have picked something to run). -/
+/-- If the scheduler has nothing running at time `t`, the ready queue must be
+empty too (otherwise stepRR would have dispatched the queue's head). -/
 theorem idle_implies_empty_ready
   (arrival_stream : ℕ → List AperiodicProcess)
   (t quantum: ℕ)
@@ -76,8 +74,8 @@ theorem idle_implies_empty_ready
     simp only [runStepsRR, stepRR] at h_running ⊢
     have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := by
       rfl
-    -- after unfolding, running = none means selectFCFS returned none
-    -- selectFCFS_none_iff_empty then gives ready = []
+    -- after unfolding, running = none forces the ready-queue match to have
+    -- taken its `[]` branch, which is exactly the goal
     simp only [h_init_running] at h_running ⊢
     split at h_running
     · rename_i h_select
@@ -86,21 +84,21 @@ theorem idle_implies_empty_ready
   | succ t ih =>
     simp only [runStepsRR, stepRR] at h_running ⊢
     split at h_running
-    · -- prev.running = none, so select was called on ready
+    · -- prev.running = none, so stepRR dispatched off the ready queue
       rename_i h_prev_none
       split at h_running
-      · -- select returned none → ready = []
+      · -- ready was empty → nothing dispatched, and it stays empty
         simp only [List.append_eq_nil_iff] at h_running ⊢
         apply And.intro
         · exact ih h_running
         · rename_i step_concat_arrivals_eq_none
           have h_ready_empty := ih h_running
           rwa [h_ready_empty, List.nil_append] at step_concat_arrivals_eq_none
-      · -- select returned some p → running = some p, contradicts h_running
+      · -- ready was p :: ps → running = some p, contradicts h_running
         contradiction
     · -- prev.running = some p, process ticked
       split at h_running
-      · -- remaining ≤ 0, process completed, next select called
+      · -- remaining ≤ 0, p completed, so the next process (if any) was dispatched
         rename_i h_remaining_after_tick_zero
         split at h_running
         · simp only [h_remaining_after_tick_zero, ↓reduceIte]
@@ -134,9 +132,8 @@ theorem ready_nonempty_implies_running_nonempty
 
 /-- Under a well-formed arrival stream, every process currently sitting in
 the ready queue or running at time `t` still has positive `remaining` time
-left (it arrived with `remaining = burst > 0` and non-preemptive ticking only
-ever reduces the *running* process's `remaining`, moving it to `completed`
-once it hits zero). -/
+left (it arrived with `remaining = burst > 0`, and a tick only ever reduces the
+*running* process's `remaining`, moving it to `completed` once it hits zero). -/
 lemma remaining_pos_of_ready_or_running
   (arrival_stream : ℕ → List AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream)
@@ -177,9 +174,8 @@ lemma remaining_pos_of_ready_or_running
         exact ⟨ready_src, by intro q hq; simp at hq; tauto⟩
       · -- ready = p :: ps: p gets dispatched to `running`, ps becomes the new ready queue
         rename_i p ps h_match   -- h_match : combined = p :: ps
-        refine ⟨fun q hq => ready_src q (by rw [h_match]; exact List.mem_cons_of_mem _ hq), ?_⟩
-        intro q hq; simp only [Option.some.injEq] at hq; subst hq
-        exact ready_src _ (by rw [h_match]; exact List.mem_cons_self)
+        obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+        exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
     · -- running = some p: p was already running; case on whether it finishes this tick
       rename_i p h_prev_running
       split  -- stepRR case: does p.remaining ≤ 1, i.e. does p complete this tick?
@@ -189,51 +185,46 @@ lemma remaining_pos_of_ready_or_running
           exact ⟨ready_src, by intro q hq; simp at hq⟩
         · -- ready = p :: ps: p completes, next process p is dispatched, ps is the new ready queue
           rename_i p ps h_match   -- h_match : combined = p :: ps
-          refine ⟨fun q hq => ready_src q (by rw [h_match]; exact List.mem_cons_of_mem _ hq), ?_⟩
-          intro q hq; simp only [Option.some.injEq] at hq; subst hq
-          exact ready_src _ (by rw [h_match]; exact List.mem_cons_self)
-      · -- p.remaining > 1: p keeps running (not preempted); only quantum bookkeeping differs below
+          obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+          exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+      · -- p.remaining > 1: p keeps running this tick (not preempted); only quantum bookkeeping
+        -- below differs, depending on whether p's quantum has expired.
         rename_i h_not_done
+        have h_tick_pos : Process.remaining { p with remaining := p.remaining - 1 } > 0 := by
+          simp only [AperiodicProcess.process_remaining]
+          omega
         constructor
         · -- ready-queue goal
-          intro p h_incomplete_process
-          split at h_incomplete_process  -- stepRR case: has p's quantum expired (ticksUsed ≥ quantum - 1)?
+          intro q hq
+          split at hq  -- stepRR case: has p's quantum expired (ticksUsed ≥ quantum - 1)?
           · -- quantum expired: p goes back to the ready queue (with remaining - 1) if there's a next process
-            split at h_incomplete_process  -- match on the combined ready queue
+            split at hq  -- match on the combined ready queue
             · -- ready = []: no one to swap in, p just keeps running with remaining - 1
-              simp at h_incomplete_process
-              exact ready_src p (by grind)
+              simp at hq
+              exact ready_src q (by grind)
             · -- ready = nx :: ps: nx is dispatched, p (remaining - 1) is appended to the back of ps
-              simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at h_incomplete_process
-              cases h_incomplete_process
-              · exact ready_src p (by grind)
-              · -- p here is the old running process ticked down; remaining - 1 > 0 since h_not_done
-                rename_i p_end_of_ready
-                rw [p_end_of_ready]
-                simp
-                linarith
+              rename_i nx ps h_match   -- h_match : combined = nx :: ps
+              exact (expire_swap_preserves { p with remaining := p.remaining - 1 } nx ps
+                (by rw [← h_match]; exact ready_src) h_tick_pos).1 q hq
           · -- quantum not expired: p just ticks down in place, ready queue is unchanged
-            simp only [List.mem_append] at h_incomplete_process
-            cases h_incomplete_process
-            · exact ready_src p (by grind)
-            · exact ready_src p (by grind)
+            simp only [List.mem_append] at hq
+            cases hq
+            · exact ready_src q (by grind)
+            · exact ready_src q (by grind)
         · -- running-process goal (mirror image of the ready-queue goal above)
-          intro p h_incomplete_process
-          split at h_incomplete_process  -- quantum expired?
-          · split at h_incomplete_process  -- match on the combined ready queue
+          intro q hq
+          split at hq  -- quantum expired?
+          · split at hq  -- match on the combined ready queue
             · -- ready = []: p keeps running with remaining - 1 > 0 (since h_not_done)
-              simp only [Option.some.injEq] at h_incomplete_process
-              rename_i a b c d
-              rw [← h_incomplete_process]
-              simp
-              linarith
+              simp only [Option.some.injEq] at hq
+              rw [← hq]
+              exact h_tick_pos
             · -- ready = nx :: ps: nx is now running, already known positive via ready_src
-              exact ready_src p (by grind)
+              exact ready_src q (by grind)
           · -- quantum not expired: p keeps running with remaining - 1 > 0 (since h_not_done)
-            simp only [Option.some.injEq] at h_incomplete_process
-            rw [← h_incomplete_process]
-            simp
-            linarith
+            simp only [Option.some.injEq] at hq
+            rw [← hq]
+            exact h_tick_pos
 
 /-- Under a well-formed arrival stream, every process in the ready queue or
 running at time `t` arrived at or before `t` (nothing from the future is
@@ -247,47 +238,71 @@ theorem system_arrival_bound
   induction t with
   | zero =>
     have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
-    split
-    · refine ⟨?_, ?_⟩
-      · intro q hq; exact le_of_eq (h_wf.consistent q 0 hq)
-      · intro q hq; simp at hq
-    · rename_i q₀ h_select
-      refine ⟨?_, ?_⟩
-      · intro q hq
-        exact le_of_eq (h_wf.consistent q 0 (List.mem_of_mem_erase hq))
-      · intro q hq; simp only [Option.some.injEq] at hq; subst hq
-        exact le_of_eq (h_wf.consistent q₀ 0 (selectFCFS_mem h_select))
+    simp only [runStepsRR, stepRR, h_init_running]
+    -- at time 0 the ready queue is exactly the first arrival batch, all of which arrived at 0
+    have arrivals_at_zero : ∀ q ∈ arrival_stream 0, Process.arrival q ≤ 0 :=
+      fun q hq => le_of_eq (h_wf.consistent q 0 hq)
+    split  -- match on the initial ready queue (= arrival_stream 0)
+    · -- ready = []: nothing to dispatch, CPU stays idle
+      exact ⟨arrivals_at_zero, by intro q hq; simp at hq⟩
+    · -- ready = p :: ps: p is dispatched to `running`, ps becomes the new ready queue
+      rename_i p ps h_match   -- h_match : arrival_stream 0 = p :: ps
+      obtain ⟨h_ready, h_running⟩ :=
+        dispatch_preserves p ps (by rw [← h_match]; exact arrivals_at_zero)
+      exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
   | succ t ih =>
     obtain ⟨ih_ready, ih_running⟩ := ih
     simp only [runStepsRR, stepRR]
-    have ready_src : ∀ q ∈ (runSteps arrival_stream stepFCFS t).ready ++ arrival_stream (t + 1),
+    -- everything that could be in next tick's ready queue is either already queued (bound by
+    -- `t`, so certainly by `t + 1`) or has just arrived at `t + 1`
+    have ready_src : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
         Process.arrival q ≤ t + 1 := by
       intro q hq
       rcases List.mem_append.mp hq with h | h
       · exact le_trans (ih_ready q h) (by omega)
       · exact le_of_eq (h_wf.consistent q (t + 1) h)
-    split
-    · split
-      · exact ⟨ready_src, by intro q hq; simp at hq; tauto⟩
-      · rename_i q₀ h_select
-        refine ⟨?_, ?_⟩
-        · intro q hq; exact ready_src q (List.mem_of_mem_erase hq)
-        · intro q hq; simp only [Option.some.injEq] at hq; subst hq
-          exact ready_src q₀ (selectFCFS_mem h_select)
-    · rename_i p h_prev_running
-      split
-      · split
-        · exact ⟨ready_src, by intro q hq; simp at hq⟩
-        · rename_i q₀ h_select
-          refine ⟨?_, ?_⟩
-          · intro q hq; exact ready_src q (List.mem_of_mem_erase hq)
-          · intro q hq; simp only [Option.some.injEq] at hq; subst hq
-            exact ready_src q₀ (selectFCFS_mem h_select)
-      · refine ⟨ready_src, ?_⟩
-        intro q hq; simp only [Option.some.injEq] at hq; subst hq
-        rw [Process.arrival_invariant_wrt_tick]
-        exact le_trans (ih_running p h_prev_running) (by omega)
+    split  -- stepRR case: was anything running last tick?
+    · -- running = none: dispatch straight off the (possibly just-grown) ready queue
+      split  -- match on the combined ready queue
+      · -- ready = []: still idle, nothing to check
+        exact ⟨ready_src, by intro q hq; simp at hq; tauto⟩
+      · -- ready = p :: ps: p gets dispatched to `running`, ps becomes the new ready queue
+        rename_i p ps h_match   -- h_match : combined = p :: ps
+        obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+        exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+    · -- running = some p: p was already running; case on whether it finishes this tick
+      rename_i p h_prev_running
+      split  -- stepRR case: does p.remaining ≤ 1, i.e. does p complete this tick?
+      · -- p completes: it moves to `completed`, and the next process (if any) is dispatched
+        split  -- match on the combined ready queue
+        · -- ready = []: p completes, CPU goes idle (running := none)
+          exact ⟨ready_src, by intro q hq; simp at hq⟩
+        · -- ready = nx :: ps: p completes, nx is dispatched, ps is the new ready queue
+          rename_i nx ps h_match   -- h_match : combined = nx :: ps
+          obtain ⟨h_ready, h_running⟩ := dispatch_preserves nx ps (by rw [← h_match]; exact ready_src)
+          exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+      · -- p.remaining > 1: p keeps running this tick; only quantum bookkeeping differs below.
+        -- Ticking never touches `arrival`, so p's own bound just weakens from `≤ t` to `≤ t + 1`.
+        have h_tick_arrival : Process.arrival { p with remaining := p.remaining - 1 } ≤ t + 1 := by
+          have h_p := ih_running p h_prev_running
+          simp only [AperiodicProcess.process_arrival] at h_p ⊢
+          omega
+        split  -- stepRR case: has p's quantum expired (ticksUsed ≥ quantum - 1)?
+        · -- expired: if there's a next process, swap it in and send p (ticked down) to the back
+          split  -- match on the combined ready queue
+          · -- ready = []: no one to swap in, p just keeps running as its ticked self
+            exact ⟨ready_src, fun q hq => by
+              simp only [Option.some.injEq] at hq; subst hq; exact h_tick_arrival⟩
+          · -- ready = nx :: ps: nx is dispatched, p (ticked down) is appended to the back of ps
+            rename_i nx ps h_match   -- h_match : combined = nx :: ps
+            obtain ⟨h_ready, h_running⟩ :=
+              expire_swap_preserves { p with remaining := p.remaining - 1 } nx ps
+                (by rw [← h_match]; exact ready_src) h_tick_arrival
+            exact ⟨h_ready, fun q hq => by
+              simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+        · -- not expired: p just ticks down in place, ready queue is unchanged
+          exact ⟨ready_src, fun q hq => by
+            simp only [Option.some.injEq] at hq; subst hq; exact h_tick_arrival⟩
 
 /-- Every process in the ready queue, running, or completed at time `t`
 traces back (by `id`) to some process that actually arrived at some time
@@ -304,132 +319,112 @@ theorem system_provenance
   | zero =>
     have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
     have h_init_completed : (SchedStateMethods.init : SchedStateG AperiodicProcess).completed = [] := rfl
-    simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
-    split
-    · rename_i h_select
-      refine ⟨?_, ?_, ?_⟩
-      · intro q hq; exact ⟨0, le_refl _, q, hq, rfl⟩
-      · intro q hq; simp at hq
-      · intro q hq; simp [h_init_completed] at hq
-    · rename_i q₀ h_select
-      refine ⟨?_, ?_, ?_⟩
-      · intro q hq
-        exact ⟨0, le_refl _, q, List.mem_of_mem_erase hq, rfl⟩
-      · intro q hq
-        simp only [Option.some.injEq] at hq
-        rw [hq] at h_select
-        exact ⟨0, le_refl _, q, selectFCFS_mem h_select, rfl⟩ -- here
-      · intro q hq; simp [h_init_completed] at hq
+    simp only [runStepsRR, stepRR, h_init_running]
+    -- at time 0 every queued process is its own witness: it arrived in the first batch
+    have arrivals_at_zero : ∀ q ∈ arrival_stream 0,
+        ∃ s ≤ 0, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q :=
+      fun q hq => ⟨0, le_refl _, q, hq, rfl⟩
+    split  -- match on the initial ready queue (= arrival_stream 0)
+    · -- ready = []: nothing to dispatch, CPU idle, nothing completed
+      exact ⟨arrivals_at_zero,
+             by intro q hq; simp at hq,
+             by intro q hq; simp [h_init_completed] at hq⟩
+    · -- ready = p :: ps: p is dispatched to `running`, ps becomes the new ready queue
+      rename_i p ps h_match   -- h_match : arrival_stream 0 = p :: ps
+      obtain ⟨h_ready, h_running⟩ :=
+        dispatch_preserves p ps (by rw [← h_match]; exact arrivals_at_zero)
+      exact ⟨h_ready,
+             fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running,
+             by intro q hq; simp [h_init_completed] at hq⟩
   | succ t ih =>
     obtain ⟨ih_ready, ih_running, ih_completed⟩ := ih
     simp only [runStepsRR, stepRR]
-    -- every `s ≤ t` from ih weakens to `s ≤ t + 1`
+    -- a witness `s ≤ t` from the IH is still a witness once the clock moves to `t + 1`
     have weaken : ∀ (q: AperiodicProcess), (∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) →
         ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
       rintro q ⟨s, hs, q₀, hq₀, hid⟩
       exact ⟨s, by omega, q₀, hq₀, hid⟩
-    -- new ready is always a sub-multiset of `prev.ready ++ arrivals`
-    have ready_src : ∀ q ∈ (runSteps arrival_stream stepFCFS t).ready ++ arrival_stream (t + 1),
+    -- anything that can end up queued next tick was either queued already or just arrived
+    have ready_src : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
         ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
       intro q hq
       rcases List.mem_append.mp hq with h | h
       · exact weaken q (ih_ready q h)
       · exact ⟨t + 1, le_refl _, q, h, rfl⟩
-    split
-    · -- prev.running = none
-      split
-      · exact ⟨ready_src, by intro q hq; simp at hq; tauto, fun q hq => weaken q (ih_completed q hq)⟩
-      · rename_i q₀ h_select
-        refine ⟨?_, ?_, fun q hq => weaken q (ih_completed q hq)⟩
-        · intro q hq; exact ready_src q (List.mem_of_mem_erase hq)
-        · intro q hq; simp only [Option.some.injEq] at hq; subst hq
-          exact ready_src q₀ (selectFCFS_mem h_select)
-    · -- prev.running = some p
+    have completed_src : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.completed,
+        ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q :=
+      fun q hq => weaken q (ih_completed q hq)
+    split  -- stepRR case: was anything running last tick?
+    · -- running = none: dispatch straight off the (possibly just-grown) ready queue
+      split  -- match on the combined ready queue
+      · -- ready = []: still idle, nothing dispatched or completed
+        exact ⟨ready_src, by intro q hq; simp at hq; tauto, completed_src⟩
+      · -- ready = p :: ps: p gets dispatched to `running`, ps becomes the new ready queue
+        rename_i p ps h_match   -- h_match : combined = p :: ps
+        obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+        exact ⟨h_ready,
+               fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running,
+               completed_src⟩
+    · -- running = some p: p was already running; case on whether it finishes this tick
       rename_i p h_prev_running
-      split
-      · -- p finished
-        split
-        · refine ⟨ready_src, by intro q hq; simp at hq, ?_⟩
-          intro q hq
-          rcases List.mem_append.mp hq with h | h
-          · exact weaken q (ih_completed q h)
-          · simp only [List.mem_cons, List.not_mem_nil, or_false] at h; subst h
-            rw [Process.id_invariant_wrt_tick]
-            exact weaken p (ih_running p h_prev_running)
-        · rename_i q₀ h_select
-          refine ⟨?_, ?_, ?_⟩
-          · intro q hq; exact ready_src q (List.mem_of_mem_erase hq)
-          · intro q hq; simp only [Option.some.injEq] at hq; subst hq
-            exact ready_src q₀ (selectFCFS_mem h_select)
-          · intro q hq
-            rcases List.mem_append.mp hq with h | h
-            · exact weaken q (ih_completed q h)
-            · simp only [List.mem_cons, List.not_mem_nil, or_false] at h; subst h
-              rw [Process.id_invariant_wrt_tick]
-              exact weaken p (ih_running p h_prev_running)
-      · -- p continues
-        refine ⟨ready_src, ?_, fun q hq => weaken q (ih_completed q hq)⟩
-        intro q hq; simp only [Option.some.injEq] at hq; subst hq
-        rw [Process.id_invariant_wrt_tick]
-        exact weaken p (ih_running p h_prev_running)
+      -- stepRR only ever rewrites p's `remaining`, and provenance is tracked by `id`, so
+      -- p's own witness carries over to both the completed copy and the ticked-down copy
+      have h_done_prov : ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s,
+          Process.id q₀ = Process.id { p with remaining := 0 } := by
+        simpa using weaken p (ih_running p h_prev_running)
+      have h_tick_prov : ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s,
+          Process.id q₀ = Process.id { p with remaining := p.remaining - 1 } := by
+        simpa using weaken p (ih_running p h_prev_running)
+      have completed_done : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.completed ++
+            [{ p with remaining := 0 }],
+          ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
+        intro q hq
+        rcases List.mem_append.mp hq with h | h
+        · exact completed_src q h
+        · simp only [List.mem_singleton] at h
+          subst h
+          exact h_done_prov
+      split  -- stepRR case: does p.remaining ≤ 1, i.e. does p complete this tick?
+      · -- p completes: it joins `completed`, and the next process (if any) is dispatched
+        split  -- match on the combined ready queue
+        · -- ready = []: p completes, CPU goes idle (running := none)
+          exact ⟨ready_src, by intro q hq; simp at hq, completed_done⟩
+        · -- ready = nx :: ps: p completes, nx is dispatched, ps is the new ready queue
+          rename_i nx ps h_match   -- h_match : combined = nx :: ps
+          obtain ⟨h_ready, h_running⟩ := dispatch_preserves nx ps (by rw [← h_match]; exact ready_src)
+          exact ⟨h_ready,
+                 fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running,
+                 completed_done⟩
+      · -- p.remaining > 1: p keeps running, nothing completes; only quantum bookkeeping differs
+        split  -- stepRR case: has p's quantum expired (ticksUsed ≥ quantum - 1)?
+        · -- expired: if there's a next process, swap it in and send p (ticked down) to the back
+          split  -- match on the combined ready queue
+          · -- ready = []: no one to swap in, p just keeps running as its ticked self
+            exact ⟨ready_src,
+                   fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_tick_prov,
+                   completed_src⟩
+          · -- ready = nx :: ps: nx is dispatched, p (ticked down) is appended to the back of ps
+            rename_i nx ps h_match   -- h_match : combined = nx :: ps
+            obtain ⟨h_ready, h_running⟩ :=
+              expire_swap_preserves { p with remaining := p.remaining - 1 } nx ps
+                (by rw [← h_match]; exact ready_src) h_tick_prov
+            exact ⟨h_ready,
+                   fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running,
+                   completed_src⟩
+        · -- not expired: p just ticks down in place, ready queue is unchanged
+          exact ⟨ready_src,
+                 fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_tick_prov,
+                 completed_src⟩
 
-/-- FCFS invariant: the ready queue is always sorted by arrival time (earlier
-arrivals precede later ones), since arrivals are appended in arrival order
-and only the front element is ever removed. -/
-theorem ready_ordered
-  (arrival_stream : ℕ → List AperiodicProcess)
-  (h_wf : WellFormedStream arrival_stream)
-  (t quantum: ℕ) :
-  List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b)
-    (runStepsRR quantum arrival_stream t).sched.ready
-    := by
-  have uniform_pairwise : ∀ (l : List AperiodicProcess) (c : ℕ),
-    (∀ p ∈ l, Process.arrival p = c) →
-    List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b) l := by
-    intro l c h
-    induction l with
-    | nil => exact List.Pairwise.nil
-    | cons hd tl ih =>
-      refine List.Pairwise.cons ?_ (ih fun p hp => h p (List.mem_cons_of_mem _ hp))
-      intro b hb
-      rw [h hd (List.mem_cons_self), h b (List.mem_cons_of_mem _ hb)]
-
-  have stream_sorted t := uniform_pairwise _ t (fun p hp => h_wf.consistent p t hp)
-
-  induction t with
-  | zero =>
-    simp only [runStepsRR, stepRR]
-    have h_init : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [h_init]
-    split
-    · simpa using stream_sorted 0
-    · exact (stream_sorted 0).sublist (List.erase_sublist)
-  | succ t ih =>
-    simp only [runStepsRR, stepRR]
-    have h_append : List.Pairwise (fun a b => Process.arrival a ≤ Process.arrival b)
-        ((runSteps arrival_stream stepFCFS t).ready ++ arrival_stream (t + 1)) := by
-      rw [List.pairwise_append]
-      refine ⟨ih, stream_sorted (t + 1), ?_⟩
-      intro a ha b hb
-      have h_a : Process.arrival a ≤ t := (system_arrival_bound arrival_stream h_wf t).1 a ha
-      have h_b : Process.arrival b = t + 1 := h_wf.consistent b (t + 1) hb
-      omega
-    split
-    · split
-      · exact h_append
-      · exact h_append.sublist (List.erase_sublist)
-    · split
-      · split
-        · exact h_append
-        · exact h_append.sublist (List.erase_sublist)
-      · exact h_append
-
-/-- One FCFS step, from a state where `target` sits at position `pre.length`
+/-- One Round Robin step, from a state where `target` sits at position `pre.length`
 in the ready queue (`ready = pre ++ target :: suf`, `target ∉ pre`), leads to
-exactly one of: `target` is now running; `target`'s prefix strictly shrank
-(the process ahead of it finished and was removed); or the prefix length is
-unchanged because the running process merely ticked (and continues running
-as its ticked self next step). -/
+exactly one of: `target` is now running; `target`'s prefix strictly shrank (the
+process at the front of the queue was dispatched); or the prefix length is
+unchanged because the running process merely ticked (and continues running as its
+ticked self next step).
+
+Quantum expiry never costs `target` any ground: the preempted process is appended
+to the *back* of the queue, which only ever lengthens `suf`. -/
 theorem target_index_decreases_one_step
   (arrival_stream : ℕ → List AperiodicProcess)
   (target : AperiodicProcess) (t quantum: ℕ) (pre suf : List AperiodicProcess)
@@ -442,74 +437,48 @@ theorem target_index_decreases_one_step
   ∨ (∃ pre' suf', (runStepsRR quantum arrival_stream (t + 1)).sched.ready = pre' ++ target :: suf'
                  ∧ target ∉ pre'
                  ∧ pre'.length = pre.length
-                 ∧ ∀ p, (runSteps arrival_stream stepFCFS t).running = some p →
+                 ∧ ∀ p, (runStepsRR quantum arrival_stream t).sched.running = some p →
                      (runStepsRR quantum arrival_stream (t + 1)).sched.running = some (Process.tick p))
-  -- ∨ ∃ suf', (runSteps arrival_stream stepFCFS (t + 1)).ready = target :: suf'
   := by
-  simp only [runStepsRR, stepRR]
-  split
-  · -- running = none
-    rename_i h_prev_none
-    have idle_pre : (runSteps arrival_stream stepFCFS t).ready = [] := idle_implies_empty_ready arrival_stream t h_prev_none
-    rw [idle_pre] at h_split
-    simp at h_split
-  · -- running = some q
-    rename_i q h_prev_none
-    split
-    · -- something just completed
-      rename_i remaining_after_tick_le_0
-      unfold stepFCFS at h_split
-      rw [h_split]
-      split
-      · -- SelectFCFS chose nothing
-        rename_i selectFCFS_chose_nothing
-        rw [selectFCFS_none_iff_empty] at selectFCFS_chose_nothing
-        simp at selectFCFS_chose_nothing
-      · -- SelectFCFS chose something
-        rename_i selectFCFS_chose_something
-        unfold selectFCFS at selectFCFS_chose_something
-
-        -- unfold choose something over match statements
-        split at selectFCFS_chose_something
-        · simp at selectFCFS_chose_something
-        · rename_i pre_target_suf_sum_to_something
-          apply Option.some.inj at selectFCFS_chose_something
-          subst selectFCFS_chose_something
-          induction pre with
-          | nil =>
-            left
-            simp only [List.nil_append, List.cons_append, List.cons.injEq] at pre_target_suf_sum_to_something
-            obtain ⟨target_is_running, _⟩ := pre_target_suf_sum_to_something
-            rw [←target_is_running]
-
-          | cons head_pre tail_pre ih =>
-            clear ih -- oh SNAP i didnt know i could do rcases on inductive types will do that next time
-            right
-            left
-            use tail_pre, (suf ++ arrival_stream (t + 1))
-            refine ⟨?_, ?_, ?_⟩
-            · simp only [List.cons_append, List.cons.injEq] at pre_target_suf_sum_to_something
-              obtain ⟨head_pre_is_running, _⟩ := pre_target_suf_sum_to_something
-              subst head_pre_is_running
-              simp
-            · exact List.not_mem_of_not_mem_cons h_target_not_in_pre
-            · simp
-    · -- nothing completed, continue execution
-      rename_i h_not_done
-      right
-      right
-      use pre, (suf ++ arrival_stream (t + 1))
-      refine ⟨?_, ?_, rfl, ?_⟩
-      · unfold stepFCFS at h_split
-        rw [h_split]
-        simp
-      · assumption
-      · intro q' h_q'_running
-        -- `q` was renamed from the outer split; h_prev_none : ...running = some q
-        have : q' = q := by
-          rw [h_prev_none] at h_q'_running
-          exact (Option.some.inj h_q'_running).symm
-        subst this
+  -- `target` sits in the ready queue, so the queue is nonempty and something is running
+  obtain ⟨p, h_prev_running⟩ :=
+    ready_nonempty_implies_running_nonempty arrival_stream t quantum (by rw [h_split]; simp)
+  -- knowing both `running` and `ready` collapses stepRR's outer match (and, once `pre` is
+  -- destructed below, the ready-queue match too); only the two tests are left to case on
+  simp only [runStepsRR, stepRR, h_prev_running, h_split]
+  cases pre with
+  | nil =>
+    -- target is at the front of the queue: it is dispatched unless p simply keeps running
+    simp only [List.nil_append, List.cons_append]
+    split  -- stepRR case: does p complete this tick?
+    · -- p completes and target, being at the front, is dispatched in its place
+      exact Or.inl rfl
+    · split  -- stepRR case: has p's quantum expired?
+      · -- p is preempted and target, being at the front, is swapped in
+        exact Or.inl rfl
+      · -- p keeps running; target stays put at the front
+        refine Or.inr (Or.inr ⟨[], suf ++ arrival_stream (t + 1), by simp, by simp, rfl, ?_⟩)
+        intro p' h_p'
+        obtain rfl : p' = p := (Option.some.inj h_p').symm
+        rfl
+  | cons hd tl =>
+    -- target is behind `hd`; every branch either dispatches `hd` (so target moves up) or
+    -- leaves the queue untouched
+    simp only [List.cons_append]
+    split  -- stepRR case: does p complete this tick?
+    · -- p completes, hd is dispatched: target's prefix loses hd
+      exact Or.inr (Or.inl ⟨tl, suf ++ arrival_stream (t + 1), by simp,
+        List.not_mem_of_not_mem_cons h_target_not_in_pre, by simp⟩)
+    · split  -- stepRR case: has p's quantum expired?
+      · -- hd is dispatched and p goes to the back of the queue: target's prefix still loses hd
+        exact Or.inr (Or.inl ⟨tl,
+          suf ++ arrival_stream (t + 1) ++ [{ p with remaining := p.remaining - 1 }], by simp,
+          List.not_mem_of_not_mem_cons h_target_not_in_pre, by simp⟩)
+      · -- p keeps running; the queue is unchanged, so target holds its position
+        refine Or.inr (Or.inr ⟨hd :: tl, suf ++ arrival_stream (t + 1), by simp,
+          h_target_not_in_pre, rfl, ?_⟩)
+        intro p' h_p'
+        obtain rfl : p' = p := (Option.some.inj h_p').symm
         rfl
 
 /-- Repeatedly applying `target_index_decreases_one_step`, bounded by the
@@ -528,31 +497,32 @@ theorem target_progresses
     ∧ target ∉ pre'
     ∧ pre'.length < pre.length) := by
 
-    suffices H : ∀ (n t : ℕ) (pre suf : List AperiodicProcess) (q : AperiodicProcess),
-      (runSteps arrival_stream stepFCFS t).running = some q →
-      (runSteps arrival_stream stepFCFS t).ready = pre ++ target :: suf →
+    -- Induct on a bound `n` for the running process's `remaining`: every step that leaves
+    -- target's prefix unchanged ticks the running process down, so the bound must run out.
+    suffices H : ∀ (n t₀ : ℕ) (pre₀ suf₀ : List AperiodicProcess) (q : AperiodicProcess),
+      (runStepsRR quantum arrival_stream t₀).sched.running = some q →
+      (runStepsRR quantum arrival_stream t₀).sched.ready = pre₀ ++ target :: suf₀ →
       Process.remaining q ≤ n →
-      target ∉ pre →
-      ∃ k > 0, (runSteps arrival_stream stepFCFS (t + k)).running = some target
-      ∨ (∃ pre' suf', (runSteps arrival_stream stepFCFS (t + k)).ready = pre' ++ target :: suf'
+      target ∉ pre₀ →
+      ∃ k > 0, (runStepsRR quantum arrival_stream (t₀ + k)).sched.running = some target
+      ∨ (∃ pre' suf', (runStepsRR quantum arrival_stream (t₀ + k)).sched.ready = pre' ++ target :: suf'
         ∧ target ∉ pre'
-        ∧ pre'.length < pre.length)
+        ∧ pre'.length < pre₀.length)
       from by
-      have h_ready_nonempty : (runSteps arrival_stream stepFCFS t).ready ≠ [] := by
-        rw [h_split]
-        simp
-      obtain ⟨q, q_running⟩ := ready_nonempty_implies_running_nonempty arrival_stream t (by rw [h_split]; simp)
+      obtain ⟨q, q_running⟩ :=
+        ready_nonempty_implies_running_nonempty arrival_stream t quantum (by rw [h_split]; simp)
       exact H (Process.remaining q) t pre suf q q_running h_split (by omega) h_target_not_in_pre
     intro n
     induction n with
     | zero =>
+      -- vacuous: whatever is running still has positive `remaining`
       intro t' pre' suf' q h_running h_ready h_remaining h_notin
-      have := (remaining_pos_of_ready_or_running arrival_stream h_wf t').2 q h_running
+      have := (remaining_pos_of_ready_or_running arrival_stream h_wf t' quantum).2 q h_running
       omega
 
     | succ n ih =>
       intro t' pre' suf' q h_running h_ready h_remaining h_notin
-      rcases target_index_decreases_one_step arrival_stream target t' pre' suf' h_ready h_notin with
+      rcases target_index_decreases_one_step arrival_stream target t' quantum pre' suf' h_ready h_notin with
         h_run | h_shrink | h_same
       · exact ⟨1, by omega, Or.inl h_run⟩
       · exact ⟨1, by omega, Or.inr h_shrink⟩
@@ -570,39 +540,6 @@ theorem target_progresses
         · exact Or.inl h
         · exact Or.inr ⟨pre3, suf3, h_ready3, h_notin3, by omega⟩
 
-/-- Any membership witness `p ∈ l` can be presented canonically as
-`l = pre ++ p :: suf` with `p` not repeated anywhere in `pre` (split at `p`'s
-first occurrence). -/
-theorem mem_split_canonical {α} {l : List α} {p : α} (h : p ∈ l) :
-    ∃ pre suf, l = pre ++ p :: suf ∧ p ∉ pre := by
-  induction l with
-  | nil => simp at h
-  | cons hd tl ih =>
-    by_cases h_eq : hd = p
-    · exact ⟨[], tl, by grind, by simp⟩
-    · have h_tl : p ∈ tl := by
-        rcases List.mem_cons.mp h with rfl | h'
-        · exact absurd rfl h_eq
-        · exact h'
-      obtain ⟨pre, suf, h_split, h_notin⟩ := ih h_tl
-      exact ⟨hd :: pre, suf, by rw [h_split]; rfl, by simp [h_notin, Ne.symm h_eq]⟩
-
-/-- Removing the head of a list `hd :: rest` that canonically decomposes as
-`pre ++ p :: suf` (`p ∉ pre`) either removes `p` itself (when `pre = []` and
-`hd = p`), or leaves the same canonical split one element shorter on the
-`pre` side. This is the one-step version of the "distance to `p`" measure
-used by `target_index_decreases_one_step`. -/
-lemma erase_head_split {α : Type*} {rest pre suf : List α} {hd p : α}
-    (h_split : hd :: rest = pre ++ p :: suf) (h_notin : p ∉ pre) :
-    (pre = [] ∧ hd = p)
-    ∨ (∃ pre', rest = pre' ++ p :: suf ∧ p ∉ pre' ∧ pre'.length < pre.length) := by
-  cases pre with
-  | nil => left; simp only [List.nil_append, List.cons.injEq] at h_split; exact ⟨rfl, h_split.1⟩
-  | cons a tl =>
-    right
-    simp only [List.cons_append, List.cons.injEq] at h_split
-    exact ⟨tl, h_split.2, List.not_mem_of_not_mem_cons h_notin, by simp⟩
-
 /-- A process `p` that arrives at time `t` is, at time `t`, either sitting
 somewhere in the ready queue in canonical split form (`ready = pre ++ p ::
 suf`, `p ∉ pre`, ready for `target_progresses` to consume) or already
@@ -616,110 +553,134 @@ theorem waiting_is_ready_or_running
   obtain ⟨pre, suf, arrival_t_composition, h_p_not_pre⟩ := mem_split_canonical h_arrived
   cases t with
   | zero =>
-    simp only [runSteps, stepFCFS, stepNonPreemptive, SchedStateMethods.init]
-    have h_comb : arrival_stream 0 = ([] ++ pre) ++ p :: suf := by
-      simpa using arrival_t_composition
-    have h_ne : arrival_stream 0 ≠ [] := by
-      rw [arrival_t_composition]; simp
-    split
-    · rename_i h_sel
-      rw [selectFCFS_none_iff_empty] at h_sel
-      exact absurd h_sel h_ne
-    · rename_i sel h_sel
-      obtain ⟨rest, h_cons⟩ := selectFCFS_head.mp h_sel
-      rw [h_cons] at h_comb
-      rcases erase_head_split h_comb (by simpa using h_p_not_pre) with
-        ⟨h_pre_nil, h_head⟩ | ⟨pre', h_erase, h_notin', _⟩
-      · right; simp [← h_head]
-      · left; exact ⟨pre', suf, by simpa [h_cons] using h_erase, h_notin'⟩
+    -- at time 0 the queue is the first arrival batch, already split as `pre ++ p :: suf`
+    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
+    simp only [runStepsRR, stepRR, h_init_running, arrival_t_composition]
+    cases pre with
+    | nil =>
+      -- p is at the front, so it is the one dispatched
+      simp only [List.nil_append]
+      exact Or.inr (by simp)
+    | cons hd tl =>
+      -- hd is dispatched and p keeps its place behind the rest of `tl`
+      simp only [List.cons_append]
+      exact Or.inl ⟨tl, suf, rfl, List.not_mem_of_not_mem_cons h_p_not_pre⟩
   | succ n =>
+    -- p has only just arrived, so it cannot already be sitting in last tick's queue
     have h_p_not_prev_ready : p ∉ (runStepsRR quantum arrival_stream n).sched.ready := by
       intro h_mem
-      have h_le := (system_arrival_bound arrival_stream h_wf n).1 p h_mem
+      have h_le := (system_arrival_bound arrival_stream h_wf n quantum).1 p h_mem
       have h_eq := h_wf.consistent p (n + 1) h_arrived
       simp at h_le; omega
     have h_p_not_comb : p ∉ (runStepsRR quantum arrival_stream n).sched.ready ++ pre := by
       simp [h_p_not_prev_ready, h_p_not_pre]
+    -- so the queue stepRR sees splits canonically at p, with everything ahead of it
+    -- gathered into `prev.ready ++ pre`
     have h_comb : (runStepsRR quantum arrival_stream n).sched.ready ++ arrival_stream (n + 1)
         = ((runStepsRR quantum arrival_stream n).sched.ready ++ pre) ++ p :: suf := by
       rw [arrival_t_composition, List.append_assoc]
-    have h_ne : (runStepsRR quantum arrival_stream n).sched.ready ++ arrival_stream (n + 1) ≠ [] := by
-      rw [h_comb]; simp
-    simp only [runStepsRR, stepRR]
-    split
-    · -- prev.running = none
-      split
-      · rename_i h_sel
-        rw [selectFCFS_none_iff_empty] at h_sel
-        exact absurd h_sel h_ne
-      · rename_i sel h_sel
-        obtain ⟨rest, h_cons⟩ := selectFCFS_head.mp h_sel
-        simp only [stepFCFS] at h_comb; rw [h_cons] at h_comb
-        rcases erase_head_split h_comb h_p_not_comb with
-          ⟨h_pre_nil, h_head⟩ | ⟨pre', h_rest, h_notin', _⟩
-        · right; simp [h_head]
-        · left; exact ⟨pre', suf, by rw [h_cons]; simpa using h_rest, h_notin'⟩
-    · -- prev.running = some q
-      split
-      · -- q finished, select fires
-        split
-        · rename_i h_sel
-          rw [selectFCFS_none_iff_empty] at h_sel
-          exact absurd h_sel h_ne
-        · rename_i sel h_sel
-          obtain ⟨rest, h_cons⟩ := selectFCFS_head.mp h_sel
-          simp only [stepFCFS] at h_comb; rw [h_cons] at h_comb
-          rcases erase_head_split h_comb h_p_not_comb with
-            ⟨h_pre_nil, h_head⟩ | ⟨pre', h_rest, h_notin', _⟩
-          · right; simp [← h_head]
-          · left; exact ⟨pre', suf, by simpa [h_cons] using h_rest, h_notin'⟩
-      · -- q continues: ready is the combined list untouched
-        left
-        exact ⟨(runSteps arrival_stream stepFCFS n).ready ++ pre, suf, h_comb, h_p_not_comb⟩
+    simp only [runStepsRR, stepRR, h_comb]
+    -- p is either at the very front of that queue, or behind some `hd`
+    rcases h_ahead : (runStepsRR quantum arrival_stream n).sched.ready ++ pre with _ | ⟨hd, tl⟩
+    · -- nothing ahead of p: every branch that dispatches picks p itself
+      simp only [List.nil_append]
+      split  -- stepRR case: was anything running last tick?
+      · exact Or.inr rfl
+      · split  -- stepRR case: does the running process complete this tick?
+        · exact Or.inr rfl
+        · split  -- stepRR case: has its quantum expired?
+          · exact Or.inr rfl
+          · -- it just ticks down, so p stays at the front of an unchanged queue
+            exact Or.inl ⟨[], suf, rfl, by simp⟩
+    · -- p sits behind `hd`; whichever branch runs, p keeps a canonical split
+      rw [h_ahead] at h_p_not_comb
+      have h_p_not_tl : p ∉ tl := List.not_mem_of_not_mem_cons h_p_not_comb
+      simp only [List.cons_append]
+      split  -- stepRR case: was anything running last tick?
+      · -- hd is dispatched, p moves up one place
+        exact Or.inl ⟨tl, suf, rfl, h_p_not_tl⟩
+      · rename_i q h_prev_running
+        split  -- stepRR case: does q complete this tick?
+        · -- q completes and hd is dispatched in its place
+          exact Or.inl ⟨tl, suf, rfl, h_p_not_tl⟩
+        · split  -- stepRR case: has q's quantum expired?
+          · -- hd is dispatched and q is appended behind p, lengthening `suf`
+            exact Or.inl ⟨tl, suf ++ [{ q with remaining := q.remaining - 1 }], by simp, h_p_not_tl⟩
+          · -- q keeps running and the queue is untouched
+            exact Or.inl ⟨hd :: tl, suf, by simp, h_p_not_comb⟩
 
-/-- A running process finishes and appears in `completed` (matched by `id`,
-since ticking changes `remaining`) within some bounded number `k ≥ 1` of
-further steps, by induction on `remaining` (each step either finishes it or
-strictly decreases `remaining`). -/
+/-- The three things one Round Robin step can do to the process it is running:
+finish it (it joins `completed`), preempt it on quantum expiry (it goes to the
+back of the ready queue, one tick lighter), or simply tick it down and carry on
+running it. Everything is matched by `id`, since ticking changes `remaining`. -/
+lemma running_step_cases
+  (arrival_stream : ℕ → List AperiodicProcess) (t quantum : ℕ) (p : AperiodicProcess)
+  (h_running : (runStepsRR quantum arrival_stream t).sched.running = some p) :
+  (∃ p_completed ∈ (runStepsRR quantum arrival_stream (t + 1)).sched.completed,
+      Process.id p_completed = Process.id p)
+  ∨ (∃ p' ∈ (runStepsRR quantum arrival_stream (t + 1)).sched.ready,
+      Process.id p' = Process.id p ∧ Process.remaining p' = Process.remaining p - 1)
+  ∨ (runStepsRR quantum arrival_stream (t + 1)).sched.running = some (Process.tick p) := by
+  simp only [runStepsRR, stepRR, h_running]
+  split  -- stepRR case: does p complete this tick?
+  · -- p completes, so it is appended to `completed` whether or not anyone succeeds it
+    split  -- match on the combined ready queue
+    · exact Or.inl ⟨{ p with remaining := 0 }, by simp, by simp⟩
+    · exact Or.inl ⟨{ p with remaining := 0 }, by simp, by simp⟩
+  · split  -- stepRR case: has p's quantum expired?
+    · split  -- match on the combined ready queue
+      · -- nobody to swap in, so p keeps running despite the expiry
+        exact Or.inr (Or.inr rfl)
+      · -- p is preempted and appended to the back of the queue
+        exact Or.inr (Or.inl ⟨{ p with remaining := p.remaining - 1 }, by simp, by simp, by simp⟩)
+    · -- quantum still has room: p just ticks down in place
+      exact Or.inr (Or.inr rfl)
+
+/-- A running process, within some bounded number `k ≥ 1` of further steps, either
+finishes (appearing in `completed`, matched by `id`) or is put back in the ready
+queue with strictly smaller `remaining`. Round Robin can preempt it before it is
+done, so unlike a non-preemptive scheduler it need not run straight to completion
+— but every step it does get strictly decreases `remaining`, which bounds this. -/
 theorem running_puts_at_back_or_completes
   (arrival_stream : ℕ → List AperiodicProcess) (t quantum : ℕ) (p : AperiodicProcess)
   (h_running : (runStepsRR quantum arrival_stream t).sched.running = some p)
   (h_wf : WellFormedStream arrival_stream) :
-  ∃ k ≥ 1, ∃ p_completed ∈ (runStepsRR quantum arrival_stream (t + k)).sched.completed, Process.id p_completed = Process.id p := by
-  suffices H : ∀ (n t : ℕ) (p : AperiodicProcess),
-      (runStepsRR quantum arrival_stream t).sched.running = some p →
-      Process.remaining p ≤ n + 1 →
-      ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p by
-    have h_pos := (remaining_pos_of_ready_or_running arrival_stream h_wf t).2 p h_running
-    exact H (Process.remaining p - 1) t p h_running (by omega)
+  ∃ k ≥ 1,
+    (∃ p_completed ∈ (runStepsRR quantum arrival_stream (t + k)).sched.completed,
+        Process.id p_completed = Process.id p)
+    ∨ (∃ p' ∈ (runStepsRR quantum arrival_stream (t + k)).sched.ready,
+        Process.id p' = Process.id p ∧ Process.remaining p' < Process.remaining p) := by
+  suffices H : ∀ (n t₀ : ℕ) (p₀ : AperiodicProcess),
+      (runStepsRR quantum arrival_stream t₀).sched.running = some p₀ →
+      Process.remaining p₀ ≤ n →
+      ∃ k ≥ 1,
+        (∃ p_completed ∈ (runStepsRR quantum arrival_stream (t₀ + k)).sched.completed,
+            Process.id p_completed = Process.id p₀)
+        ∨ (∃ p' ∈ (runStepsRR quantum arrival_stream (t₀ + k)).sched.ready,
+            Process.id p' = Process.id p₀ ∧ Process.remaining p' < Process.remaining p₀) by
+    exact H (Process.remaining p) t p h_running le_rfl
   intro n
   induction n with
   | zero =>
-    intro t p h_running h_remaining
-    have h_tick_p := Process.tick_decrements p
-    have h_tick_le : Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
-    have h_running' : (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
-    refine ⟨1, by omega, Process.tick p, ?_, Process.id_invariant_wrt_tick p⟩
-    simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_le, ↓reduceIte]
-    split <;> simp [List.mem_append]
+    -- vacuous: whatever is running still has positive `remaining`
+    intro t₀ p₀ h_run h_rem
+    have := (remaining_pos_of_ready_or_running arrival_stream h_wf t₀ quantum).2 p₀ h_run
+    omega
   | succ n ih =>
-    intro t p h_running h_remaining
-    have h_tick_p := Process.tick_decrements p
-    have h_running' : (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
-    by_cases h_finish : Process.remaining p ≤ 1
-    · have h_tick_le : Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
-      refine ⟨1, by omega, Process.tick p, ?_, Process.id_invariant_wrt_tick p⟩
-      simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_le, ↓reduceIte]
-      split <;> simp [List.mem_append]
-    · push Not at h_finish
-      have h_tick_not_le : ¬ Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
-      have h_next_running : (runSteps arrival_stream stepFCFS (t + 1)).running = some (Process.tick p) := by
-        simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_not_le, ↓reduceIte]
-      have h_remaining' : Process.remaining (Process.tick p) ≤ n + 1 := by rw [h_tick_p]; omega
-      obtain ⟨k, h_k_pos, q, hq, hid⟩ := ih (t + 1) (Process.tick p) h_next_running h_remaining'
-      refine ⟨1 + k, by omega, q, ?_, ?_⟩
-      · rwa [show t + (1 + k) = t + 1 + k by omega]
-      · rwa [Process.id_invariant_wrt_tick] at hid
+    intro t₀ p₀ h_run h_rem
+    rcases running_step_cases arrival_stream t₀ quantum p₀ h_run with h_done | h_back | h_still
+    · exact ⟨1, le_rfl, Or.inl h_done⟩
+    · obtain ⟨p', h_mem, h_id, h_rem'⟩ := h_back
+      have h_pos := (remaining_pos_of_ready_or_running arrival_stream h_wf t₀ quantum).2 p₀ h_run
+      exact ⟨1, le_rfl, Or.inr ⟨p', h_mem, h_id, by omega⟩⟩
+    · -- p₀ is still running, one tick lighter, so the bound has shrunk: recurse
+      have h_tick := Process.tick_decrements p₀
+      obtain ⟨k, h_k, h_concl⟩ := ih (t₀ + 1) (Process.tick p₀) h_still (by omega)
+      refine ⟨1 + k, by omega, ?_⟩
+      rw [show t₀ + (1 + k) = t₀ + 1 + k by omega]
+      rcases h_concl with ⟨q, hq, hid⟩ | ⟨q, hq, hid, hlt⟩
+      · exact Or.inl ⟨q, hq, by simp [hid]⟩
+      · exact Or.inr ⟨q, hq, by simp [hid], by omega⟩
 
 
 /-- Chaining `target_progresses` by strong induction on the prefix length: a
@@ -732,17 +693,23 @@ theorem ready_eventually_runs
   ∃ k, (runStepsRR quantum arrival_stream (t + k)).sched.running = some target := by
   induction hn : pre.length using Nat.strong_induction_on generalizing t pre suf with
   | _ n ih =>
-    obtain ⟨k, h_k_pos, h_concl⟩ := target_progresses arrival_stream h_wf target t pre suf h_split h_notin
+    obtain ⟨k, h_k_pos, h_concl⟩ :=
+      target_progresses arrival_stream h_wf target t quantum pre suf h_split h_notin
     rcases h_concl with h_run | ⟨pre', suf', h_ready', h_notin', h_lt⟩
     · exact ⟨k, h_run⟩
     · obtain ⟨k', h_k'⟩ := ih pre'.length (by omega) (t + k) pre' suf' h_ready' h_notin' rfl
       exact ⟨k + k', by rw [show t + (k + k') = t + k + k' by omega]; exact h_k'⟩
 
-/-- **Main theorem.** FCFS is starvation-free: under a well-formed arrival
+/-- **Main theorem.** Round Robin is starvation-free: under a well-formed arrival
 stream, every process that ever arrives is eventually found in `completed`
 (matched by `id`). Combines `waiting_is_ready_or_running`,
-`ready_eventually_runs`, and `running_puts_at_back_or_completes`. -/
-theorem RRStarvationFree
+`ready_eventually_runs`, and `running_puts_at_back_or_completes`.
+
+Unlike a non-preemptive scheduler, a process here need not run straight to
+completion once dispatched: quantum expiry can send it back to the queue. The
+induction below is therefore on its `remaining` time, which strictly drops every
+time it gets a turn, so it can be sent back only finitely often. -/
+theorem StarvationFree
   (arrival_stream : Nat → List AperiodicProcess)
   (quantum : ℕ)
   (h_wf : WellFormedStream arrival_stream) :
@@ -751,12 +718,46 @@ theorem RRStarvationFree
     Process.id finished_process = Process.id process -- cannot directly compare a process via == since the `remaining` field changes
   := by
   intro arrival_time process h_arrived
-  rcases waiting_is_ready_or_running arrival_stream arrival_time process h_arrived h_wf with
-    ⟨pre, suf, h_split, h_notin⟩ | h_running
-  · obtain ⟨k, h_running⟩ := ready_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
-    obtain ⟨k', h_k'_pos, q, h_q_mem, h_q_id⟩ :=
-      running_puts_at_back_or_completes arrival_stream (arrival_time + k) process h_running h_wf
-    exact ⟨arrival_time + k + k', q, h_q_mem, h_q_id⟩
-  · obtain ⟨k, h_k_pos, q, h_q_mem, h_q_id⟩ :=
-      running_puts_at_back_or_completes arrival_stream arrival_time process h_running h_wf
-    exact ⟨arrival_time + k, q, h_q_mem, h_q_id⟩
+  -- It suffices to show that a process which is queued or running at some time, with
+  -- `remaining` bounded by `n`, eventually completes.
+  suffices H : ∀ (n t : ℕ) (q : AperiodicProcess),
+      Process.remaining q ≤ n →
+      ((∃ pre suf, (runStepsRR quantum arrival_stream t).sched.ready = pre ++ q :: suf ∧ q ∉ pre)
+        ∨ (runStepsRR quantum arrival_stream t).sched.running = some q) →
+      ∃ ct, ∃ fp ∈ (runStepsRR quantum arrival_stream ct).sched.completed,
+        Process.id fp = Process.id q by
+    exact H (Process.remaining process) arrival_time process le_rfl
+      (waiting_is_ready_or_running arrival_stream arrival_time quantum process h_arrived h_wf)
+  intro n
+  induction n with
+  | zero =>
+    -- vacuous: anything queued or running still has positive `remaining`
+    intro t q h_rem h_where
+    exfalso
+    rcases h_where with ⟨pre, suf, h_split, _⟩ | h_run
+    · have := (remaining_pos_of_ready_or_running arrival_stream h_wf t quantum).1 q
+        (by rw [h_split]; simp)
+      omega
+    · have := (remaining_pos_of_ready_or_running arrival_stream h_wf t quantum).2 q h_run
+      omega
+  | succ n ih =>
+    intro t q h_rem h_where
+    -- whether q is queued or already running, it gets a turn at some point
+    obtain ⟨t_run, h_run⟩ : ∃ t_run, (runStepsRR quantum arrival_stream t_run).sched.running = some q := by
+      rcases h_where with ⟨pre, suf, h_split, h_notin⟩ | h_run
+      · obtain ⟨k, h_k⟩ :=
+          ready_eventually_runs arrival_stream q h_wf t quantum pre suf h_split h_notin
+        exact ⟨t + k, h_k⟩
+      · exact ⟨t, h_run⟩
+    -- that turn either finishes q, or returns it to the queue strictly shorter
+    obtain ⟨k, h_k, h_concl⟩ :=
+      running_puts_at_back_or_completes arrival_stream t_run quantum q h_run h_wf
+    rcases h_concl with ⟨fp, h_mem, h_id⟩ | ⟨q', h_mem, h_id, h_lt⟩
+    · exact ⟨t_run + k, fp, h_mem, h_id⟩
+    · -- back in the queue: re-split canonically and recurse on the smaller `remaining`
+      obtain ⟨pre', suf', h_split', h_notin'⟩ := mem_split_canonical h_mem
+      obtain ⟨ct, fp, h_fp_mem, h_fp_id⟩ :=
+        ih (t_run + k) q' (by omega) (Or.inl ⟨pre', suf', h_split', h_notin'⟩)
+      exact ⟨ct, fp, h_fp_mem, by rw [h_fp_id, h_id]⟩
+
+end RRStarvation
