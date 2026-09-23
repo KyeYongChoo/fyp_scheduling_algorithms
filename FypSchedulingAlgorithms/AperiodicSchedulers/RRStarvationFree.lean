@@ -9,6 +9,7 @@ import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.ProcessSimpLemmas
+import FypSchedulingAlgorithms.SchedStateSimpLemmas
 import Mathlib.Tactic.Linarith
 import FypSchedulingAlgorithms.ListLemmas
 
@@ -72,11 +73,9 @@ theorem idle_implies_empty_ready
   induction t with
   | zero =>
     simp only [runStepsRR, stepRR] at h_running ⊢
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := by
-      rfl
     -- after unfolding, running = none forces the ready-queue match to have
     -- taken its `[]` branch, which is exactly the goal
-    simp only [h_init_running] at h_running ⊢
+    simp only [SchedStateG.init_aperiodic] at h_running ⊢
     split at h_running
     · rename_i h_select
       assumption
@@ -110,9 +109,7 @@ theorem idle_implies_empty_ready
         rename_i p p_running p_remaining_mt_1
         simp [p_remaining_mt_1]
         split at h_running
-        · split at h_running
-          · simp at h_running
-          · simp at h_running
+        · split at h_running <;> simp at h_running
         · simp at h_running
 
 /-- Contrapositive of `idle_implies_empty_ready`: a nonempty ready queue at
@@ -147,8 +144,7 @@ lemma remaining_pos_of_ready_or_running
     exact Process.burst_exceed_zero p
   induction t with
   | zero =>
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [runStepsRR, stepRR, h_init_running]
+    simp only [runStepsRR, stepRR, SchedStateG.init_aperiodic]
     split
     · exact ⟨fun q hq => fresh_pos q 0 hq, by intro q hq; simp at hq⟩
     · rename_i arrival_stream_head arrival_stream_tail h_select
@@ -208,9 +204,7 @@ lemma remaining_pos_of_ready_or_running
                 (by rw [← h_match]; exact ready_src) h_tick_pos).1 q hq
           · -- quantum not expired: p just ticks down in place, ready queue is unchanged
             simp only [List.mem_append] at hq
-            cases hq
-            · exact ready_src q (by grind)
-            · exact ready_src q (by grind)
+            cases hq <;> exact ready_src q (by grind)
         · -- running-process goal (mirror image of the ready-queue goal above)
           intro q hq
           split at hq  -- quantum expired?
@@ -237,8 +231,7 @@ theorem system_arrival_bound
   (∀ p, (runStepsRR quantum arrival_stream t).sched.running = some p → Process.arrival p ≤ t) := by
   induction t with
   | zero =>
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [runStepsRR, stepRR, h_init_running]
+    simp only [runStepsRR, stepRR, SchedStateG.init_aperiodic]
     -- at time 0 the ready queue is exactly the first arrival batch, all of which arrived at 0
     have arrivals_at_zero : ∀ q ∈ arrival_stream 0, Process.arrival q ≤ 0 :=
       fun q hq => le_of_eq (h_wf.consistent q 0 hq)
@@ -317,9 +310,7 @@ theorem system_provenance
      ∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id p) := by
   induction t with
   | zero =>
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    have h_init_completed : (SchedStateMethods.init : SchedStateG AperiodicProcess).completed = [] := rfl
-    simp only [runStepsRR, stepRR, h_init_running]
+    simp only [runStepsRR, stepRR, SchedStateG.init_aperiodic]
     -- at time 0 every queued process is its own witness: it arrived in the first batch
     have arrivals_at_zero : ∀ q ∈ arrival_stream 0,
         ∃ s ≤ 0, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q :=
@@ -328,14 +319,14 @@ theorem system_provenance
     · -- ready = []: nothing to dispatch, CPU idle, nothing completed
       exact ⟨arrivals_at_zero,
              by intro q hq; simp at hq,
-             by intro q hq; simp [h_init_completed] at hq⟩
+             by intro q hq; simp at hq⟩
     · -- ready = p :: ps: p is dispatched to `running`, ps becomes the new ready queue
       rename_i p ps h_match   -- h_match : arrival_stream 0 = p :: ps
       obtain ⟨h_ready, h_running⟩ :=
         dispatch_preserves p ps (by rw [← h_match]; exact arrivals_at_zero)
       exact ⟨h_ready,
              fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running,
-             by intro q hq; simp [h_init_completed] at hq⟩
+             by intro q hq; simp at hq⟩
   | succ t ih =>
     obtain ⟨ih_ready, ih_running, ih_completed⟩ := ih
     simp only [runStepsRR, stepRR]
@@ -554,8 +545,7 @@ theorem waiting_is_ready_or_running
   cases t with
   | zero =>
     -- at time 0 the queue is the first arrival batch, already split as `pre ++ p :: suf`
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [runStepsRR, stepRR, h_init_running, arrival_t_composition]
+    simp only [runStepsRR, stepRR, SchedStateG.init_aperiodic, arrival_t_composition]
     cases pre with
     | nil =>
       -- p is at the front, so it is the one dispatched
@@ -624,9 +614,8 @@ lemma running_step_cases
   simp only [runStepsRR, stepRR, h_running]
   split  -- stepRR case: does p complete this tick?
   · -- p completes, so it is appended to `completed` whether or not anyone succeeds it
-    split  -- match on the combined ready queue
-    · exact Or.inl ⟨{ p with remaining := 0 }, by simp, by simp⟩
-    · exact Or.inl ⟨{ p with remaining := 0 }, by simp, by simp⟩
+    -- match on the combined ready queue: p is completed either way
+    split <;> exact Or.inl ⟨{ p with remaining := 0 }, by simp, by simp⟩
   · split  -- stepRR case: has p's quantum expired?
     · split  -- match on the combined ready queue
       · -- nobody to swap in, so p keeps running despite the expiry

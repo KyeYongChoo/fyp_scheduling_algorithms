@@ -9,6 +9,8 @@ import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.ProcessSimpLemmas
+import FypSchedulingAlgorithms.SchedStateSimpLemmas
+import FypSchedulingAlgorithms.AperiodicSchedulers.NonPreemptiveLemmas
 import Mathlib.Tactic.Linarith
 import FypSchedulingAlgorithms.ListLemmas
 
@@ -38,9 +40,15 @@ arrives eventually completes. It is assembled from two chains of lemmas:
   down to completion within a bounded number of further steps.
 
 Along the way: FCFS-specific facts about `stepFCFS`/`selectFCFS`
-(`selectFCFS_none_iff_empty`, `selectFCFS_mem`, `selectFCFS_head`,
-`idle_implies_empty_ready`, `ready_nonempty_implies_running_nonempty`) and
-scheduler-state invariants (`system_arrival_bound`, `system_provenance`).
+(`selectFCFS_none_iff_empty`, `selectFCFS_none_imp_empty`, `selectFCFS_mem`,
+`selectFCFS_head`) and scheduler-state invariants (`system_arrival_bound`,
+`system_provenance`).
+
+`idle_implies_empty_ready` and its contrapositive
+`ready_nonempty_implies_running_nonempty` are now just the FCFS instances of
+the scheduler-agnostic lemmas of the same name in
+`AperiodicSchedulers.NonPreemptiveLemmas`; the only FCFS input they need is
+`selectFCFS_none_imp_empty`.
 
 `non_preemptive_processes_are_ready_running_completed_or_unarrived` is a
 scheduler-agnostic version of the same "nothing vanishes" invariant, stated
@@ -88,8 +96,8 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
         simp only [runSteps, stepNonPreemptive]
         -- after scheduler runs on init + arrivals at 0
         -- process is either picked to run or stays in ready
-        have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := by rfl
-        simp only [h_init_running]
+
+        simp only [SchedStateG.init_aperiodic, zero_add, Option.mem_def, gt_iff_lt]
 
         split
         · -- select returned none, process stays in ready
@@ -198,9 +206,7 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
         · -- prev.running = some p
           split
           · -- remaining ≤ 0, completed grows
-            split
-            · simp [List.mem_append, h_completed]
-            · simp [List.mem_append, h_completed]
+            split <;> simp [List.mem_append, h_completed]
           · -- remaining > 0, completed unchanged
             simp [h_completed]
       · -- was unarrived
@@ -269,69 +275,35 @@ theorem selectFCFS_head {q l}: selectFCFS l = some q ↔ ∃ rest, l = q :: rest
     · rintro ⟨rest, h⟩
       exact (List.cons.injEq .. ▸ h).1
 
+/-- `selectFCFS` idles only when there is genuinely nothing to pick, which is
+the one property the scheduler-agnostic lemmas in `NonPreemptive` require. -/
+theorem selectFCFS_none_imp_empty (l : List AperiodicProcess) :
+  selectFCFS l = none → l = [] :=
+  (selectFCFS_none_iff_empty l).mp
+
 /-- If the FCFS scheduler has nothing running at time `t`, the ready queue
-must be empty too (otherwise FCFS would have picked something to run). -/
+must be empty too (otherwise FCFS would have picked something to run).
+
+FCFS instance of `NonPreemptive.idle_implies_empty_ready`. -/
 theorem idle_implies_empty_ready
   (arrival_stream : ℕ → List AperiodicProcess)
   (t : ℕ)
   (h_running : (runSteps arrival_stream stepFCFS t).running = none) :
-  (runSteps arrival_stream stepFCFS t).ready = [] := by
-  induction t with
-  | zero =>
-    simp only [runSteps, stepFCFS, stepNonPreemptive] at h_running ⊢
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := by
-      rfl
-    -- after unfolding, running = none means selectFCFS returned none
-    -- selectFCFS_none_iff_empty then gives ready = []
-    simp only [h_init_running] at h_running ⊢
-    split at h_running
-    · rename_i h_select
-      rwa [selectFCFS_none_iff_empty] at h_select
-    · simp at h_running
-  | succ t ih =>
-    simp only [runSteps, stepFCFS, stepNonPreemptive] at h_running ⊢
-    split at h_running
-    · -- prev.running = none, so select was called on ready
-      rename_i h_prev_none
-      split at h_running
-      · -- select returned none → ready = []
-        simp only [List.append_eq_nil_iff] at h_running ⊢
-        apply And.intro
-        · exact ih h_running
-        · rename_i step_concat_arrivals_eq_none
-          have h_ready_empty := ih h_running
-          simp only [stepFCFS] at h_ready_empty
-          rw [h_ready_empty, List.nil_append] at step_concat_arrivals_eq_none
-          rwa [selectFCFS_none_iff_empty] at step_concat_arrivals_eq_none
-      · -- select returned some p → running = some p, contradicts h_running
-        contradiction
-    · -- prev.running = some p, process ticked
-      split at h_running
-      · -- remaining ≤ 0, process completed, next select called
-        rename_i h_remaining_after_tick_zero
-        split at h_running
-        · simp only [h_remaining_after_tick_zero, ↓reduceIte]
-          rename_i h_none_after_1_step
-          rw [selectFCFS_none_iff_empty] at h_none_after_1_step
-          exact h_none_after_1_step
-        · contradiction
-      · -- remaining > 0, running = some p, contradicts h_running = none
-        contradiction
+  (runSteps arrival_stream stepFCFS t).ready = [] :=
+  NonPreemptive.idle_implies_empty_ready selectFCFS selectFCFS_none_imp_empty
+    arrival_stream t h_running
 
 /-- Contrapositive of `idle_implies_empty_ready`: a nonempty ready queue at
-time `t` means some process must be running at time `t`. -/
+time `t` means some process must be running at time `t`.
+
+FCFS instance of `NonPreemptive.ready_nonempty_implies_running_nonempty`. -/
 theorem ready_nonempty_implies_running_nonempty
   (arrival_stream : ℕ → List AperiodicProcess)
   (t : ℕ)
   (h_ready_nonempty : (runSteps arrival_stream stepFCFS t).ready ≠ []):
   ∃ p_running : AperiodicProcess, (runSteps arrival_stream stepFCFS t).running = some p_running :=
-  by
-  cases h : (runSteps arrival_stream stepFCFS t).running with
-  | none =>
-    exfalso
-    have := idle_implies_empty_ready arrival_stream t h
-    tauto
-  | some p => exact ⟨p, rfl⟩
+  NonPreemptive.ready_nonempty_implies_running_nonempty selectFCFS selectFCFS_none_imp_empty
+    arrival_stream t h_ready_nonempty
 
 /-- Under a well-formed arrival stream, every process currently sitting in
 the ready queue or running at time `t` still has positive `remaining` time
@@ -351,8 +323,7 @@ theorem remaining_pos_of_ready_or_running
     exact Process.burst_exceed_zero p
   induction t with
   | zero =>
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
+    simp only [runSteps, stepFCFS, stepNonPreemptive, SchedStateG.init_aperiodic]
     split
     · exact ⟨fun q hq => fresh_pos q 0 hq, by intro q hq; simp at hq⟩
     · rename_i q₀ h_select
@@ -400,8 +371,7 @@ theorem system_arrival_bound
   (∀ q, (runSteps arrival_stream stepFCFS t).running = some q → Process.arrival q ≤ t) := by
   induction t with
   | zero =>
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
+    simp only [runSteps, stepFCFS, stepNonPreemptive, SchedStateG.init_aperiodic]
     split
     · refine ⟨?_, ?_⟩
       · intro q hq; exact le_of_eq (h_wf.consistent q 0 hq)
@@ -456,15 +426,13 @@ theorem system_provenance
      ∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) := by
   induction t with
   | zero =>
-    have h_init_running : (SchedStateMethods.init : SchedStateG AperiodicProcess).running = none := rfl
-    have h_init_completed : (SchedStateMethods.init : SchedStateG AperiodicProcess).completed = [] := rfl
-    simp only [runSteps, stepFCFS, stepNonPreemptive, h_init_running]
+    simp only [runSteps, stepFCFS, stepNonPreemptive, SchedStateG.init_aperiodic]
     split
     · rename_i h_select
       refine ⟨?_, ?_, ?_⟩
       · intro q hq; exact ⟨0, le_refl _, q, hq, rfl⟩
       · intro q hq; simp at hq
-      · intro q hq; simp [h_init_completed] at hq
+      · intro q hq; simp at hq
     · rename_i q₀ h_select
       refine ⟨?_, ?_, ?_⟩
       · intro q hq
@@ -473,7 +441,7 @@ theorem system_provenance
         simp only [Option.some.injEq] at hq
         rw [hq] at h_select
         exact ⟨0, le_refl _, q, selectFCFS_mem h_select, rfl⟩ -- here
-      · intro q hq; simp [h_init_completed] at hq
+      · intro q hq; simp at hq
   | succ t ih =>
     obtain ⟨ih_ready, ih_running, ih_completed⟩ := ih
     simp only [runSteps, stepFCFS, stepNonPreemptive]

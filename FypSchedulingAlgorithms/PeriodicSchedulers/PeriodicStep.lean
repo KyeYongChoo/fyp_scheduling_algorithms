@@ -7,40 +7,28 @@ import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.Step
 
+/-!
+# Periodic Scheduling Algorithms
+
+This file defines the step functions for the two classic periodic schedulers,
+`stepRMS` and `stepEDF`.  Both are preemptive, so both are obtained by handing a
+priority function to `stepPreemptive`; see `FypSchedulingAlgorithms.Step` for the
+shared machinery.
+
+`stepPreemptive` runs the candidate with the *highest* priority number, so a
+policy that wants the *smallest* value of some field `f` passes `fun p => 1 / f p`
+(the priority is a `ℚ`, so this is genuine reciprocal, not `Nat` division).
+
+* `stepRMS` -- Rate Monotonic: the shortest period gets the CPU.
+* `stepEDF` -- Earliest Deadline First: the nearest deadline gets the CPU.
+
+Neither has a starvation or schedulability proof yet; they are currently only
+exercised by the simulator in `FypSchedulingAlgorithms.Test`.
+-/
+
 -- Rate Monotonic (RM) scheduler - Preemptively runs the process with the shortest period
 def stepRMS : PeriodicSchedState → PeriodicSchedState :=
-  stepPreemptive PeriodicProcess (fun p => 1/(p.burst))
-
--- def stepRMS : PeriodicSchedState → PeriodicSchedState :=
---   fun s =>
---     -- gather all candidates: currently running (if any) + ready queue
---     let candidates : List PeriodicProcess :=
---       s.ready ++ (s.running.toList)
---     let shortest : Option PeriodicProcess :=
---       candidates.foldl (fun best p =>
---         match best with
---         | none   => some p
---         | some b => if p.period < b.period then some p else some b)
---         none
---     match shortest with
---     | none =>                                        -- nothing to run
---       { s with time := s.time + 1 }
---     | some p =>
---       -- preempt: put the old runner back in ready (if it's different)
---       let newReady : List PeriodicProcess :=
---         match s.running with
---         | none      => s.ready.erase p
---         | some curr =>
---           if curr == p then s.ready                 -- same process keeps running
---           else s.ready.erase p ++ [curr]      -- preempt: evict curr
---       if p.remaining ≤ 1 then
---         { s with time      := s.time + 1,
---                  running   := none,
---                  ready     := newReady }
---       else
---         { s with time    := s.time + 1,
---                  running := some { p with remaining := p.remaining - 1},
---                  ready   := newReady }
+  stepPreemptive PeriodicProcess (fun p => 1/(p.period))
 
 -- Earliest Deadline First (EDF) Scheduler - Preemptively picks the earliest deadline to run
 def stepEDF : PeriodicSchedState -> PeriodicSchedState :=
