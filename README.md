@@ -2,12 +2,7 @@
 
 ## TODO
 
-1. generalise to periodic/recurrent processes that arrive repeatedly infinitely
-1.1 Rate Monotonic Scheduler
-1.2 Earliest Deadline First Scheduler
-2. prove starvation freedom for some algorithms - no process can be infinitely delayed, all processes must complete <- can a finite statement of this problem be posed?
-3. prove no convoy effect for some algorithms - process wait time before being partially serviced is bounded above by some amount which is independent of any processes
-4. Try to generalise to global scheduling and partitioned scheduling?
+Try to show optimality of EDF compared to RMS
 
 ## AI suggestions:
 
@@ -66,12 +61,4 @@
 #### Monotonicity — adding a process to the ready queue never improves the waiting time of existing processes (expected, but fails for some feedback schedulers).
 
 #### Simulation / refinement — your abstract model (pure state machine) refines to a more concrete model (with context-switch overhead, cache effects). A bisimulation proof connecting the two levels.
-
-
-
-
-
-Maybe could act on these ideas later
-
-\-- show that a priority function is static or dynamic
 

@@ -4,9 +4,9 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
-import FypSchedulingAlgorithms.AperiodicSchedulers.StarvationSpec
+import FypSchedulingAlgorithms.AperiodicSchedulers.Starvation.StarvationSpec
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
-import FypSchedulingAlgorithms.AperiodicSchedulers.StarvationWitnesses
+import FypSchedulingAlgorithms.AperiodicSchedulers.Starvation.StarvationWitnesses
 import Mathlib.Tactic.NormNum
 
 /-!
