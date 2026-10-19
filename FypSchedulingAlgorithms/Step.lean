@@ -50,11 +50,14 @@ structure WellFormedStream (arrival_stream : ℕ → List AperiodicProcess) : Pr
 
 def default_num_steps := 30
 
+/-- The candidate with the *highest* `priority_func` value; among equal-priority
+candidates the **earliest** in the list wins (FIFO ties): a later candidate replaces
+the best so far only if its priority is strictly higher. -/
 def selectByPriority {process_type} (priority_func : process_type → ℚ) (candidates : List process_type) : Option process_type :=
   candidates.foldl (fun best p =>
     match best with
     | none   => some p
-    | some b => if priority_func p < priority_func b then some b else some p)
+    | some b => if priority_func b < priority_func p then some p else some b)
     none
 
 -- Non-preemptive schedulers
@@ -138,10 +141,11 @@ module docstring:
 3. otherwise the best job in `ready` preempts it only if it has *strictly* higher
    priority than the ticked job, which then goes to the back of `ready`.
 
-Step 3 is the same as choosing `selectByPriority priority_func (ready ++ [running])`
-with ties going to the running job (it is scanned last), see
-`Preemptive.selectByPriority_append_singleton`; spelling it as a comparison avoids
-testing jobs for equality.  A job newly put on the CPU is not ticked until the next
+Step 3 is the same as choosing `selectByPriority priority_func (running :: ready)`
+with ties going to the running job (it is scanned first, and ties go to the earliest
+candidate), see `Preemptive.selectByPriority_cons`; spelling it as a comparison avoids
+testing jobs for equality.  Among the jobs in `ready`, ties go to the one nearest the
+front of the queue.  A job newly put on the CPU is not ticked until the next
 step. -/
 def stepPreemptive (process_type : Type) [Process process_type]
   (priority_func : process_type → ℚ) :
