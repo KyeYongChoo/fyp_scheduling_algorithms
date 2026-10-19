@@ -50,7 +50,11 @@ convoy-free yet starves.
 This file only states the property and connects it to `totalWait`
 (`hasConvoyEffect_iff_swap_improves`); the per-scheduler results live in
 `FCFSConvoy`, `SJFConvoy`, `SRTFConvoy` and `RRConvoy`, sharing the arrival
-streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`.
+streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`, and `RunWait`
+ties it to actual runs: there `runWait` measures a run's waiting time, a batch
+run of a non-preemptive policy waits exactly `totalWait` of its dispatch order,
+and `hasConvoyEffect_iff_runWait` restates `HasConvoyEffect` as "on some batch,
+the run waits strictly longer than SJF's".
 -/
 
 namespace ConvoyEffect

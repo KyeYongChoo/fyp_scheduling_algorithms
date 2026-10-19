@@ -65,6 +65,58 @@ theorem selectSJF_foldl_min (l : List AperiodicProcess) (init : Option Aperiodic
         · omega
         · exact ih_rest q hq
 
+/-- Invariant of the `foldl` inside `selectSJF`: the result is either the
+accumulator it started from or one of the scanned jobs. -/
+theorem selectSJF_foldl_mem (l : List AperiodicProcess) (init : Option AperiodicProcess)
+    (p : AperiodicProcess)
+    (h : l.foldl (fun best q =>
+        match best with
+        | none   => some q
+        | some b => if q.burst < b.burst then some q else some b) init = some p) :
+    init = some p ∨ p ∈ l := by
+  induction l generalizing init with
+  | nil => exact Or.inl h
+  | cons x xs ih =>
+    simp only [List.foldl_cons] at h
+    rcases ih _ h with h_eq | h_mem
+    · cases init with
+      | none =>
+        simp only [Option.some.injEq] at h_eq
+        exact Or.inr (h_eq ▸ List.mem_cons_self ..)
+      | some b =>
+        by_cases hlt : x.burst < b.burst
+        · simp only [hlt, ↓reduceIte, Option.some.injEq] at h_eq
+          exact Or.inr (h_eq ▸ List.mem_cons_self ..)
+        · simp only [hlt, ↓reduceIte] at h_eq
+          exact Or.inl h_eq
+    · exact Or.inr (List.mem_cons_of_mem _ h_mem)
+
+/-- SJF only ever picks a job from the queue it is given. -/
+theorem selectSJF_mem (l : List AperiodicProcess) (p : AperiodicProcess)
+    (h : selectSJF l = some p) : p ∈ l :=
+  (selectSJF_foldl_mem l none p h).resolve_left (by simp)
+
+/-- SJF idles only when the queue is empty. -/
+theorem selectSJF_none_imp_empty (l : List AperiodicProcess) (h : selectSJF l = none) :
+    l = [] := by
+  cases l with
+  | nil => rfl
+  | cons x xs =>
+    exfalso
+    -- once the fold holds some job it keeps holding one
+    have key : ∀ (ys : List AperiodicProcess) (b : AperiodicProcess), ys.foldl (fun best q =>
+        match best with
+        | none   => some q
+        | some b => if q.burst < b.burst then some q else some b) (some b) ≠ none := by
+      intro ys
+      induction ys with
+      | nil => simp
+      | cons y ys ih =>
+        intro b
+        simp only [List.foldl_cons]
+        split_ifs <;> exact ih _
+    exact key xs x h
+
 /-- **SJF never inverts**: the job it dispatches is no longer than any job in
 the ready queue. -/
 theorem sjf_noInversion : RunsShortestProcess selectSJF := fun ready _ p _ h =>
