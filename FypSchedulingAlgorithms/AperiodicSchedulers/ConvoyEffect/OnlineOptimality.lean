@@ -19,7 +19,7 @@ is the same on `as` and on `knownAt as t` (`runSteps_knownAt`).  On the known
 instance nothing arrives after `t`, so the wait over `t + T` steps splits into
 the wait up to `t` and the wait of the decision at `t` and its continuation
 (`runWait_knownAt`, with `stateBefore as step t` the state step `t` starts
-from).
+from).  These general facts live in `RunStepsLemmas` and `RunWait`.
 
 **What is proved.**  Competitors are the online non-preemptive policies of
 `OnlineImpossibility` (`IsOnlinePolicy`): they may idle on purpose and read the
@@ -325,32 +325,6 @@ theorem waitFrom_sjf_of_running (x : SchedState) (q : AperiodicProcess)
   exact waitFrom_eq_truncWait selectSJF_mem selectSJF_none_imp_empty x q h_run
     (by rw [hq]; exact q.burst_exceed_zero) h_fresh T
 
-/-- When a step makes a decision -- the CPU is idle, or its job is on its last
-tick -- the policy's choice goes on the CPU, unticked, and leaves the queue; with
-no choice the CPU is left idle. -/
-theorem stepNonPreemptiveOnline_decide (select : SchedState → Option AperiodicProcess)
-    (s : SchedState) (h_dec : ∀ p, s.running = some p → p.remaining ≤ 1) :
-    (∀ q, select s = some q → (stepNonPreemptiveOnline select s).running = some q ∧
-        (stepNonPreemptiveOnline select s).ready = s.ready.erase q) ∧
-      (select s = none → (stepNonPreemptiveOnline select s).running = none ∧
-        (stepNonPreemptiveOnline select s).ready = s.ready) := by
-  cases h_run : s.running with
-  | none =>
-    exact ⟨fun q h => stepNonPreemptiveOnline_dispatch select s h_run h,
-      fun h => stepNonPreemptiveOnline_idle select s h_run h⟩
-  | some p =>
-    have h_done := h_dec p h_run
-    exact ⟨fun q h => stepNonPreemptiveOnline_complete_dispatch select s h_run h_done h,
-      fun h => stepNonPreemptiveOnline_complete_idle select s h_run h_done h⟩
-
-/-- When the running job has more than one tick left, the step does not consult
-the policy: every non-preemptive policy takes the same step. -/
-theorem stepNonPreemptiveOnline_eq_of_tick (select select' : SchedState → Option AperiodicProcess)
-    (s : SchedState) {p : AperiodicProcess} (h_run : s.running = some p)
-    (h_left : 1 < p.remaining) :
-    stepNonPreemptiveOnline select s = stepNonPreemptiveOnline select' s := by
-  simp [stepNonPreemptiveOnline, h_run, show ¬ p.remaining - 1 = 0 by omega]
-
 /-- SJF's continuation after it decides at `s` and dispatches `m`: `m`, then
 SJF's order of the rest -- that is, SJF's order of the whole queue. -/
 theorem waitFrom_sjf_step_of_decide (s : SchedState)
@@ -518,132 +492,16 @@ theorem waitFrom_sjf_step_lt_of_convoy (select : SchedState → Option Aperiodic
   simp only [List.take_succ_cons, List.take_zero, List.sum_cons, List.sum_nil]
   omega
 
-/-! ## The instance known at time `t` -/
+/-! ## Switching policy at a given time
 
-/-- **The instance known at time `t`**: the arrivals of `arrival_stream` up to
-time `t`, and nothing afterwards. -/
-def knownAt (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) : ℕ → List AperiodicProcess :=
-  fun t' => if t' ≤ t then arrival_stream t' else []
-
-/-- Nothing is known to arrive after time `t`. -/
-theorem knownAt_of_lt (arrival_stream : ℕ → List AperiodicProcess) {t j : ℕ} (h : t < j) :
-    knownAt arrival_stream t j = [] := by
-  simp [knownAt, show ¬ j ≤ t by omega]
-
-/-- The known instance of a well-formed stream is well formed. -/
-theorem knownAt_wf {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (t : ℕ) :
-    WellFormedStream (knownAt arrival_stream t) := by
-  have h_mem : ∀ p j, p ∈ knownAt arrival_stream t j → p ∈ arrival_stream j := fun p j hp => by
-    unfold knownAt at hp
-    split at hp
-    · exact hp
-    · simp at hp
-  exact ⟨fun p j hp => h_wf.consistent p j (h_mem p j hp),
-    fun p j hp => h_wf.fresh p j (h_mem p j hp),
-    fun p1 p2 t1 t2 h1 h2 h_id => h_wf.unique p1 p2 t1 t2 (h_mem _ _ h1) (h_mem _ _ h2) h_id⟩
-
-/-- **A run cannot see the future**: up to time `t` it is the same on the
-stream and on the instance known at `t`. -/
-theorem runSteps_knownAt (arrival_stream : ℕ → List AperiodicProcess)
-    (step : SchedState → SchedState) {t t' : ℕ} (h : t' ≤ t) :
-    runSteps (knownAt arrival_stream t) step t' = runSteps arrival_stream step t' := by
-  induction t' with
-  | zero => simp [runSteps, knownAt]
-  | succ k ih =>
-    simp only [runSteps]
-    rw [ih (by omega)]
-    simp [knownAt, h]
-
-/-- The state step `t` of a run starts from: the state after step `t - 1` (or
-the initial state) with the arrivals of time `t` added to `ready`.  This is
-the state on which the scheduler makes its decision at time `t`. -/
-def stateBefore (arrival_stream : ℕ → List AperiodicProcess) (step : SchedState → SchedState) :
-    ℕ → SchedState
-  | 0 => { SchedStateMethods.init with ready := arrival_stream 0 }
-  | t + 1 => { runSteps arrival_stream step t with
-      ready := (runSteps arrival_stream step t).ready ++ arrival_stream (t + 1) }
-
-/-- Each run step is one `step` from the state it starts from. -/
-theorem runSteps_eq_step_stateBefore (arrival_stream : ℕ → List AperiodicProcess)
-    (step : SchedState → SchedState) (t : ℕ) :
-    runSteps arrival_stream step t = step (stateBefore arrival_stream step t) := by
-  cases t <;> rfl
-
-/-- Two runs that agree before time `t` start step `t` from the same state. -/
-theorem stateBefore_congr (arrival_stream : ℕ → List AperiodicProcess)
-    {step step' : SchedState → SchedState} {t : ℕ}
-    (h : ∀ k < t, runSteps arrival_stream step k = runSteps arrival_stream step' k) :
-    stateBefore arrival_stream step t = stateBefore arrival_stream step' t := by
-  cases t with
-  | zero => rfl
-  | succ k => simp only [stateBefore, h k (by omega)]
-
-/-- In a non-preemptive run on a well-formed stream, the jobs waiting when step
-`t` starts are untouched. -/
-theorem stateBefore_ready_fresh (select : SchedState → Option AperiodicProcess)
-    (arrival_stream : ℕ → List AperiodicProcess) (h_wf : WellFormedStream arrival_stream)
-    (t : ℕ) : ∀ q ∈ (stateBefore arrival_stream (stepNonPreemptiveOnline select) t).ready,
-      q.remaining = q.burst := by
-  intro q hq
-  cases t with
-  | zero => exact h_wf.fresh q 0 (by simpa [stateBefore] using hq)
-  | succ t =>
-    rcases List.mem_append.mp hq with hq | hq
-    · exact nonPreemptiveOnline_ready_fresh select arrival_stream h_wf t q hq
-    · exact h_wf.fresh q _ hq
-
-/-- **Waiting on the known instance.** Over `t + T` steps on the instance known
-at `t`, a run waits what it waited on the stream up to `t`, plus the wait still
-to come once it has made its decision at time `t`. -/
-theorem runWait_knownAt (arrival_stream : ℕ → List AperiodicProcess)
-    (step : SchedState → SchedState) (t T : ℕ) :
-    runWait (runSteps · step) (knownAt arrival_stream t) (t + T) =
-      runWait (runSteps · step) arrival_stream t +
-        waitFrom step (step (stateBefore arrival_stream step t)) T := by
-  rw [runWait_add _ _ t T fun j h _ => knownAt_of_lt arrival_stream h,
-    runSteps_knownAt _ _ le_rfl, runSteps_eq_step_stateBefore]
-  congr 1
-  unfold runWait
-  congr 1
-  refine List.map_congr_left fun k hk => ?_
-  dsimp only
-  rw [runSteps_knownAt _ _ (List.mem_range.mp hk).le]
-
-/-- Two runs that agree before time `t` have waited the same up to `t`. -/
-theorem runWait_eq_of_agree (arrival_stream : ℕ → List AperiodicProcess)
-    {step step' : SchedState → SchedState} {t : ℕ}
-    (h : ∀ k < t, runSteps arrival_stream step k = runSteps arrival_stream step' k) :
-    runWait (runSteps · step) arrival_stream t = runWait (runSteps · step') arrival_stream t := by
-  unfold runWait
-  congr 1
-  refine List.map_congr_left fun k hk => ?_
-  dsimp only
-  rw [h k (List.mem_range.mp hk)]
-
-/-! ## Switching policy at a given time -/
-
-/-- A step depends on the policy only through its choice at the current state. -/
-theorem stepNonPreemptiveOnline_congr {select select' : SchedState → Option AperiodicProcess}
-    {s : SchedState} (h : select s = select' s) :
-    stepNonPreemptiveOnline select s = stepNonPreemptiveOnline select' s := by
-  simp only [stepNonPreemptiveOnline, h]
-
-/-- After step `k` of a non-preemptive run the clock reads `k + 1`. -/
-theorem runSteps_online_time (arrival_stream : ℕ → List AperiodicProcess)
-    (select : SchedState → Option AperiodicProcess) (k : ℕ) :
-    (runSteps arrival_stream (stepNonPreemptiveOnline select) k).time = k + 1 := by
-  induction k with
-  | zero => simp [runSteps, stepNonPreemptiveOnline_time]
-  | succ k ih => simp [runSteps, stepNonPreemptiveOnline_time, ih]
-
-/-- Step `t` of a non-preemptive run starts with the clock at `t`. -/
-theorem stateBefore_online_time (arrival_stream : ℕ → List AperiodicProcess)
-    (select : SchedState → Option AperiodicProcess) (t : ℕ) :
-    (stateBefore arrival_stream (stepNonPreemptiveOnline select) t).time = t := by
-  cases t with
-  | zero => rfl
-  | succ k => simp [stateBefore, runSteps_online_time]
+The instance known at time `t` and the state a step starts from (`knownAt`,
+`stateBefore`, `runSteps_knownAt`, `runSteps_eq_step_stateBefore`,
+`stateBefore_congr`) are in `RunStepsLemmas`; the wait on the known instance
+(`runWait_knownAt`, `runWait_eq_of_agree`) is in `RunWait`; the clock and the
+untouched queue of a non-preemptive run (`runSteps_online_time`,
+`stateBefore_online_time`, `stateBefore_ready_fresh`) and the one-step facts
+(`stepNonPreemptiveOnline_congr`, `stepNonPreemptiveOnline_decide`,
+`stepNonPreemptiveOnline_eq_of_tick`) are in `NonPreemptiveLemmas`. -/
 
 /-- Two policies that choose alike whenever the clock reads less than `t` have
 the same run before time `t`. -/
@@ -800,9 +658,10 @@ stream and any online non-preemptive policy.  If at step `t` its run dispatches
 `p` while a job `q` with strictly less work left waits -- a convoy at a dispatch
 moment, as in `HasConvoyEffect` -- then switching to SJF at time `t` waits
 strictly less on the instance known at `t`, over every horizon `t + T` with
-`q.remaining < T`.  (When `q` is the shortest waiting job this bound is tight:
-until `q` could have finished, both runs keep every waiting job waiting at every
-step.) -/
+`q.remaining < T`.  In general the wait is strictly less once `T` exceeds the
+work of the shortest waiting job (apply this with `q` that job), and the stated
+bound is tight when `q` is the shortest waiting job: until it could have
+finished, both runs keep every waiting job waiting at every step. -/
 theorem runWait_switchToSJF_lt_of_convoy (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
     (select : SchedState → Option AperiodicProcess) (h_online : IsOnlinePolicy select)
