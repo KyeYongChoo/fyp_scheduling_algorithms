@@ -25,7 +25,11 @@ bad as FCFS.
 
 This does **not** mean a smaller quantum lowers total waiting time in general:
 `rr_smaller_quantum_not_better` gives two equal jobs for which quantum 1
-finishes them later than quantum 2, because they interleave.
+finishes them later than quantum 2, because they interleave.  Since bursts do
+not depend on the quantum, the same example shows total *waiting* time is not
+monotone either.  What a smaller quantum does improve is *response* time, the
+time until a job first gets the CPU: see `RRResponse`, which generalises
+`rr_convoy_dispatch` to arbitrary batches.
 -/
 
 namespace ConvoyEffect

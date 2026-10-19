@@ -4,12 +4,6 @@
 
 Try to show optimality of EDF compared to RMS
 
-## AI suggestions:
-
-1. Prove FCFS is starvation-free but exhibits convoy effect (a quantitative lower bound on waiting time as a function of preceding burst sizes)
-2. Prove Round Robin is starvation-free and bounded-wait (waiting ≤ (n-1) \* Q ticks) — same safety, better fairness
-3. Prove SJF minimizes average waiting time (the exchange argument) — shows there's a tradeoff: SJF is optimal by one metric but can starve (prove that too, with a counterexample workload as a #eval)
-
 ## List of scheduling properties:
 
 ### Safety Properties (nothing bad ever happens)

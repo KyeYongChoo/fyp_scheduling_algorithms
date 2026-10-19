@@ -32,7 +32,7 @@ Unlike a non-preemptive scheduler, a Round Robin process need not run straight
 to completion once dispatched — quantum expiry can send it back to the queue.
 So the argument alternates two phases, with `remaining` as the overall measure:
 
-* *Getting to the front.* `waiting_is_ready_or_running` locates a just-arrived
+* *Getting to the front.* `arrived_is_ready_or_running` locates a just-arrived
   process as a canonical `pre ++ target :: suf` split of the ready queue (via
   `mem_split_canonical`), or shows it is already running.
   `target_index_decreases_one_step` shows one step either dispatches `target`,
@@ -535,7 +535,7 @@ theorem target_progresses
 somewhere in the ready queue in canonical split form (`ready = pre ++ p ::
 suf`, `p ∉ pre`, ready for `target_progresses` to consume) or already
 running. -/
-theorem waiting_is_ready_or_running
+theorem arrived_is_ready_or_running
   (arrival_stream : ℕ → List AperiodicProcess) (t quantum: ℕ) (p : AperiodicProcess)
   (h_arrived : p ∈ arrival_stream t)
   (h_wf : WellFormedStream arrival_stream) :
@@ -691,7 +691,7 @@ theorem ready_eventually_runs
 
 /-- **Main theorem.** Round Robin is starvation-free: under a well-formed arrival
 stream, every process that ever arrives is eventually found in `completed`
-(matched by `id`). Combines `waiting_is_ready_or_running`,
+(matched by `id`). Combines `arrived_is_ready_or_running`,
 `ready_eventually_runs`, and `running_puts_at_back_or_completes`.
 
 Unlike a non-preemptive scheduler, a process here need not run straight to
@@ -716,7 +716,7 @@ theorem StarvationFree
       ∃ ct, ∃ fp ∈ (runStepsRR quantum arrival_stream ct).sched.completed,
         Process.id fp = Process.id q by
     exact H (Process.remaining process) arrival_time process le_rfl
-      (waiting_is_ready_or_running arrival_stream arrival_time quantum process h_arrived h_wf)
+      (arrived_is_ready_or_running arrival_stream arrival_time quantum process h_arrived h_wf)
   intro n
   induction n with
   | zero =>
