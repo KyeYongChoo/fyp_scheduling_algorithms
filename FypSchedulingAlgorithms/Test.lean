@@ -11,9 +11,10 @@ import Std.Data.String
 /-!
 # Test scheduling algorithms
 
-The file generates processes, executes them via the different scheduling algorithms and
-generates a csv file for the user to check whether the scheduling algorithms are working as
-intended.
+The file defines sample process sets and the CSV rendering of a run, so the user can check
+that the scheduling algorithms behave as intended.  Nothing here writes files: the CSVs in
+`SampleSchedules/` are produced by `Main.lean` (run `lake env lean --run Main.lean` from the
+repository root), not by `lake build`.
 -/
 
 -- # Test Data
@@ -93,27 +94,8 @@ def outputCSV {α} [Process α] [SchedStateMethods α] (states : List (SchedStat
   let rows := states.map stateToCSV
   (header :: rows) |> "\n".intercalate
 
+/-- Write `content` to `dir ++ subdir ++ "/" ++ filename`, creating the directory if needed.
+Paths are relative to the working directory, so run the generator from the repository root. -/
 def writeCSV (filename : String) (content : String) (dir: String := "SampleSchedules/") (subdir: String := ""): IO Unit := do
   IO.FS.createDirAll (dir ++ subdir)
   IO.FS.writeFile (dir ++ subdir ++ "/" ++ filename) content
-
-set_option linter.hashCommand false
-
-#eval writeCSV "SRTFschedule.csv" (outputCSV (runStepsAccumulateResults aperiodicArrivals stepSRTF))
-
-#eval writeCSV "SJFschedule.csv" (outputCSV (runStepsAccumulateResults aperiodicArrivals stepSJF))
-
-#eval writeCSV "FCFSschedule.csv" (outputCSV (runStepsAccumulateResults aperiodicArrivals stepFCFS))
-
-#eval writeCSV "RRschedule_q3.csv" (outputCSV (runStepsRRAccumulateResults (quantum:=3) (arrivalStream := aperiodicArrivals) (num_steps:= 30)))
-
--- # Periodic Schedulers
-#eval writeCSV "EDFscheduleSingleRecurrent.csv" (outputCSV (runStepsAccumulateResults singleRecurrentProcess stepEDF)) (subdir := "EDF")
-#eval writeCSV "EDFscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsSucceedsEdfSucceeds stepEDF)) (subdir := "EDF")
-#eval writeCSV "EDFscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsFailsEdfSucceeds stepEDF)) (subdir := "EDF")
-#eval writeCSV "EDFscheduleBothFail.csv" (outputCSV (runStepsAccumulateResults bothFail stepEDF)) (subdir := "EDF")
-
-#eval writeCSV "RMSscheduleSingleRecurrent.csv" (outputCSV (runStepsAccumulateResults singleRecurrentProcess stepRMS)) (subdir := "RMS")
-#eval writeCSV "RMSscheduleRmsSucceedsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsSucceedsEdfSucceeds stepRMS)) (subdir := "RMS")
-#eval writeCSV "RMSscheduleRmsFailsEdfSucceeds.csv" (outputCSV (runStepsAccumulateResults rmsFailsEdfSucceeds stepRMS)) (subdir := "RMS")
-#eval writeCSV "RMSscheduleBothFail.csv" (outputCSV (runStepsAccumulateResults bothFail stepRMS)) (subdir := "RMS")
