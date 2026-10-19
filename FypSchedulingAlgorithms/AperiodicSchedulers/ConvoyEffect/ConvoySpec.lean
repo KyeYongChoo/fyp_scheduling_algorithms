@@ -42,7 +42,10 @@ Two related notions:
   cost is visible: for a batch, swapping the two jobs strictly lowers total
   waiting time (`hasBatchConvoyEffect_iff_swap_improves`), and in `RunWait` a
   policy has the batch convoy effect exactly when its run waits strictly longer
-  than SJF's on some batch (`hasBatchConvoyEffect_iff_runWait`).
+  than SJF's on some batch (`hasBatchConvoyEffect_iff_runWait`).  Off batches
+  the cost is in `OnlineOptimality`: at a convoy dispatch of any online
+  non-preemptive run, switching to SJF strictly lowers the wait on the instance
+  known at that moment (`runWait_switchToSJF_lt_of_convoy`).
 * The **online convoy effect** (`HasOnlineConvoyEffect`) is weaker: a shorter
   job waits behind the running one at *any* step, not just at a dispatch.  The
   convoy effect implies it (`hasConvoyEffectRun_imp_online`), but not
@@ -67,7 +70,9 @@ the arrival streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`, and
 a batch run of a non-preemptive policy waits exactly `totalWait` of its dispatch
 order, and `hasBatchConvoyEffect_iff_runWait` restates `HasBatchConvoyEffect` as
 "on some batch, the run waits strictly longer than SJF's".  `OnlineImpossibility`
-shows that no online non-preemptive policy waits least on every stream.
+shows that no online non-preemptive policy waits least on every stream, and
+`OnlineOptimality` that SJF nevertheless waits least given only the past (on
+the instance known so far, against policies with the same past).
 -/
 
 namespace ConvoyEffect

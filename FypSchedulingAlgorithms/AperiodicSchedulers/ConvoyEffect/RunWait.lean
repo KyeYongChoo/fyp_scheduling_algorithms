@@ -382,7 +382,9 @@ theorem dispatchOrder_burst_perm
 
 /-- **SJF is optimal on a batch.** Among non-preemptive policies that never idle
 while a job is waiting (`h_none`), none waits less than SJF on a batch released
-at time 0, once the horizon covers the total work. -/
+at time 0, once the horizon covers the total work.  (`OnlineOptimality`
+strengthens this to every horizon and to policies that idle or read the whole
+state, `runWait_sjf_le_online_batch`.) -/
 theorem runWait_sjf_le {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
     (l : List AperiodicProcess) (h_batch : IsBatch l) (T : ℕ) (hT : (l.map (·.burst)).sum ≤ T) :

@@ -54,6 +54,10 @@ The theorem is about the class that includes deliberate idling; a statement
 about work-conserving policies alone (never idle while a job waits) would be a
 different claim, not made here.
 
+What SJF lacks is only the future: given only the past, it is optimal
+(`OnlineOptimality`).  On the instance known at any time `t`, its run waits no
+longer than any policy of the class that agrees with it before `t`.
+
 Preemption removes the dilemma: SRTF dispatches the long job and preempts it
 when the unit job arrives, waiting 1 tick on `streamB` and 0 on `streamA`
 (computed with `#eval`; not yet proved here).
