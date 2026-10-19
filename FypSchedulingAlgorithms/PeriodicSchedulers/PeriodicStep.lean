@@ -23,7 +23,7 @@ policy that wants the *smallest* value of some field `f` passes `fun p => 1 / f 
 * `stepEDF` -- Earliest Deadline First: the nearest deadline gets the CPU.
 
 Neither has a starvation or schedulability proof yet; they are currently only
-exercised by the simulator in `FypSchedulingAlgorithms.Test`.
+exercised by the simulator in `FypSchedulingAlgorithms.SampleSchedules`.
 -/
 
 -- Rate Monotonic (RM) scheduler - Preemptively runs the process with the shortest period

@@ -3,7 +3,7 @@
 ## Generating the sample schedules
 
 `SampleSchedules/` holds CSV traces of each scheduler on the sample process sets in
-`FypSchedulingAlgorithms/Test.lean`, so you can read what the schedulers actually do.
+`FypSchedulingAlgorithms/SampleSchedules.lean`, so you can read what the schedulers actually do.
 They are not produced by `lake build`. Regenerate them by running, from the repository root,
 
 ```
@@ -11,8 +11,8 @@ lake build && lake env lean --run Main.lean
 ```
 
 `lean --run` uses the compiled library modules as they are, so always rebuild first after
-editing anything (otherwise it runs a stale `Test.olean`). `Main.lean` itself is not part of
-the library, so `lake build` does not check it; after changing `Test.lean` you can type-check
+editing anything (otherwise it runs a stale `SampleSchedules.olean`). `Main.lean` itself is not part of
+the library, so `lake build` does not check it; after changing `SampleSchedules.lean` you can type-check
 the generator without running it with `lake env lean Main.lean`.
 
 `Main.lean` runs in the Lean interpreter (a compiled `lake exe` would first have to compile
@@ -39,7 +39,7 @@ one task apart. Columns:
   row, in the same `P<label>:...` format, separated by `|`. Late jobs are not aborted, so one
   miss shows up on every row until the job finishes.
 
-To add a scenario, define its arrival stream next to the others in `Test.lean` (a list of
+To add a scenario, define its arrival stream next to the others in `SampleSchedules.lean` (a list of
 processes passed to `Process.convert_to_arrival_stream`), then add a `writeCSV` line for it in
 `main` in `Main.lean` (the `subdir` argument picks the folder under `SampleSchedules/`), and
 rerun the command above.

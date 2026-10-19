@@ -4,13 +4,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 
-import FypSchedulingAlgorithms.Test
+import FypSchedulingAlgorithms.SampleSchedules
 
 /-!
 # Sample schedule generator
 
 Writes the sample-schedule CSVs in `SampleSchedules/`: one file per (scheduler, scenario)
-pair, using the test data and the CSV rendering in `FypSchedulingAlgorithms.Test`.
+pair, using the test data and the CSV rendering in `FypSchedulingAlgorithms.SampleSchedules`.
 
 This is not part of the library and `lake build` never runs it.  Run it from the repository
 root (the output paths are relative) with

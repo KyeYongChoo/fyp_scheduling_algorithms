@@ -9,7 +9,7 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.PeriodicSchedulers.PeriodicStep
 import Std.Data.String
 /-!
-# Test scheduling algorithms
+# Sample schedules
 
 The file defines sample process sets and the CSV rendering of a run, so the user can check
 that the scheduling algorithms behave as intended.  Nothing here writes files: the CSVs in
