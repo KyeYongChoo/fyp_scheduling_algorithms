@@ -59,8 +59,9 @@ What SJF lacks is only the future: given only the past, it is optimal
 longer than any policy of the class that agrees with it before `t`.
 
 Preemption removes the dilemma: SRTF dispatches the long job and preempts it
-when the unit job arrives, waiting 1 tick on `streamB` and 0 on `streamA`
-(computed with `#eval`; not yet proved here).
+when the unit job arrives, waiting 1 tick on `streamB` and 0 on `streamA`, the
+least any schedule can wait on either stream, so it beats every policy of the
+class on one of them (`PreemptiveOptimality`).
 -/
 
 namespace ConvoyEffect
