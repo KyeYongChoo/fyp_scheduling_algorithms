@@ -58,6 +58,7 @@ still to come from state `s` when nothing else arrives. -/
 def waitFrom (step : SchedState → SchedState) (s : SchedState) (T : ℕ) : ℕ :=
   ((List.range T).map fun t => (step^[t] s).ready.length).sum
 
+/-- Over a zero horizon nobody waits. -/
 @[simp] theorem waitFrom_zero (step : SchedState → SchedState) (s : SchedState) :
     waitFrom step s 0 = 0 := rfl
 
@@ -68,28 +69,71 @@ theorem waitFrom_succ (step : SchedState → SchedState) (s : SchedState) (T : �
     Function.iterate_zero_apply]
   congr 2
 
+/-! ### Runs with no arrivals for a while -/
+
+/-- When nothing arrives at time `t + 1`, run step `t + 1` is just one `step`. -/
+theorem runSteps_succ_of_nil (step : SchedState → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (h : arrival_stream (t + 1) = []) :
+    runSteps arrival_stream step (t + 1) = step (runSteps arrival_stream step t) := by
+  simp [runSteps, h]
+
+/-- When nothing arrives in `(t, t + k]`, the run from time `t` on is `step`
+iterated. -/
+theorem runSteps_add_eq_iterate (step : SchedState → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) (t k : ℕ)
+    (h : ∀ j, t < j → j ≤ t + k → arrival_stream j = []) :
+    runSteps arrival_stream step (t + k) = step^[k] (runSteps arrival_stream step t) := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+    rw [← Nat.add_assoc, runSteps_succ_of_nil _ _ _ (h _ (by omega) (by omega)),
+      ih (fun j h1 h2 => h j h1 (by omega)), Function.iterate_succ_apply']
+
+/-- **Splitting a run's waiting time.** When nothing arrives in `(t, t + T)`, the
+wait over the first `t + T` steps is the wait up to `t` plus the wait still to
+come from the state at `t`. -/
+theorem runWait_add (step : SchedState → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) (t T : ℕ)
+    (h : ∀ j, t < j → j < t + T → arrival_stream j = []) :
+    runWait (runSteps · step) arrival_stream (t + T) =
+      runWait (runSteps · step) arrival_stream t +
+        waitFrom step (runSteps arrival_stream step t) T := by
+  unfold runWait waitFrom
+  rw [List.range_add, List.map_append, List.sum_append, List.map_map]
+  congr 2
+  apply List.map_congr_left
+  intro k hk
+  have hk' := List.mem_range.mp hk
+  simp only [Function.comp_apply]
+  rw [runSteps_add_eq_iterate step arrival_stream t k (fun j h1 h2 => h j h1 (by omega))]
+
 /-- On a batch nothing arrives after time 0, so each run step is one `step`. -/
 theorem runSteps_batch_succ (step : SchedState → SchedState) (l : List AperiodicProcess)
-    (t : ℕ) : runSteps (batchStream l) step (t + 1) = step (runSteps (batchStream l) step t) := by
-  simp [runSteps, batchStream]
+    (t : ℕ) : runSteps (batchStream l) step (t + 1) = step (runSteps (batchStream l) step t) :=
+  runSteps_succ_of_nil step _ t rfl
 
+/-- After time 0 a batch stream is empty. -/
+theorem batchStream_succ (l : List AperiodicProcess) (j : ℕ) (hj : 0 < j) :
+    batchStream l j = [] := by
+  obtain ⟨i, rfl⟩ : ∃ i, j = i + 1 := ⟨j - 1, by omega⟩
+  rfl
+
+/-- On a batch, the run is `step` iterated from the state after step 0. -/
 theorem runSteps_batch_eq_iterate (step : SchedState → SchedState) (l : List AperiodicProcess)
     (t : ℕ) : runSteps (batchStream l) step t = step^[t] (runSteps (batchStream l) step 0) := by
-  induction t with
-  | zero => rfl
-  | succ t ih => rw [runSteps_batch_succ, ih, Function.iterate_succ_apply']
+  have := runSteps_add_eq_iterate step (batchStream l) 0 t
+    (fun j h1 _ => batchStream_succ l j h1)
+  rwa [Nat.zero_add] at this
 
 /-- On a batch, the run's waiting time is the wait from the state after step 0. -/
 theorem runWait_batch_eq_waitFrom (step : SchedState → SchedState) (l : List AperiodicProcess)
     (T : ℕ) :
     runWait (fun as => runSteps as step) (batchStream l) T =
       waitFrom step (runSteps (batchStream l) step 0) T := by
-  unfold runWait waitFrom
-  congr 1
-  apply List.map_congr_left
-  intro t _
-  show (runSteps (batchStream l) step t).ready.length = _
-  rw [runSteps_batch_eq_iterate step l t]
+  have := runWait_add step (batchStream l) 0 T (fun j h1 _ => batchStream_succ l j h1)
+  rw [Nat.zero_add] at this
+  rw [this]
+  exact Nat.zero_add _
 
 /-! ## Dispatch order of a non-preemptive policy -/
 
@@ -108,6 +152,7 @@ def dispatchOrder (select : List AperiodicProcess → Option AperiodicProcess)
     (ready : List AperiodicProcess) : List AperiodicProcess :=
   dispatchOrderAux select ready.length ready
 
+/-- Nothing to dispatch. -/
 @[simp] theorem dispatchOrder_nil (select : List AperiodicProcess → Option AperiodicProcess) :
     dispatchOrder select [] = [] := rfl
 
@@ -141,11 +186,14 @@ theorem dispatchOrder_perm {select : List AperiodicProcess → Option AperiodicP
       rw [List.length_erase_of_mem hp, hn]
       rfl
 
-/-- If the policy always picks a shortest job of a batch, it dispatches the
-batch in non-decreasing order of burst. -/
-theorem dispatchOrder_sorted {select : List AperiodicProcess → Option AperiodicProcess}
+/-- If the policy picks a shortest job from every queue in some family `P` that
+is closed under removing a job, it dispatches every queue of the family in
+non-decreasing order of burst. -/
+theorem dispatchOrder_sorted_on {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
-    (h_short : RunsShortestProcess select) (l : List AperiodicProcess) (h_batch : IsBatch l) :
+    (P : List AperiodicProcess → Prop) (hP : ∀ l p, P l → P (l.erase p))
+    (h_short : ∀ l, P l → ∀ p, select l = some p → ∀ q ∈ l, p.burst ≤ q.burst)
+    (l : List AperiodicProcess) (hl : P l) :
     ((dispatchOrder select l).map (·.burst)).Pairwise (· ≤ ·) := by
   obtain ⟨n, hn⟩ : ∃ n, l.length = n := ⟨_, rfl⟩
   induction n generalizing l with
@@ -155,16 +203,35 @@ theorem dispatchOrder_sorted {select : List AperiodicProcess → Option Aperiodi
     | none => rw [h_none l h]; simp
     | some p =>
       have hp := h_mem l p h
-      -- what is left of a batch is again a batch
-      have h_batch' : IsBatch (l.erase p) :=
-        ⟨fun q hq => h_batch.1 q (List.mem_of_mem_erase hq),
-          h_batch.2.sublist ((List.erase_sublist).map _)⟩
       rw [dispatchOrder_of_select h_mem h, List.map_cons, List.pairwise_cons]
-      refine ⟨?_, ih (l.erase p) h_batch' (by rw [List.length_erase_of_mem hp, hn]; rfl)⟩
+      refine ⟨?_, ih (l.erase p) (hP l p hl) (by rw [List.length_erase_of_mem hp, hn]; rfl)⟩
       intro b hb
       obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb
       have hq' := List.mem_of_mem_erase ((dispatchOrder_perm h_mem h_none _).subset hq)
-      exact h_short l h_batch p hp h q hq'
+      exact h_short l hl p h q hq'
+
+/-- A policy that always picks a shortest job, from any queue, dispatches any
+queue in non-decreasing order of burst.  (No batch assumption: this applies to
+the queue a run has built up mid-way.) -/
+theorem dispatchOrder_sorted_of_min {select : List AperiodicProcess → Option AperiodicProcess}
+    (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
+    (h_short : ∀ l p, select l = some p → ∀ q ∈ l, p.burst ≤ q.burst)
+    (l : List AperiodicProcess) :
+    ((dispatchOrder select l).map (·.burst)).Pairwise (· ≤ ·) :=
+  dispatchOrder_sorted_on h_mem h_none (fun _ => True) (fun _ _ _ => trivial)
+    (fun l _ p h => h_short l p h) l trivial
+
+/-- If the policy always picks a shortest job of a batch, it dispatches the
+batch in non-decreasing order of burst. -/
+theorem dispatchOrder_sorted {select : List AperiodicProcess → Option AperiodicProcess}
+    (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
+    (h_short : RunsShortestProcess select) (l : List AperiodicProcess) (h_batch : IsBatch l) :
+    ((dispatchOrder select l).map (·.burst)).Pairwise (· ≤ ·) :=
+  -- what is left of a batch is again a batch
+  dispatchOrder_sorted_on h_mem h_none IsBatch
+    (fun _ _ h_batch => ⟨fun q hq => h_batch.1 q (List.mem_of_mem_erase hq),
+      h_batch.2.sublist ((List.erase_sublist).map _)⟩)
+    (fun l h_batch p h => h_short l h_batch p (h_mem l p h) h) l h_batch
 
 /-- Taking a job out of a batch takes its burst out of the total work. -/
 theorem sum_map_erase (f : AperiodicProcess → ℕ) {l : List AperiodicProcess}
@@ -186,30 +253,35 @@ section Steps
 
 variable (select : List AperiodicProcess → Option AperiodicProcess) (s : SchedState)
 
+/-- A running job with more than one tick left is ticked and keeps the CPU. -/
 theorem stepNonPreemptive_tick {p : AperiodicProcess} (h_run : s.running = some p)
     (h_left : 1 < p.remaining) :
     (stepNonPreemptive select s).running = some { p with remaining := p.remaining - 1 } ∧
       (stepNonPreemptive select s).ready = s.ready := by
   simp [stepNonPreemptive, h_run, show ¬ p.remaining - 1 = 0 by omega]
 
+/-- A running job on its last tick completes, and the choice of `select` is dispatched. -/
 theorem stepNonPreemptive_complete_dispatch {p q : AperiodicProcess}
     (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : select s.ready = some q) :
     (stepNonPreemptive select s).running = some q ∧
       (stepNonPreemptive select s).ready = s.ready.erase q := by
   simp [stepNonPreemptive, h_run, h_sel, show p.remaining - 1 = 0 by omega]
 
+/-- A running job on its last tick completes; with nothing chosen the CPU goes idle. -/
 theorem stepNonPreemptive_complete_idle {p : AperiodicProcess}
     (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : select s.ready = none) :
     (stepNonPreemptive select s).running = none ∧
       (stepNonPreemptive select s).ready = s.ready := by
   simp [stepNonPreemptive, h_run, h_sel, show p.remaining - 1 = 0 by omega]
 
+/-- An idle CPU takes the choice of `select`, unticked. -/
 theorem stepNonPreemptive_dispatch {q : AperiodicProcess}
     (h_run : s.running = none) (h_sel : select s.ready = some q) :
     (stepNonPreemptive select s).running = some q ∧
       (stepNonPreemptive select s).ready = s.ready.erase q := by
   simp [stepNonPreemptive, h_run, h_sel]
 
+/-- An idle CPU with nothing chosen stays idle. -/
 theorem stepNonPreemptive_idle (h_run : s.running = none) (h_sel : select s.ready = none) :
     (stepNonPreemptive select s).running = none ∧
       (stepNonPreemptive select s).ready = s.ready := by
@@ -339,8 +411,9 @@ theorem dispatchOrder_burst_perm
     (dispatchOrder select l).map (·.burst) ~ (dispatchOrder select' l).map (·.burst) :=
   ((dispatchOrder_perm h_mem h_none l).trans (dispatchOrder_perm h_mem' h_none' l).symm).map _
 
-/-- **SJF is optimal on a batch.** Among non-preemptive policies, none waits less
-than SJF on a batch released at time 0, once the horizon covers the total work. -/
+/-- **SJF is optimal on a batch.** Among non-preemptive policies that never idle
+while a job is waiting (`h_none`), none waits less than SJF on a batch released
+at time 0, once the horizon covers the total work. -/
 theorem runWait_sjf_le {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
     (l : List AperiodicProcess) (h_batch : IsBatch l) (T : ℕ) (hT : (l.map (·.burst)).sum ≤ T) :
@@ -349,7 +422,7 @@ theorem runWait_sjf_le {select : List AperiodicProcess → Option AperiodicProce
   rw [runWait_sjf_batch l h_batch T hT,
     runWait_batch_eq_totalWait h_mem h_none l (fun p hp => (h_batch.1 p hp).2) T hT]
   exact totalWait_sorted_le
-    (dispatchOrder_sorted selectSJF_mem selectSJF_none_imp_empty sjf_noInversion l h_batch)
+    (dispatchOrder_sorted_of_min selectSJF_mem selectSJF_none_imp_empty selectSJF_min l)
     (dispatchOrder_burst_perm selectSJF_mem selectSJF_none_imp_empty h_mem h_none l)
 
 /-- **The convoy effect, measured on runs.** A non-preemptive policy has the
@@ -372,8 +445,8 @@ theorem hasConvoyEffect_iff_runWait (select : List AperiodicProcess → Option A
         totalWait ((dispatchOrder select l).map (·.burst)) := fun l h_batch =>
     runWait_batch_eq_totalWait h_mem h_none l (fun p hp => (h_batch.1 p hp).2) _ le_rfl
   have h_perm := dispatchOrder_burst_perm selectSJF_mem selectSJF_none_imp_empty h_mem h_none
-  have h_sjf_sorted := fun l => dispatchOrder_sorted selectSJF_mem selectSJF_none_imp_empty
-    sjf_noInversion l
+  have h_sjf_sorted := fun l (_ : IsBatch l) =>
+    dispatchOrder_sorted_of_min selectSJF_mem selectSJF_none_imp_empty selectSJF_min l
   constructor
   · intro h
     obtain ⟨l, h_batch, p, hp, h_p, q, hq, h_lt⟩ := (hasConvoyEffect_iff select).mp h

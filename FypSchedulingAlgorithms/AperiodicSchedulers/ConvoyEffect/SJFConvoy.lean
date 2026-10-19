@@ -117,10 +117,15 @@ theorem selectSJF_none_imp_empty (l : List AperiodicProcess) (h : selectSJF l = 
         split_ifs <;> exact ih _
     exact key xs x h
 
+/-- SJF picks a job of least burst from *any* queue, batch or not. -/
+theorem selectSJF_min (l : List AperiodicProcess) (p : AperiodicProcess)
+    (h : selectSJF l = some p) : ∀ q ∈ l, p.burst ≤ q.burst :=
+  (selectSJF_foldl_min l none p h).2
+
 /-- **SJF never inverts**: the job it dispatches is no longer than any job in
 the ready queue. -/
 theorem sjf_noInversion : RunsShortestProcess selectSJF := fun ready _ p _ h =>
-  (selectSJF_foldl_min ready none p h).2
+  selectSJF_min ready p h
 
 /-- SJF does not have the convoy effect. -/
 theorem sjf_not_hasConvoyEffect : ¬ HasConvoyEffect selectSJF :=
