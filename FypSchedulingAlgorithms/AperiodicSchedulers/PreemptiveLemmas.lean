@@ -97,4 +97,17 @@ theorem selectByPriority_eq_none {α : Type} (f : α → ℚ) (l : List α)
         split_ifs <;> exact ih _
     exact key xs x h
 
+/-- **The running job wins ties.** Selecting from `l ++ [b]` (the ready queue with
+the running job scanned last) returns `b` unless the best job of `l` has strictly
+higher priority.  This is how `stepPreemptive` decides whether to preempt the
+running job `b`. -/
+theorem selectByPriority_append_singleton {α : Type} (f : α → ℚ) (l : List α) (b : α) :
+    selectByPriority f (l ++ [b]) =
+      match selectByPriority f l with
+      | none   => some b
+      | some q => if f b < f q then some q else some b := by
+  unfold selectByPriority
+  rw [List.foldl_append]
+  rfl
+
 end Preemptive

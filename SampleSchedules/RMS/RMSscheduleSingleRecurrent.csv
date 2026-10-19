@@ -1,7 +1,7 @@
 time,running,ready_queue,completed,process_ticks with deadline,missed_deadlines
-1,1,"","","P1:1/3d4",
-2,1,"","","P1:2/3d4",
-3,0,"","1","P1:3/3d4",
+1,1,"","","P1:0/3d4",
+2,1,"","","P1:1/3d4",
+3,1,"","","P1:2/3d4",
 4,0,"","1","P1:3/3d4",
 5,0,"","1","P1:3/3d4",
 6,0,"","1","P1:3/3d4",

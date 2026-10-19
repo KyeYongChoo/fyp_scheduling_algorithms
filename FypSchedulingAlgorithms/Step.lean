@@ -23,6 +23,19 @@ The preemptive version of FCFS, which is Round Robin, differs enough from
 other preemptive algorithms that it is built independently from
 `stepNonPreemptive` and `stepPreemptive`
 
+## Tick convention
+
+Every step function (`stepNonPreemptive`, `stepPreemptive`, and `stepRR` in
+`AperiodicStep`) follows the same convention, one tick of CPU time per step:
+
+1. tick the job that was running at the start of the step, if any;
+2. if that finished it, move it to `completed`;
+3. decide who runs next (keep it, preempt it, or dispatch into an idle CPU).
+
+A job newly put on the CPU in a step -- dispatched from idle, after a completion,
+or by preemption -- is **not** ticked in that step; its first tick is in the next
+step.  So the state after a step shows who holds the CPU *going into* the next tick.
+
 This file also defines the runSteps function which simulates a time step and
 Arrival stream to simulate arrivals, since i'm modelling infinite processes arriving
 in total, though at any time step only a finite amount of processes arrive
@@ -75,49 +88,58 @@ def stepNonPreemptive [Process AperiodicProcess] (select : List AperiodicProcess
         { s with time    := s.time + 1,
                  running := some p }
 
--- preemptive schedulers:
--- Higher priority number means execute first
+/-- **Preemptive scheduler** driven by a priority function: the candidate with the
+*highest* `priority_func` value gets the CPU.  It follows the tick convention in the
+module docstring:
+
+1. the job running at the start of the step (if any) is ticked;
+2. if that finished it, it moves to `completed` and the best job in `ready` (if any) is
+   dispatched;
+3. otherwise the best job in `ready` preempts it only if it has *strictly* higher
+   priority than the ticked job, which then goes to the back of `ready`.
+
+Step 3 is the same as choosing `selectByPriority priority_func (ready ++ [running])`
+with ties going to the running job (it is scanned last), see
+`Preemptive.selectByPriority_append_singleton`; spelling it as a comparison avoids
+testing jobs for equality.  A job newly put on the CPU is not ticked until the next
+step. -/
 def stepPreemptive (process_type : Type) [Process process_type]
   (priority_func : process_type → ℚ) :
   SchedStateG process_type → SchedStateG process_type :=
-  fun state_before =>
-    let candidates := state_before.ready ++ (state_before.running.toList)
-    let next_run := selectByPriority priority_func candidates
-    match next_run with
-      | none =>
-        {state_before with time := state_before.time + 1}
-      | some p =>
-        let newReady :=
-          match state_before.running with
-            | none => state_before.ready.erase p
-            | some b =>
-              if b == p then state_before.ready
-              else
-                state_before.ready.erase p ++ [b]
-        let p := Process.tick p
-        if Process.remaining p ≤ 0 then
-          -- immediately look for next process - no context switch time
-          let nextUp := selectByPriority priority_func newReady
-          match nextUp with
-          | none =>
-            { state_before with
-                time      := state_before.time + 1
-                ready     := newReady
-                running   := none
-                completed := state_before.completed ++ [p] }
-          | some q =>
-            { state_before with
-                time      := state_before.time + 1
-                ready     := newReady.erase q
-                running   := some q
-                completed := state_before.completed ++ [p] }
-        else
-          {
-            state_before with
-              time := state_before.time + 1
-              ready := newReady
-              running := some (p)
-          }
+  fun s =>
+    match s.running with
+    | none =>
+      match selectByPriority priority_func s.ready with
+      | none   => { s with time := s.time + 1 }   -- idle tick (ready is empty)
+      | some p => { s with time    := s.time + 1,
+                           running := some p,
+                           ready   := s.ready.erase p }
+    | some b =>
+      let b := Process.tick b
+      if Process.remaining b ≤ 0 then
+        -- immediately look for next process - no context switch time
+        match selectByPriority priority_func s.ready with
+        | none   => { s with
+                      time      := s.time + 1
+                      running   := none
+                      completed := s.completed ++ [b] }
+        | some q => { s with
+                      time      := s.time + 1
+                      running   := some q
+                      ready     := s.ready.erase q
+                      completed := s.completed ++ [b] }
+      else
+        match selectByPriority priority_func s.ready with
+        | none   => { s with time := s.time + 1, running := some b }
+        | some q =>
+          if priority_func b < priority_func q then
+            -- preemption: `q` takes the CPU unticked, `b` rejoins the queue
+            { s with
+                time    := s.time + 1
+                running := some q
+                ready   := s.ready.erase q ++ [b] }
+          else
+            { s with time := s.time + 1, running := some b }
 
 def runSteps {process_type} [SchedStateMethods process_type] (arrivalStream : ℕ → List process_type)
     (scheduler : SchedStateG process_type → SchedStateG process_type) : ℕ → SchedStateG process_type

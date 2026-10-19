@@ -7,13 +7,26 @@ import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.Step
 
--- ─── SRTF (preemptive: on every tick, pick shortest remaining time) ───────────
+-- ─── SRTF (preemptive: on every tick, run the shortest remaining time) ─────────
 def stepSRTF : SchedState -> SchedState:=
   stepPreemptive AperiodicProcess (fun p => 1/(p.remaining))
 
 -- ─── Round Robin ─────────────────────────────────────────────────────────────
 -- RR needs a quantum counter; hence the repeated code
 
+/-- **Round Robin** with time quantum `quantum`.  It follows the tick convention of
+`FypSchedulingAlgorithms.Step` (tick the running job; retire it if done; then decide
+who runs next):
+
+* idle CPU: the head of `ready` is dispatched, unticked, with `ticksUsed := 0`;
+* the running job's last tick (`remaining ≤ 1`): it completes and the head of
+  `ready` is dispatched, unticked;
+* the tick that uses up the quantum: the ticked job goes to the back of `ready`
+  and the head of `ready` is dispatched, unticked (if `ready` is empty the job
+  keeps the CPU and starts a new slice, `ticksUsed := 1`);
+* otherwise the running job is ticked and keeps the CPU.
+
+`ticksUsed` counts the ticks of the current slice taken before this step. -/
 def stepRR (quantum : Nat) : RRState → RRState :=
   fun rs =>
     let s := rs.sched
