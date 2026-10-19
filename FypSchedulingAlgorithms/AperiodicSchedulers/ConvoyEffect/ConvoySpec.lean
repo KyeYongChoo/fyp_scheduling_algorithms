@@ -30,7 +30,8 @@ non-preemptive, preemptive and Round Robin schedulers alike.
   In particular a short job arriving *after* non-preemptive SJF has committed to
   a long one is not a convoy: it was not in `ready` when the choice was made
   (`sjf_late_convoy_runsShortestAtDispatch`).  It is the cost of non-preemption,
-  which SRTF removes.
+  which SRTF removes, and `OnlineImpossibility` shows that no online
+  non-preemptive policy can avoid it on every stream.
 
 Two related notions:
 
@@ -63,7 +64,8 @@ the arrival streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`, and
 `RunWait` ties it to actual runs: there `runWait` measures a run's waiting time,
 a batch run of a non-preemptive policy waits exactly `totalWait` of its dispatch
 order, and `hasBatchConvoyEffect_iff_runWait` restates `HasBatchConvoyEffect` as
-"on some batch, the run waits strictly longer than SJF's".
+"on some batch, the run waits strictly longer than SJF's".  `OnlineImpossibility`
+shows that no online non-preemptive policy waits least on every stream.
 -/
 
 namespace ConvoyEffect
