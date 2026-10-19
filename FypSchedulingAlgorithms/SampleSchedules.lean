@@ -13,8 +13,9 @@ import Std.Data.String
 
 The file defines sample process sets and the CSV rendering of a run, so the user can check
 that the scheduling algorithms behave as intended.  Nothing here writes files: the CSVs in
-`SampleSchedules/` are produced by `Main.lean` (run `lake env lean --run Main.lean` from the
-repository root), not by `lake build`.
+`SampleSchedules/` are written by `writeSampleSchedules` in `Main.lean`, which `lake build` runs
+through the `SampleSchedulesGen` library whenever this file or a scheduler changes (manual
+fallback: `lake env lean --run Main.lean` from the repository root).
 -/
 
 -- # Test Data

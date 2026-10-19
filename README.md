@@ -4,22 +4,30 @@
 
 `SampleSchedules/` holds CSV traces of each scheduler on the sample process sets in
 `FypSchedulingAlgorithms/SampleSchedules.lean`, so you can read what the schedulers actually do.
-They are not produced by `lake build`. Regenerate them by running, from the repository root,
+`lake build` keeps them up to date: besides the proof library it builds a second library,
+`SampleSchedulesGen` (listed in `defaultTargets` in `lakefile.toml`), whose module
+`SampleSchedulesGen.lean` writes every CSV while it is compiled. Lake only recompiles it when it
+or something it imports changes (the schedulers, the sample data, the CSV rendering,
+`Main.lean`), so a build rewrites the CSVs exactly when they could change and otherwise writes
+nothing. The proof library does not import any of this, and `lake build` now also type-checks
+the generator. The files always land in `SampleSchedules/` at the repository root (opening
+`SampleSchedulesGen.lean` in an editor rewrites them too).
+
+As a manual fallback (e.g. after editing or deleting a CSV by hand, which `lake build` does not
+notice), run from the repository root
 
 ```
 lake build && lake env lean --run Main.lean
 ```
 
-`lean --run` uses the compiled library modules as they are, so always rebuild first after
-editing anything (otherwise it runs a stale `SampleSchedules.olean`). `Main.lean` itself is not part of
-the library, so `lake build` does not check it; after changing `SampleSchedules.lean` you can type-check
-the generator without running it with `lake env lean Main.lean`.
-
-`Main.lean` runs in the Lean interpreter (a compiled `lake exe` would first have to compile
-all of the imported Mathlib modules to native code). It overwrites the aperiodic traces
-(`FCFSschedule.csv`, `SJFschedule.csv`, `SRTFschedule.csv`, `RRschedule_q3.csv`) in
-`SampleSchedules/` and the periodic ones in `SampleSchedules/EDF/` and `SampleSchedules/RMS/`
-(the paths are relative to the current directory).
+`lean --run` uses the compiled library modules as they are, so always build first (otherwise it
+runs a stale `SampleSchedules.olean`). It writes to `SampleSchedules/` relative to the current
+directory. `Main.lean` runs in the Lean interpreter (a compiled `lake exe` would first have to
+compile all of the imported Mathlib modules to native code). Both routes write the aperiodic
+traces (`FCFSschedule.csv`, `SJFschedule.csv`, `SRTFschedule.csv`, `RRschedule_q3.csv`) to
+`SampleSchedules/` and the periodic ones to `SampleSchedules/EDF/` and `SampleSchedules/RMS/`.
+`.gitattributes` keeps the CSVs LF-only, as the generator writes them, so regenerating
+unchanged CSVs leaves `git status` clean.
 
 Each file has one row per step: the row with `time = k + 1` is the state after step `k`,
 i.e. `runSteps arrivals step k` (`runStepsRR` for RR), after the jobs arriving at times
@@ -39,10 +47,10 @@ one task apart. Columns:
   row, in the same `P<label>:...` format, separated by `|`. Late jobs are not aborted, so one
   miss shows up on every row until the job finishes.
 
-To add a scenario, define its arrival stream next to the others in `SampleSchedules.lean` (a list of
-processes passed to `Process.convert_to_arrival_stream`), then add a `writeCSV` line for it in
-`main` in `Main.lean` (the `subdir` argument picks the folder under `SampleSchedules/`), and
-rerun the command above.
+To add a scenario, define its arrival stream next to the others in `SampleSchedules.lean` (a
+list of processes passed to `Process.convert_to_arrival_stream`), then add a `writeCSV` line for
+it in `writeSampleSchedules` in `Main.lean` (the `subdir` argument picks the folder under
+`SampleSchedules/`), and run `lake build`.
 
 ## TODO
 
