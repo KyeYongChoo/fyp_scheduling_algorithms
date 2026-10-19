@@ -45,9 +45,9 @@ policy optimal on every well-formed stream (`no_optimal_online_nonPreemptive`).
 In particular SJF is not (`sjf_not_optimal_online`).  The competitors finish
 both streams by step 4, after which nothing more arrives, so their waits are
 fixed from then on (`runWait_online_eq_of_drained`), while the beaten policy's
-wait can only grow (`runWait_mono`).  Four is the least horizon that works:
-over three steps, dispatching the long job costs only 2 on `streamB`, no more
-than `idleThenSJF`.
+wait can only grow (`runWait_mono`).  Four is the least horizon at which these
+two streams separate the policies: over three steps, dispatching the long job
+costs only 2 on `streamB`, no more than `idleThenSJF`.
 
 The competitor that beats a policy which dispatches at time 0 idles at time 0.
 The theorem is about the class that includes deliberate idling; a statement
@@ -56,7 +56,7 @@ different claim, not made here.
 
 Preemption removes the dilemma: SRTF dispatches the long job and preempts it
 when the unit job arrives, waiting 1 tick on `streamB` and 0 on `streamA`
-(computed with `#eval`; to be proved in Task 5).
+(computed with `#eval`; not yet proved here).
 -/
 
 namespace ConvoyEffect
@@ -69,7 +69,8 @@ open NonPreemptive
 waiting.  (It may return `none` while jobs wait: deliberate idling.)  It sees
 the current state only: the jobs that have arrived, with their bursts, but no
 future arrivals.  Since the state includes the strictly increasing `time`, this
-is no real restriction compared with seeing the whole history so far. -/
+is no restriction on any one stream compared with seeing the whole history so
+far (across streams, two histories can reach the same state). -/
 def IsOnlinePolicy (select : SchedState → Option AperiodicProcess) : Prop :=
   ∀ s p, select s = some p → p ∈ s.ready
 
