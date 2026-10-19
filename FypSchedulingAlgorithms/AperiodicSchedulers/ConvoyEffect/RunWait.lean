@@ -6,6 +6,7 @@ Authors: Choo Kye Yong
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoySpec
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SJFConvoy
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
+import FypSchedulingAlgorithms.AperiodicSchedulers.NonPreemptiveLemmas
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 
@@ -43,6 +44,7 @@ its run waits strictly longer than SJF's.
 namespace ConvoyEffect
 
 open scoped List
+open NonPreemptive
 
 /-! ## Waiting time of a run -/
 
@@ -246,48 +248,6 @@ theorem sum_map_erase (f : AperiodicProcess → ℕ) {l : List AperiodicProcess}
       simp only [List.erase_cons, beq_iff_eq, hxy, ↓reduceIte, List.map_cons, List.sum_cons,
         ih hx]
       omega
-
-/-! ## One non-preemptive step -/
-
-section Steps
-
-variable (select : List AperiodicProcess → Option AperiodicProcess) (s : SchedState)
-
-/-- A running job with more than one tick left is ticked and keeps the CPU. -/
-theorem stepNonPreemptive_tick {p : AperiodicProcess} (h_run : s.running = some p)
-    (h_left : 1 < p.remaining) :
-    (stepNonPreemptive select s).running = some { p with remaining := p.remaining - 1 } ∧
-      (stepNonPreemptive select s).ready = s.ready := by
-  simp [stepNonPreemptive, h_run, show ¬ p.remaining - 1 = 0 by omega]
-
-/-- A running job on its last tick completes, and the choice of `select` is dispatched. -/
-theorem stepNonPreemptive_complete_dispatch {p q : AperiodicProcess}
-    (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : select s.ready = some q) :
-    (stepNonPreemptive select s).running = some q ∧
-      (stepNonPreemptive select s).ready = s.ready.erase q := by
-  simp [stepNonPreemptive, h_run, h_sel, show p.remaining - 1 = 0 by omega]
-
-/-- A running job on its last tick completes; with nothing chosen the CPU goes idle. -/
-theorem stepNonPreemptive_complete_idle {p : AperiodicProcess}
-    (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : select s.ready = none) :
-    (stepNonPreemptive select s).running = none ∧
-      (stepNonPreemptive select s).ready = s.ready := by
-  simp [stepNonPreemptive, h_run, h_sel, show p.remaining - 1 = 0 by omega]
-
-/-- An idle CPU takes the choice of `select`, unticked. -/
-theorem stepNonPreemptive_dispatch {q : AperiodicProcess}
-    (h_run : s.running = none) (h_sel : select s.ready = some q) :
-    (stepNonPreemptive select s).running = some q ∧
-      (stepNonPreemptive select s).ready = s.ready.erase q := by
-  simp [stepNonPreemptive, h_run, h_sel]
-
-/-- An idle CPU with nothing chosen stays idle. -/
-theorem stepNonPreemptive_idle (h_run : s.running = none) (h_sel : select s.ready = none) :
-    (stepNonPreemptive select s).running = none ∧
-      (stepNonPreemptive select s).ready = s.ready := by
-  simp [stepNonPreemptive, h_run, h_sel]
-
-end Steps
 
 /-! ## The bridge -/
 
