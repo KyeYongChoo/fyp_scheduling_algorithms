@@ -19,9 +19,17 @@ library `FypSchedulingAlgorithms` does not import it.
 The output directory is taken from this file's own path rather than the working directory, so
 the CSVs land in `SampleSchedules/` next to this file.  Opening this file in an editor also
 rewrites them.
+
+A CSV that cannot be written (e.g. one held open, and so locked, by a spreadsheet on Windows)
+only produces a warning, so the build still succeeds.  Lake then caches this module as built,
+so close the file and rerun `lake env lean --run Main.lean` to catch up.
 -/
 
 open Lean Elab Command in
 run_cmd do
   let root := (System.FilePath.mk (← getFileName)).parent.getD "."
-  writeSampleSchedules (dir := (root / "SampleSchedules").toString ++ "/")
+  try
+    writeSampleSchedules (dir := (root / "SampleSchedules").toString ++ "/")
+  catch e =>
+    logWarning m!"sample schedules not written: {e.toMessageData}\n\
+      Close the file and run `lake env lean --run Main.lean` to regenerate them."

@@ -27,7 +27,9 @@ compile all of the imported Mathlib modules to native code). Both routes write t
 traces (`FCFSschedule.csv`, `SJFschedule.csv`, `SRTFschedule.csv`, `RRschedule_q3.csv`) to
 `SampleSchedules/` and the periodic ones to `SampleSchedules/EDF/` and `SampleSchedules/RMS/`.
 `.gitattributes` keeps the CSVs LF-only, as the generator writes them, so regenerating
-unchanged CSVs leaves `git status` clean.
+unchanged CSVs leaves `git status` clean. In a checkout made before `.gitattributes` existed,
+the first regeneration may still show the CSVs as modified although their content is
+unchanged; a one-off `git add -- SampleSchedules` clears this and stages nothing.
 
 Each file has one row per step: the row with `time = k + 1` is the state after step `k`,
 i.e. `runSteps arrivals step k` (`runStepsRR` for RR), after the jobs arriving at times

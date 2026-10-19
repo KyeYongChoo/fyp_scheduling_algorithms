@@ -18,9 +18,9 @@ through the `SampleSchedulesGen` library whenever this file or a scheduler chang
 fallback: `lake env lean --run Main.lean` from the repository root).
 -/
 
--- # Test Data
+-- # Sample data
 
--- Aperiodic Test data
+-- Aperiodic sample data
 def aperiodicArrivals [Process AperiodicProcess]: Nat → List AperiodicProcess :=
   Process.convert_to_arrival_stream
   [
@@ -32,7 +32,7 @@ def aperiodicArrivals [Process AperiodicProcess]: Nat → List AperiodicProcess 
     { id := 6, arrival := 27, burst := 1, remaining := 1, burst_exceed_zero := (by omega)  },
   ]
 
--- Periodic Test data
+-- Periodic sample data
 def singleRecurrentProcess [Process PeriodicProcess]: Nat → List PeriodicProcess :=
   Process.convert_to_arrival_stream
   [
