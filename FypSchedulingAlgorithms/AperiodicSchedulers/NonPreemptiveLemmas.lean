@@ -246,4 +246,26 @@ theorem stepNonPreemptive_idle (h_run : s.running = none) (h_sel : sel s.ready =
 
 end StepsList
 
+/-! ## Run invariants -/
+
+/-- **Waiting jobs are untouched.** On a well-formed stream, a non-preemptive run
+never ticks a job in the ready queue, so every waiting job still has its full
+burst -- whatever the policy, even one that idles on purpose. -/
+theorem nonPreemptiveOnline_ready_fresh (select : SchedState → Option AperiodicProcess)
+    (arrival_stream : ℕ → List AperiodicProcess) (h_wf : WellFormedStream arrival_stream)
+    (t : ℕ) :
+    ∀ q ∈ (runSteps arrival_stream (stepNonPreemptiveOnline select) t).ready,
+      q.remaining = q.burst := by
+  induction t with
+  | zero =>
+    intro q hq
+    have h := stepNonPreemptiveOnline_ready_subset select _ q hq
+    exact h_wf.fresh q 0 (by simpa using h)
+  | succ t ih =>
+    intro q hq
+    have h := stepNonPreemptiveOnline_ready_subset select _ q hq
+    rcases List.mem_append.mp h with h | h
+    · exact ih q h
+    · exact h_wf.fresh q _ h
+
 end NonPreemptive

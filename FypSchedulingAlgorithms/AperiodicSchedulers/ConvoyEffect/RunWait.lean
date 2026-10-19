@@ -37,7 +37,7 @@ of `R` in dispatch order.
 
 Combined with `totalWait_sorted_le` (shortest first is optimal) this gives a
 run-level characterisation of the batch convoy effect
-(`hasConvoyEffect_iff_runWait`): a policy has it exactly when, on some batch,
+(`hasBatchConvoyEffect_iff_runWait`): a policy has it exactly when, on some batch,
 its run waits strictly longer than SJF's.
 -/
 
@@ -227,7 +227,7 @@ theorem dispatchOrder_sorted_of_min {select : List AperiodicProcess → Option A
 batch in non-decreasing order of burst. -/
 theorem dispatchOrder_sorted {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
-    (h_short : RunsShortestProcess select) (l : List AperiodicProcess) (h_batch : IsBatch l) :
+    (h_short : RunsShortestProcessBatch select) (l : List AperiodicProcess) (h_batch : IsBatch l) :
     ((dispatchOrder select l).map (·.burst)).Pairwise (· ≤ ·) :=
   -- what is left of a batch is again a batch
   dispatchOrder_sorted_on h_mem h_none IsBatch
@@ -385,8 +385,8 @@ theorem runWait_sjf_le {select : List AperiodicProcess → Option AperiodicProce
     (dispatchOrder_sorted_of_min selectSJF_mem selectSJF_none_imp_empty selectSJF_min l)
     (dispatchOrder_burst_perm selectSJF_mem selectSJF_none_imp_empty h_mem h_none l)
 
-/-- **The convoy effect, measured on runs.** A non-preemptive policy has the
-(batch) convoy effect exactly when, on some batch released at time 0, its run
+/-- **The batch convoy effect, measured on runs.** A non-preemptive policy has the
+batch convoy effect exactly when, on some batch released at time 0, its run
 waits strictly longer than SJF's, over the time it takes to finish the batch.
 
 (→) it passes over a shorter job `q` for `p`; swapping them in its dispatch
@@ -395,9 +395,9 @@ order is no worse than the swapped one (`totalWait_sorted_le`).
 (←) a policy that always picks a shortest job dispatches every batch in sorted
 order, and the sorted permutation of a list of bursts is unique, so its run
 waits exactly as long as SJF's. -/
-theorem hasConvoyEffect_iff_runWait (select : List AperiodicProcess → Option AperiodicProcess)
+theorem hasBatchConvoyEffect_iff_runWait (select : List AperiodicProcess → Option AperiodicProcess)
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = []) :
-    HasConvoyEffect select ↔ ∃ l, IsBatch l ∧
+    HasBatchConvoyEffect select ↔ ∃ l, IsBatch l ∧
       runWait (runSteps · stepSJF) (batchStream l) (l.map (·.burst)).sum <
         runWait (runSteps · (stepNonPreemptive select)) (batchStream l) (l.map (·.burst)).sum := by
   have h_sel : ∀ l, IsBatch l →
@@ -409,7 +409,7 @@ theorem hasConvoyEffect_iff_runWait (select : List AperiodicProcess → Option A
     dispatchOrder_sorted_of_min selectSJF_mem selectSJF_none_imp_empty selectSJF_min l
   constructor
   · intro h
-    obtain ⟨l, h_batch, p, hp, h_p, q, hq, h_lt⟩ := (hasConvoyEffect_iff select).mp h
+    obtain ⟨l, h_batch, p, hp, h_p, q, hq, h_lt⟩ := (hasBatchConvoyEffect_iff select).mp h
     refine ⟨l, h_batch, ?_⟩
     rw [runWait_sjf_batch l h_batch _ le_rfl, h_sel l h_batch]
     -- `q` is dispatched somewhere after `p`
@@ -428,7 +428,7 @@ theorem hasConvoyEffect_iff_runWait (select : List AperiodicProcess → Option A
       _ < totalWait (p.burst :: (mid ++ q.burst :: post)) := totalWait_swap_far_lt mid post h_lt
   · rintro ⟨l, h_batch, h_lt⟩
     by_contra h_no
-    have h_short : RunsShortestProcess select := Classical.not_not.mp h_no
+    have h_short : RunsShortestProcessBatch select := Classical.not_not.mp h_no
     rw [runWait_sjf_batch l h_batch _ le_rfl, h_sel l h_batch,
       List.Perm.eq_of_pairwise (fun _ _ _ _ => Nat.le_antisymm) (h_sjf_sorted l h_batch)
         (dispatchOrder_sorted h_mem h_none h_short l h_batch) (h_perm l)] at h_lt

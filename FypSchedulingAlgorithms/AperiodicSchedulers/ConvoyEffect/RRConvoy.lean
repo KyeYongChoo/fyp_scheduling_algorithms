@@ -13,7 +13,8 @@ import FypSchedulingAlgorithms.SchedStateSimpLemmas
 /-! # Round Robin: the quantum caps the convoy
 
 Round Robin always dispatches the head of the queue, regardless of burst, so in
-the yes/no sense above it inverts just as FCFS does.  What the quantum changes
+the yes/no sense of `ConvoySpec` it has the convoy effect just as FCFS does
+(`rr_hasConvoyEffect`, for every quantum).  What the quantum changes
 is the *cost* of the convoy: a long job can hold the CPU for at most `quantum`
 ticks before the job behind it gets a turn.
 
@@ -87,15 +88,21 @@ theorem rr_convoy_eq_fcfs (quantum L : ℕ) (hL : 0 < L) (hq : L ≤ quantum) :
   rw [min_eq_right hq] at h
   rw [h, fcfs_convoy_dispatch]
 
-/-- **RR has the online convoy effect, for every quantum**: it dispatches the
-head of the queue, so on the convoy with `L = 2` the short job (1 tick) waits
-behind the long job (2 ticks) at step 0. -/
-theorem rr_hasOnlineConvoyEffect (quantum : ℕ) :
-    HasOnlineConvoyEffectRun (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) := by
-  rw [hasOnlineConvoyEffectRun_iff]
-  refine ⟨_, convoyArrivalStream_wf 2 (by omega), 0, longJob 2 (by omega), ?_, shortJob, ?_,
-    by simp [shortJob, longJob]⟩ <;>
+/-- **RR has the convoy effect, for every quantum**: it dispatches the head of
+the queue, so on the convoy with `L = 2` it dispatches the long job (2 ticks) at
+step 0 while the short job (1 tick) waits. -/
+theorem rr_hasConvoyEffect (quantum : ℕ) :
+    HasConvoyEffectRun (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) := by
+  rw [hasConvoyEffectRun_iff]
+  refine ⟨_, convoyArrivalStream_wf 2 (by omega), 0, longJob 2 (by omega),
+    dispatchesAt_zero ?_, shortJob, ?_, by simp [shortJob, longJob]⟩ <;>
     simp [runStepsRR, stepRR, convoyArrivalStream]
+
+/-- **RR has the online convoy effect, for every quantum** (a consequence of the
+convoy effect). -/
+theorem rr_hasOnlineConvoyEffect (quantum : ℕ) :
+    HasOnlineConvoyEffectRun (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) :=
+  hasConvoyEffectRun_imp_online (rr_hasConvoyEffect quantum)
 
 /-! ### A smaller quantum is not better in general -/
 

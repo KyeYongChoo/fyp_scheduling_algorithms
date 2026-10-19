@@ -14,11 +14,12 @@ import Mathlib.Algebra.Order.Field.Basic
 /-! # SRTF: preemption removes the late-arrival convoy
 
 SRTF is preemptive, so it is described by a priority function (`1 / remaining`)
-passed to `stepPreemptive`, not by a `select` function.  The preemptive analogue
-of `RunsShortestProcess` is that every step runs a candidate with the least
-*remaining* time (`srtf_runs_shortest_remaining`), and it follows from a lemma
-about `selectByPriority` that holds for every preemptive scheduler
-(`Preemptive.selectByPriority_spec`, in `PreemptiveLemmas`).
+passed to `stepPreemptive`, not by a `select` function.  Every step runs a
+candidate with the least *remaining* time (`srtf_runs_shortest_remaining`), which
+follows from a lemma about `selectByPriority` that holds for every preemptive
+scheduler (`Preemptive.selectByPriority_spec`, in `PreemptiveLemmas`).  So SRTF
+has neither the online convoy effect nor, in particular, the convoy effect
+(`srtf_not_hasConvoyEffect`).
 
 The payoff is the late-arrival convoy (`lateConvoyArrivalStream`): a long job
 starts at time 0 and a unit job arrives at time 1.  Non-preemptive SJF has
@@ -164,6 +165,15 @@ theorem srtf_runsShortestRemaining :
 /-- **SRTF has no online convoy effect.** -/
 theorem srtf_not_hasOnlineConvoyEffect : ¬ HasOnlineConvoyEffect stepSRTF :=
   not_not_intro srtf_runsShortestRemaining
+
+/-- **SRTF runs the shortest job at every dispatch** (it does so at every step). -/
+theorem srtf_runsShortestAtDispatch :
+    RunsShortestAtDispatchRun (fun arrival_stream => runSteps arrival_stream stepSRTF) :=
+  runsShortestRemainingRun_imp_atDispatch srtf_runsShortestRemaining
+
+/-- **SRTF has no convoy effect.** -/
+theorem srtf_not_hasConvoyEffect : ¬ HasConvoyEffect stepSRTF :=
+  not_not_intro srtf_runsShortestAtDispatch
 
 /-- **SRTF preempts the convoy.** On the late-arrival convoy (with `L ≥ 3`, so
 the long job still has more than one tick left at time 1), the short job is

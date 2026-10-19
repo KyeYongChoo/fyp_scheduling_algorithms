@@ -15,7 +15,8 @@ the difference of their bursts (times their distance apart), so a longer job
 ahead of a shorter one is always strictly worse than the swapped order.
 
 `ConvoySpec` uses `totalWait_swap_far_lt` to justify the definition of
-`HasConvoyEffect`.
+`HasBatchConvoyEffect`, and `RunWait` uses `totalWait_sorted_le` to show that SJF
+waits least on a batch.
 -/
 
 namespace ConvoyEffect

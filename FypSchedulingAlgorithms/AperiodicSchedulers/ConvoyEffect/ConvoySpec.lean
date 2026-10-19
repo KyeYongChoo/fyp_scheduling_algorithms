@@ -13,33 +13,43 @@ import Mathlib.Data.List.Nodup
 /-!
 # The convoy effect
 
-The convoy effect is the textbook observation that a long job running ahead of
-shorter ones that are already waiting inflates the total waiting time of the
-whole batch: every job behind it pays for its full burst.
+The convoy effect is the textbook observation that a long job put on the CPU
+ahead of shorter ones that are already waiting inflates the total waiting time:
+every job behind it pays for its full burst.
 
-This folder states it at two levels.
+**The definition** (`HasConvoyEffectRun`, `HasConvoyEffect`) watches real runs
+on well-formed arrival streams, with no restriction on when jobs arrive.  A
+scheduler has the convoy effect when, at some *dispatch moment* -- a step at
+which a job is put on the CPU that was not on it the step before
+(`DispatchesAt`) -- a job with strictly less work left is waiting in `ready`.
+Like `StarvationFreeRun`, it is stated over a run function, so it applies to
+non-preemptive, preemptive and Round Robin schedulers alike.
 
-* **The cost** (`totalWait`, `totalWait_swap`): for a batch run back-to-back,
-  swapping two adjacent jobs changes total waiting time by exactly the
-  difference of their bursts.  So a longer job ahead of a shorter one is
-  strictly worse than the swapped order -- the comparison is against the
-  scheduler's *own* order with one inversion fixed, not against some external
-  optimum.
-* **The cause** (`RunsShortestProcess`, `HasConvoyEffect`): a selection policy has the
-  convoy effect when, faced with a batch of jobs, it can dispatch one while a
-  strictly shorter one is waiting in the same ready queue.
+* FCFS and RR have it (`fcfs_hasConvoyEffect`, `rr_hasConvoyEffect`).
+* SJF and SRTF do not (`sjf_not_hasConvoyEffect`, `srtf_not_hasConvoyEffect`).
+  In particular a short job arriving *after* non-preemptive SJF has committed to
+  a long one is not a convoy: it was not in `ready` when the choice was made
+  (`sjf_late_convoy_runsShortestAtDispatch`).  It is the cost of non-preemption,
+  which SRTF removes.
 
-A third, weaker notion watches whole runs instead of single decisions: the
-**online convoy effect** (`HasOnlineConvoyEffect`), where at some step a job
-with less work left waits behind the running one.  It applies to preemptive
-schedulers and Round Robin too.  The batch convoy effect implies it
-(`hasConvoyEffect_imp_online`), but not conversely: SJF has the online convoy
-effect without the batch one (`online_convoy_not_imp_convoy`).
+Two related notions:
 
-Under this definition FCFS has the convoy effect and SJF does not.  A short job
-arriving *after* non-preemptive SJF has committed to a long one is not an
-inversion -- the short job was not in `ready` when the choice was made -- and is
-better described as the cost of non-preemption, which SRTF removes.
+* The **batch convoy effect** (`HasBatchConvoyEffect`) judges a selection
+  policy's decision on a single *batch* (jobs all present at time 0).  It is the
+  special case of the definition at step 0 of a batch run
+  (`hasBatchConvoyEffect_imp_hasConvoyEffect`), and it is the form in which the
+  cost is visible: for a batch, swapping the two jobs strictly lowers total
+  waiting time (`hasBatchConvoyEffect_iff_swap_improves`), and in `RunWait` a
+  policy has the batch convoy effect exactly when its run waits strictly longer
+  than SJF's on some batch (`hasBatchConvoyEffect_iff_runWait`).
+* The **online convoy effect** (`HasOnlineConvoyEffect`) is weaker: a shorter
+  job waits behind the running one at *any* step, not just at a dispatch.  The
+  convoy effect implies it (`hasConvoyEffectRun_imp_online`), but not
+  conversely: SJF has the online convoy effect without the convoy effect
+  (`online_convoy_not_imp_convoy`).
+
+`remaining` rather than `burst` is the right measure in the run-based notions,
+because a preempted job re-enters the queue with part of its burst done.
 Starvation is an independent liveness property (`StarvationSpec`): SJF is
 convoy-free yet starves.
 -/
@@ -47,72 +57,122 @@ convoy-free yet starves.
 /-!
 ## Layout
 
-This file only states the property and connects it to `totalWait`
-(`hasConvoyEffect_iff_swap_improves`); the per-scheduler results live in
-`FCFSConvoy`, `SJFConvoy`, `SRTFConvoy` and `RRConvoy`, sharing the arrival
-streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`, and `RunWait`
-ties it to actual runs: there `runWait` measures a run's waiting time, a batch
-run of a non-preemptive policy waits exactly `totalWait` of its dispatch order,
-and `hasConvoyEffect_iff_runWait` restates `HasConvoyEffect` as "on some batch,
-the run waits strictly longer than SJF's".
+This file only states the properties and connects them; the per-scheduler
+results live in `FCFSConvoy`, `SJFConvoy`, `SRTFConvoy` and `RRConvoy`, sharing
+the arrival streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`, and
+`RunWait` ties it to actual runs: there `runWait` measures a run's waiting time,
+a batch run of a non-preemptive policy waits exactly `totalWait` of its dispatch
+order, and `hasBatchConvoyEffect_iff_runWait` restates `HasBatchConvoyEffect` as
+"on some batch, the run waits strictly longer than SJF's".
 -/
 
 namespace ConvoyEffect
 
+/-! ## The convoy effect at dispatch moments -/
+
+/-- In run `run` on stream `arrival_stream`, job `p` is **dispatched at step
+`t`**: it holds the CPU after step `t`, and (if `t > 0`) the job on the CPU
+after step `t - 1` had a different id.  This covers a dispatch into an idle CPU,
+after a completion, and by preemption; a job that simply keeps the CPU is not
+dispatched again. -/
+def DispatchesAt (run : (ℕ → List AperiodicProcess) → ℕ → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (p : AperiodicProcess) : Prop :=
+  (run arrival_stream t).running = some p ∧
+    ∀ t', t = t' + 1 → (run arrival_stream t').running.map (·.id) ≠ some p.id
+
+/-- A scheduler, presented as `run arrival_stream t`, **runs the shortest job at
+every dispatch**: on every well-formed stream, whenever it puts a job on the
+CPU, no job waiting in `ready` has strictly less work left. -/
+def RunsShortestAtDispatchRun (run : (ℕ → List AperiodicProcess) → ℕ → SchedState) : Prop :=
+  ∀ arrival_stream : ℕ → List AperiodicProcess,
+    WellFormedStream arrival_stream →
+    ∀ (t : ℕ) (p : AperiodicProcess), DispatchesAt run arrival_stream t p →
+      ∀ q ∈ (run arrival_stream t).ready, p.remaining ≤ q.remaining
+
+/-- A scheduler has the **convoy effect** when, on some well-formed stream, it
+puts a job on the CPU while a job with strictly less work left is waiting. -/
+def HasConvoyEffectRun (run : (ℕ → List AperiodicProcess) → ℕ → SchedState) : Prop :=
+  ¬ RunsShortestAtDispatchRun run
+
+/-- The convoy effect for a one-step scheduler iterated with `runSteps`; every
+scheduler except Round Robin has this form. -/
+def HasConvoyEffect (step : SchedState → SchedState) : Prop :=
+  HasConvoyEffectRun (fun arrival_stream => runSteps arrival_stream step)
+
+/-- Unfolded form of `HasConvoyEffectRun`: an explicit stream, dispatch moment,
+dispatched job, and shorter waiting job. -/
+theorem hasConvoyEffectRun_iff (run : (ℕ → List AperiodicProcess) → ℕ → SchedState) :
+    HasConvoyEffectRun run ↔
+      ∃ arrival_stream, WellFormedStream arrival_stream ∧
+        ∃ (t : ℕ) (p : AperiodicProcess), DispatchesAt run arrival_stream t p ∧
+          ∃ q ∈ (run arrival_stream t).ready, q.remaining < p.remaining := by
+  unfold HasConvoyEffectRun RunsShortestAtDispatchRun
+  push Not
+  rfl
+
+/-- Whatever holds the CPU after step 0 was dispatched at step 0. -/
+theorem dispatchesAt_zero {run : (ℕ → List AperiodicProcess) → ℕ → SchedState}
+    {arrival_stream : ℕ → List AperiodicProcess} {p : AperiodicProcess}
+    (h : (run arrival_stream 0).running = some p) : DispatchesAt run arrival_stream 0 p :=
+  ⟨h, fun t' ht' => by omega⟩
+
+/-! ## The batch convoy effect -/
+
 /-- A **batch**: jobs that all arrive at time 0, untouched (`remaining = burst`),
 with distinct ids.  These are the ready queues a scheduler can actually face at
-the start of a well-formed run (`batchStream_wf`); restricting to them stops a
-policy from being blamed for its behaviour on queues no run produces. -/
+the start of a well-formed run (`batchStream_wf`). -/
 def IsBatch (ready : List AperiodicProcess) : Prop :=
   (∀ p ∈ ready, p.arrival = 0 ∧ p.remaining = p.burst) ∧ (ready.map (·.id)).Nodup
 
 /-- A selection policy never dispatches a job from a batch while a strictly
 shorter job of the batch is waiting.  (Only jobs *from* the batch count: a
 `select` returning some job outside the queue is not judged here.) -/
-def RunsShortestProcess (select : List AperiodicProcess → Option AperiodicProcess) : Prop :=
+def RunsShortestProcessBatch (select : List AperiodicProcess → Option AperiodicProcess) :
+    Prop :=
   ∀ ready, IsBatch ready → ∀ p ∈ ready, select ready = some p → ∀ q ∈ ready, p.burst ≤ q.burst
 
-/-- A selection policy has the **convoy effect** when, for some batch, it
+/-- A selection policy has the **batch convoy effect** when, for some batch, it
 dispatches a job ahead of a strictly shorter one that is already waiting. -/
-def HasConvoyEffect (select : List AperiodicProcess → Option AperiodicProcess) : Prop :=
-  ¬ RunsShortestProcess select
+def HasBatchConvoyEffect (select : List AperiodicProcess → Option AperiodicProcess) : Prop :=
+  ¬ RunsShortestProcessBatch select
 
-/-- Unfolded form of `HasConvoyEffect`: an explicit batch and an explicit
+/-- Unfolded form of `HasBatchConvoyEffect`: an explicit batch and an explicit
 shorter job that the policy passes over. -/
-theorem hasConvoyEffect_iff (select : List AperiodicProcess → Option AperiodicProcess) :
-    HasConvoyEffect select ↔
+theorem hasBatchConvoyEffect_iff (select : List AperiodicProcess → Option AperiodicProcess) :
+    HasBatchConvoyEffect select ↔
       ∃ ready, IsBatch ready ∧ ∃ p ∈ ready, select ready = some p ∧
         ∃ q ∈ ready, q.burst < p.burst := by
-  unfold HasConvoyEffect RunsShortestProcess
+  unfold HasBatchConvoyEffect RunsShortestProcessBatch
   push Not
   rfl
 
-/-! ## Why "not running the shortest process" is the right definition
+/-! ### Why "not running the shortest process" is the right definition
 
-`HasConvoyEffect` is a property of single decisions, while `totalWait` measures
-a whole batch.  They are linked by a non-adjacent version of the exchange
-lemma: if the policy dispatches `p` while a strictly shorter `q` is waiting,
-then *whatever* order the remaining jobs run in afterwards -- `q` sits somewhere
-in it, as `mid ++ q :: post` -- swapping `p` and `q` strictly lowers total
-waiting time.  Conversely, if every such swap helps, `q` really was shorter.
+`HasBatchConvoyEffect` is a property of single decisions, while `totalWait`
+measures a whole batch.  They are linked by a non-adjacent version of the
+exchange lemma: if the policy dispatches `p` while a strictly shorter `q` is
+waiting, then *whatever* order the remaining jobs run in afterwards -- `q` sits
+somewhere in it, as `mid ++ q :: post` -- swapping `p` and `q` strictly lowers
+total waiting time.  Conversely, if every such swap helps, `q` really was
+shorter.
 
-So `hasConvoyEffect_iff_swap_improves` says: a policy has the convoy effect
-exactly when one of its dispatch decisions is provably wasteful, independently
-of everything the scheduler does later.
+So `hasBatchConvoyEffect_iff_swap_improves` says: a policy has the batch convoy
+effect exactly when one of its dispatch decisions is provably wasteful,
+independently of everything the scheduler does later.
 -/
 
-/-- **Convoy effect = a provably wasteful dispatch.** A policy has the convoy
-effect iff, for some ready queue, it dispatches `p` while some other waiting job
-`q` exists such that swapping `p` and `q` strictly lowers total waiting time in
-*every* continuation `mid ++ q :: post`. -/
-theorem hasConvoyEffect_iff_swap_improves
+/-- **Batch convoy effect = a provably wasteful dispatch.** A policy has the
+batch convoy effect iff, for some batch, it dispatches `p` while some other
+waiting job `q` exists such that swapping `p` and `q` strictly lowers total
+waiting time in *every* continuation `mid ++ q :: post`. -/
+theorem hasBatchConvoyEffect_iff_swap_improves
     (select : List AperiodicProcess → Option AperiodicProcess) :
-    HasConvoyEffect select ↔
+    HasBatchConvoyEffect select ↔
       ∃ ready, IsBatch ready ∧ ∃ p ∈ ready, select ready = some p ∧
         ∃ q ∈ ready.erase p, ∀ mid post : List ℕ,
         totalWait (q.burst :: (mid ++ p.burst :: post)) <
           totalWait (p.burst :: (mid ++ q.burst :: post)) := by
-  rw [hasConvoyEffect_iff]
+  rw [hasBatchConvoyEffect_iff]
   constructor
   · rintro ⟨ready, h_batch, p, hp, h_sel, q, hq, h_lt⟩
     have h_ne : q ≠ p := fun h_eq => by subst h_eq; omega
@@ -127,26 +187,17 @@ theorem hasConvoyEffect_iff_swap_improves
 
 /-! ## The online convoy effect
 
-`HasConvoyEffect` judges a single dispatch decision on a fixed ready queue, so
-it only applies to non-preemptive schedulers built from a `select` function,
-and it cannot see jobs that arrive *after* a decision was made.
-
-The online convoy effect instead watches a whole run: at some step of some
-well-formed arrival stream, a job is waiting in `ready` with strictly less work
-left than the job holding the CPU.  It applies to every scheduler -- like
-`StarvationFreeRun`, it is stated over a run function, so Round Robin (which
-steps an `RRState`) fits too.
+The online convoy effect watches every step, not just dispatches: at some step
+of some well-formed arrival stream, a job is waiting in `ready` with strictly
+less work left than the job holding the CPU.
 
 * FCFS and RR have it on `convoyArrivalStream`, where both jobs are present
   from the start.
 * Non-preemptive SJF has it on `lateConvoyArrivalStream`, where the short job
   arrives after the long one has been dispatched -- even though SJF has no
-  (batch) convoy effect.
+  convoy effect.
 * SRTF never has it: preemption always hands the CPU to the job with least
   remaining work.
-
-`remaining` rather than `burst` is the right measure here, because a preempted
-job re-enters the queue with part of its burst already done.
 -/
 
 /-- A scheduler, presented as `run arrival_stream t`, always **runs the job with
@@ -180,7 +231,19 @@ theorem hasOnlineConvoyEffectRun_iff (run : (ℕ → List AperiodicProcess) → 
   push Not
   rfl
 
-/-! ## The batch convoy effect implies the online one -/
+/-! ## How the three notions relate -/
+
+/-- Running the shortest job at every step in particular runs it at every
+dispatch. -/
+theorem runsShortestRemainingRun_imp_atDispatch
+    {run : (ℕ → List AperiodicProcess) → ℕ → SchedState} (h : RunsShortestRemainingRun run) :
+    RunsShortestAtDispatchRun run :=
+  fun arrival_stream h_wf t p h_disp => h arrival_stream h_wf t p h_disp.1
+
+/-- **The convoy effect implies the online convoy effect.** -/
+theorem hasConvoyEffectRun_imp_online {run : (ℕ → List AperiodicProcess) → ℕ → SchedState}
+    (h : HasConvoyEffectRun run) : HasOnlineConvoyEffectRun run :=
+  fun h_short => h (runsShortestRemainingRun_imp_atDispatch h_short)
 
 /-- The arrival stream that releases `ready` at time 0 and nothing afterwards. -/
 def batchStream (ready : List AperiodicProcess) : ℕ → List AperiodicProcess
@@ -203,21 +266,27 @@ theorem batchStream_wf {ready : List AperiodicProcess} (h_batch : IsBatch ready)
     obtain ⟨rfl, hp2⟩ := mem_batchStream h2
     exact ⟨rfl, List.inj_on_of_nodup_map h_batch.2 hp1 hp2 h_id⟩
 
-/-- **The batch convoy effect implies the online convoy effect.** If a
+/-- **The batch convoy effect is the convoy effect at step 0.** If a
 non-preemptive policy passes over a shorter job in some batch, then releasing
-that batch at time 0 makes it do so in a real run: after step 0 the chosen job
-holds the CPU while the shorter one waits. -/
-theorem hasConvoyEffect_imp_online (select : List AperiodicProcess → Option AperiodicProcess)
-    (h : HasConvoyEffect select) : HasOnlineConvoyEffect (stepNonPreemptive select) := by
-  obtain ⟨ready, h_batch, p, hp, h_sel, q, hq, h_lt⟩ := (hasConvoyEffect_iff select).mp h
+that batch at time 0 makes it do so in a real run: at step 0 it dispatches the
+chosen job while the shorter one waits. -/
+theorem hasBatchConvoyEffect_imp_hasConvoyEffect
+    (select : List AperiodicProcess → Option AperiodicProcess)
+    (h : HasBatchConvoyEffect select) : HasConvoyEffect (stepNonPreemptive select) := by
+  obtain ⟨ready, h_batch, p, hp, h_sel, q, hq, h_lt⟩ := (hasBatchConvoyEffect_iff select).mp h
   have h_ne : q ≠ p := fun h_eq => by subst h_eq; omega
-  rw [HasOnlineConvoyEffect, hasOnlineConvoyEffectRun_iff]
-  refine ⟨batchStream ready, batchStream_wf h_batch, 0, p, ?_, q, ?_, ?_⟩
+  rw [HasConvoyEffect, hasConvoyEffectRun_iff]
+  refine ⟨batchStream ready, batchStream_wf h_batch, 0, p, dispatchesAt_zero ?_, q, ?_, ?_⟩
   · simp [runSteps, stepNonPreemptive, batchStream, h_sel]
   · simpa [runSteps, stepNonPreemptive, batchStream, h_sel] using
       (List.mem_erase_of_ne h_ne).mpr hq
   · -- in a batch nothing has run yet, so `remaining` is the burst
     rw [(h_batch.1 q hq).2, (h_batch.1 p hp).2]
     exact h_lt
+
+/-- **The batch convoy effect implies the online convoy effect.** -/
+theorem hasBatchConvoyEffect_imp_online (select : List AperiodicProcess → Option AperiodicProcess)
+    (h : HasBatchConvoyEffect select) : HasOnlineConvoyEffect (stepNonPreemptive select) :=
+  hasConvoyEffectRun_imp_online (hasBatchConvoyEffect_imp_hasConvoyEffect select h)
 
 end ConvoyEffect
