@@ -100,7 +100,8 @@ theorem selectByPriority_eq_none {α : Type} (f : α → ℚ) (l : List α)
     exact key xs x h
 
 /-- **Ties go to the earlier candidate.** Selecting from `l ++ [b]` returns the
-best job `q` of `l` unless `b` has strictly higher priority. -/
+best job `q` of `l` unless `b` has strictly higher priority.  Not used by `stepPreemptive`,
+which compares the running job with the winner of `ready` explicitly. -/
 theorem selectByPriority_append_singleton {α : Type} (f : α → ℚ) (l : List α) (b : α) :
     selectByPriority f (l ++ [b]) =
       match selectByPriority f l with

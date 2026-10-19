@@ -18,8 +18,9 @@ abbrev PeriodicSchedState := SchedStateG PeriodicProcess
 class SchedStateMethods(process_type : Type) where
   init                  : SchedStateG process_type
   add_arrival           : SchedStateG process_type → List process_type → SchedStateG process_type
-  -- the unfinished jobs already past their deadline; late jobs are not aborted, so
-  -- a job that misses its deadline is listed again at every step until it finishes
+  -- the unfinished jobs that can no longer meet their deadline (still unfinished at or
+  -- after it); late jobs are not aborted, so a job that misses its deadline is listed
+  -- again at every step until it finishes
   get_missed_processes  : SchedStateG process_type → List process_type
   extra_csv_field_names : String -- of form ",field_name1,field_name2" for new fields
   extra_csv_content     : SchedStateG process_type → String -- of form ",content1,content2" for new fields
@@ -31,15 +32,23 @@ instance : SchedStateMethods AperiodicProcess where
   extra_csv_field_names := ""
   extra_csv_content _ := ""
 
+/-- The unfinished (ready or running) periodic jobs of `s` that have missed their deadline.
+A job with absolute deadline `D = arrival + deadline` meets it iff it finishes by time `D`
+(finishing time `f ≤ D`).  The state with `time = t` is the one after `t` ticks, so a job still
+unfinished when `time ≥ D` can no longer meet its deadline.  Late jobs are not aborted, so a
+missed job stays in this list until it finishes. -/
+def PeriodicProcess.missedDeadlines (s : SchedStateG PeriodicProcess) : List PeriodicProcess :=
+  (s.ready ++ s.running.toList).filter fun p => p.arrival + p.deadline ≤ s.time
+
 instance : SchedStateMethods PeriodicProcess where
   init := {time := 0, ready := [], running := none, completed := []}
   -- the same releases as `Process.convert_to_arrival_stream`
   add_arrival s processes := {s with ready := s.ready ++ PeriodicProcess.releasesAt processes s.time}
-  get_missed_processes s := (s.ready ++ s.running.toList).filter (fun p => s.time > (p.arrival + p.deadline))
+  get_missed_processes := PeriodicProcess.missedDeadlines
   extra_csv_field_names := " with deadline,missed_deadlines"
   extra_csv_content s :=
-    -- Lean doesnt support `self` or calling other methods within own class during class definition
-    let missed_processes := (s.ready ++ s.running.toList).filter (fun p => s.time > (p.arrival + p.deadline))
+    -- the same filter as `get_missed_processes`
+    let missed_processes := PeriodicProcess.missedDeadlines s
     let tickInfo :=
       missed_processes.map fun p =>
       "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
