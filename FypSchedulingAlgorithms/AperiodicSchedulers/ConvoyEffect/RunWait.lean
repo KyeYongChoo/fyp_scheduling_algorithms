@@ -109,6 +109,15 @@ theorem runWait_add (step : SchedState → SchedState)
   simp only [Function.comp_apply]
   rw [runSteps_add_eq_iterate step arrival_stream t k (fun j h1 h2 => h j h1 (by omega))]
 
+/-- A longer horizon never waits less: `runWait` only adds terms as `T` grows. -/
+theorem runWait_mono (run : (ℕ → List AperiodicProcess) → ℕ → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) {T T' : ℕ} (h : T ≤ T') :
+    runWait run arrival_stream T ≤ runWait run arrival_stream T' := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+  unfold runWait
+  rw [List.range_add, List.map_append, List.sum_append]
+  exact Nat.le_add_right _ _
+
 /-- On a batch nothing arrives after time 0, so each run step is one `step`. -/
 theorem runSteps_batch_succ (step : SchedState → SchedState) (l : List AperiodicProcess)
     (t : ℕ) : runSteps (batchStream l) step (t + 1) = step (runSteps (batchStream l) step t) :=
