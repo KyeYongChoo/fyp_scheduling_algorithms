@@ -45,7 +45,8 @@ Two related notions:
   than SJF's on some batch (`hasBatchConvoyEffect_iff_runWait`).  Off batches
   the cost is in `OnlineOptimality`: at a convoy dispatch of any online
   non-preemptive run, switching to SJF strictly lowers the wait on the instance
-  known at that moment (`runWait_switchToSJF_lt_of_convoy`).
+  known at that moment, over every horizon that outlasts the shorter waiting
+  job's work (`runWait_switchToSJF_lt_of_convoy`).
 * The **online convoy effect** (`HasOnlineConvoyEffect`) is weaker: a shorter
   job waits behind the running one at *any* step, not just at a dispatch.  The
   convoy effect implies it (`hasConvoyEffectRun_imp_online`), but not

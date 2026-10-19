@@ -63,7 +63,7 @@ dispatch moments of real runs, with no cost in its definition.  On batches the
 cost shows through `hasBatchConvoyEffect_iff_runWait`.  On general streams this
 file supplies it: if any online policy's run dispatches a job while a strictly
 shorter one waits, switching to SJF at that moment waits strictly less on the
-known instance, once the horizon leaves time for the waiting work
+known instance, as soon as the horizon outlasts the shorter job's work
 (`runWait_switchToSJF_lt_of_convoy`); so every online policy with the convoy
 effect has such a moment (`hasConvoyEffect_switchToSJF_lt`).
 
@@ -103,6 +103,20 @@ theorem sum_map_le_sum_map {α : Type} (l : List α) {f g : α → ℕ} (h : ∀
     exact Nat.add_le_add (h x (List.mem_cons_self ..))
       (ih fun i hi => h i (List.mem_cons_of_mem _ hi))
 
+/-- Termwise `≤`, strict at one term, gives `<` of the sums. -/
+theorem sum_map_lt_sum_map {α : Type} (l : List α) {f g : α → ℕ} (h : ∀ i ∈ l, f i ≤ g i)
+    {j : α} (hj : j ∈ l) (h_lt : f j < g j) : (l.map f).sum < (l.map g).sum := by
+  induction l with
+  | nil => simp at hj
+  | cons x l ih =>
+    simp only [List.map_cons, List.sum_cons]
+    have hx := h x (List.mem_cons_self ..)
+    have hl := sum_map_le_sum_map l fun i hi => h i (List.mem_cons_of_mem _ hi)
+    rcases List.mem_cons.mp hj with rfl | hj
+    · omega
+    · have := ih (fun i hi => h i (List.mem_cons_of_mem _ hi)) hj
+      omega
+
 /-- Waiting time over the first `T` steps when a job with `r` ticks left holds
 the CPU and the jobs with bursts `bs` then run back to back, in list order.
 Each job of `bs` waits until it is dispatched, so while the first `r` steps last
@@ -111,8 +125,10 @@ def truncWait : ℕ → List ℕ → ℕ → ℕ
   | _, [], _ => 0
   | r, b :: bs, T => min r T * (bs.length + 1) + truncWait b bs (T - r)
 
+/-- Nobody waits in an empty queue. -/
 @[simp] theorem truncWait_nil (r T : ℕ) : truncWait r [] T = 0 := rfl
 
+/-- Unfold one job: while the current job runs, the whole queue waits. -/
 theorem truncWait_cons (r b : ℕ) (bs : List ℕ) (T : ℕ) :
     truncWait r (b :: bs) T = min r T * (bs.length + 1) + truncWait b bs (T - r) := rfl
 
@@ -217,6 +233,18 @@ theorem truncWait_sorted_le {bs cs : List ℕ} (h_sorted : bs.Pairwise (· ≤ �
   refine sum_map_le_sum_map _ fun i _ => ?_
   have := sum_take_sorted_le h_sorted h_perm i
   omega
+
+/-- **Strictly better at one position.** If the sorted order dispatches its
+`i`-th job strictly earlier than the other order does, and before the horizon,
+then it waits strictly less. -/
+theorem truncWait_sorted_lt {bs cs : List ℕ} (h_sorted : bs.Pairwise (· ≤ ·)) (h_perm : bs ~ cs)
+    (r T : ℕ) {i : ℕ} (hi : i < bs.length) (h_take : (bs.take i).sum < (cs.take i).sum)
+    (hT : r + (bs.take i).sum < T) : truncWait r bs T < truncWait r cs T := by
+  rw [truncWait_eq_sum, truncWait_eq_sum, h_perm.length_eq]
+  refine sum_map_lt_sum_map _ (fun j _ => ?_) (List.mem_range.mpr (h_perm.length_eq ▸ hi)) ?_
+  · have := sum_take_sorted_le h_sorted h_perm j
+    omega
+  · omega
 
 /-! ## Draining a state, at every horizon -/
 
@@ -395,8 +423,8 @@ theorem waitFrom_sjf_step_le_sjf_after (select : SchedState → Option Aperiodic
           (by rw [h2, hi_ready]; exact fun r hr => h_fresh r (List.mem_of_mem_erase hr)) T,
           h2, hi_ready, ← List.map_cons, ← dispatchOrder_of_select selectSJF_mem h_m]
         have := truncWait_succ_le 0 ((dispatchOrder selectSJF s.ready).map (·.burst)) T
-        rw [List.length_map, (dispatchOrder_perm selectSJF_mem selectSJF_none_imp_empty _).length_eq]
-          at this
+        rw [List.length_map,
+          (dispatchOrder_perm selectSJF_mem selectSJF_none_imp_empty _).length_eq] at this
         exact this
 
 /-- **SJF's continuation waits least.** From any state whose waiting jobs are
@@ -431,18 +459,19 @@ theorem waitFrom_sjf_step_le (select : SchedState → Option AperiodicProcess)
 
 /-- **A convoy dispatch strictly costs.** From a state whose waiting jobs are
 untouched, suppose an online non-preemptive policy puts `p` on the CPU while a
-strictly shorter job `q` is left waiting.  With no further arrivals, once the
-horizon covers the work waiting at `s`, SJF's step and continuation wait
+strictly shorter job `q` is left waiting.  With no further arrivals, as soon as
+the horizon outlasts `q` (`q.burst < T`), SJF's step and continuation wait
 strictly less than the policy's step and continuation, whatever the policy does
-afterwards.  (Swap `p` and `q`: strictly better, `totalWait_swap_far_lt`; SJF's
-sorted order is no worse than that, `totalWait_sorted_le`.) -/
+afterwards.  (SJF's first job is no longer than `q`, hence shorter than `p`, so
+SJF dispatches its second job strictly earlier: `truncWait_sorted_lt` at
+position 1.) -/
 theorem waitFrom_sjf_step_lt_of_convoy (select : SchedState → Option AperiodicProcess)
     (h_online : IsOnlinePolicy select) (s : SchedState)
     (h_fresh : ∀ q ∈ s.ready, q.remaining = q.burst) {p q : AperiodicProcess}
     (h_run : (stepNonPreemptiveOnline select s).running = some p)
     (h_ready : (stepNonPreemptiveOnline select s).ready = s.ready.erase p)
     (hp : p ∈ s.ready) (hq : q ∈ s.ready.erase p) (h_lt : q.burst < p.burst)
-    (T : ℕ) (hT : (s.ready.map (·.burst)).sum ≤ T) :
+    (T : ℕ) (hT : q.burst < T) :
     waitFrom stepSJF (stepSJF s) T <
       waitFrom (stepNonPreemptiveOnline select) (stepNonPreemptiveOnline select s) T := by
   -- the step was a decision: a job that only ticks leaves the queue alone
@@ -465,25 +494,29 @@ theorem waitFrom_sjf_step_lt_of_convoy (select : SchedState → Option Aperiodic
   rw [waitFrom_sjf_of_running _ p h_run (h_fresh p hp) h_fresh' T, h_ready] at h_after
   rw [waitFrom_sjf_step_of_decide s h_dec h_fresh h_m]
   refine lt_of_lt_of_le ?_ h_after
-  -- the horizon covers the work, so both are `totalWait`s
+  -- SJF's first job is no longer than `q`, so its second job starts before `p` would end
   have h_perm := sjf_dispatchOrder_perm_cons hp
-  have h_sum : ((dispatchOrder selectSJF s.ready).map (·.burst)).sum ≤ T := by
-    rw [((dispatchOrder_perm selectSJF_mem selectSJF_none_imp_empty _).map _).sum_nat]
-    exact hT
-  rw [truncWait_of_le 0 _ T (by simpa using h_sum),
-    truncWait_of_le 0 _ T (by rw [← h_perm.sum_nat]; simpa using h_sum),
-    Nat.zero_mul, Nat.zero_add, Nat.zero_mul, Nat.zero_add]
-  -- `q` runs somewhere after `p`
-  have hq' : q.burst ∈ (dispatchOrder selectSJF (s.ready.erase p)).map (·.burst) :=
+  have h_sorted := sjf_dispatchOrder_sorted s.ready
+  have hq_rest : q.burst ∈ (dispatchOrder selectSJF (s.ready.erase p)).map (·.burst) :=
     List.mem_map_of_mem
       ((dispatchOrder_perm selectSJF_mem selectSJF_none_imp_empty _).symm.subset hq)
-  obtain ⟨mid, post, h_split⟩ := List.append_of_mem hq'
-  rw [h_split] at h_perm ⊢
-  calc totalWait ((dispatchOrder selectSJF s.ready).map (·.burst))
-      ≤ totalWait (q.burst :: (mid ++ p.burst :: post)) :=
-        totalWait_sorted_le (sjf_dispatchOrder_sorted _)
-          (h_perm.trans (perm_swap_far _ _ mid post))
-    _ < totalWait (p.burst :: (mid ++ q.burst :: post)) := totalWait_swap_far_lt mid post h_lt
+  have hq_mem : q.burst ∈ (dispatchOrder selectSJF s.ready).map (·.burst) :=
+    h_perm.symm.subset (List.mem_cons_of_mem _ hq_rest)
+  have h_len : 1 < ((dispatchOrder selectSJF s.ready).map (·.burst)).length := by
+    rw [h_perm.length_eq, List.length_cons]
+    have := List.length_pos_of_mem hq_rest
+    omega
+  have h_first : (((dispatchOrder selectSJF s.ready).map (·.burst)).take 1).sum ≤ q.burst := by
+    generalize (dispatchOrder selectSJF s.ready).map (·.burst) = bs at h_sorted hq_mem
+    cases bs with
+    | nil => simp at hq_mem
+    | cons b rest =>
+      rcases List.mem_cons.mp hq_mem with h | h
+      · simp [h]
+      · simpa using (List.pairwise_cons.mp h_sorted).1 _ h
+  refine truncWait_sorted_lt h_sorted h_perm 0 T h_len ?_ (by omega)
+  simp only [List.take_succ_cons, List.take_zero, List.sum_cons, List.sum_nil]
+  omega
 
 /-! ## The instance known at time `t` -/
 
@@ -499,7 +532,8 @@ theorem knownAt_of_lt (arrival_stream : ℕ → List AperiodicProcess) {t j : �
 
 /-- The known instance of a well-formed stream is well formed. -/
 theorem knownAt_wf {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (t : ℕ) : WellFormedStream (knownAt arrival_stream t) := by
+    (h_wf : WellFormedStream arrival_stream) (t : ℕ) :
+    WellFormedStream (knownAt arrival_stream t) := by
   have h_mem : ∀ p j, p ∈ knownAt arrival_stream t j → p ∈ arrival_stream j := fun p j hp => by
     unfold knownAt at hp
     split at hp
@@ -662,7 +696,8 @@ theorem runWait_switchToSJF_knownAt (arrival_stream : ℕ → List AperiodicProc
     (select : SchedState → Option AperiodicProcess) (T : ℕ) :
     runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) =
       runWait (onlineRun select) arrival_stream t +
-        waitFrom stepSJF (stepSJF (stateBefore arrival_stream (stepNonPreemptiveOnline select) t)) T := by
+        waitFrom stepSJF
+          (stepSJF (stateBefore arrival_stream (stepNonPreemptiveOnline select) t)) T := by
   have h_agree := onlineRun_agree_of_time_lt arrival_stream t (select := switchToSJF t select)
     (select' := select) fun s hs => by simp [switchToSJF, hs]
   have h_before := stateBefore_congr arrival_stream h_agree
@@ -764,16 +799,16 @@ theorem runWait_sjf_le_sjfUntil (arrival_stream : ℕ → List AperiodicProcess)
 stream and any online non-preemptive policy.  If at step `t` its run dispatches
 `p` while a job `q` with strictly less work left waits -- a convoy at a dispatch
 moment, as in `HasConvoyEffect` -- then switching to SJF at time `t` waits
-strictly less on the instance known at `t`, over every horizon `t + T` that
-leaves time for the work waiting when step `t` starts. -/
+strictly less on the instance known at `t`, over every horizon `t + T` with
+`q.remaining < T`.  (When `q` is the shortest waiting job this bound is tight:
+until `q` could have finished, both runs keep every waiting job waiting at every
+step.) -/
 theorem runWait_switchToSJF_lt_of_convoy (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
     (select : SchedState → Option AperiodicProcess) (h_online : IsOnlinePolicy select)
     {p q : AperiodicProcess} (h_disp : DispatchesAt (onlineRun select) arrival_stream t p)
     (hq : q ∈ (onlineRun select arrival_stream t).ready) (h_lt : q.remaining < p.remaining)
-    (T : ℕ)
-    (hT : ((stateBefore arrival_stream (stepNonPreemptiveOnline select) t).ready.map
-      (·.burst)).sum ≤ T) :
+    (T : ℕ) (hT : q.remaining < T) :
     runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) <
       runWait (onlineRun select) (knownAt arrival_stream t) (t + T) := by
   set s := stateBefore arrival_stream (stepNonPreemptiveOnline select) t with hs
@@ -792,6 +827,7 @@ theorem runWait_switchToSJF_lt_of_convoy (arrival_stream : ℕ → List Aperiodi
   have hp := h_online s p h_sel
   rw [h_ready] at hq
   rw [h_fresh p hp, h_fresh q (List.mem_of_mem_erase hq)] at h_lt
+  rw [h_fresh q (List.mem_of_mem_erase hq)] at hT
   rw [runWait_switchToSJF_knownAt]
   change _ < runWait (runSteps · (stepNonPreemptiveOnline select)) _ _
   rw [runWait_knownAt]
@@ -801,8 +837,8 @@ theorem runWait_switchToSJF_lt_of_convoy (arrival_stream : ℕ → List Aperiodi
 /-- **The convoy effect costs, on general streams.** An online non-preemptive
 policy with the convoy effect waits strictly longer, on some well-formed stream
 known up to some time `t`, than the same policy switched to SJF at `t`, at
-every long enough horizon.  (On batches, `hasBatchConvoyEffect_iff_runWait`
-says this against SJF itself.) -/
+every horizon `t + T` once `T` passes the work of the shorter waiting job.  (On
+batches, `hasBatchConvoyEffect_iff_runWait` says this against SJF itself.) -/
 theorem hasConvoyEffect_switchToSJF_lt (select : SchedState → Option AperiodicProcess)
     (h_online : IsOnlinePolicy select) (h : HasConvoyEffect (stepNonPreemptiveOnline select)) :
     ∃ arrival_stream, WellFormedStream arrival_stream ∧ ∃ t T₀, ∀ T, T₀ ≤ T →
@@ -810,7 +846,7 @@ theorem hasConvoyEffect_switchToSJF_lt (select : SchedState → Option Aperiodic
         runWait (onlineRun select) (knownAt arrival_stream t) (t + T) := by
   obtain ⟨as, h_wf, t, p, h_disp, q, hq, h_lt⟩ :=
     (hasConvoyEffectRun_iff (onlineRun select)).mp h
-  exact ⟨as, h_wf, t, _, fun T hT =>
+  exact ⟨as, h_wf, t, q.remaining + 1, fun T hT =>
     runWait_switchToSJF_lt_of_convoy as h_wf t select h_online h_disp hq h_lt T hT⟩
 
 /-! ## The batch case: `t = 0` -/
@@ -822,7 +858,8 @@ ready-queue policies that never idle, and only once the horizon covers the
 total work. -/
 theorem runWait_sjf_le_online_batch (l : List AperiodicProcess) (h_batch : IsBatch l)
     (select : SchedState → Option AperiodicProcess) (h_online : IsOnlinePolicy select) (T : ℕ) :
-    runWait (runSteps · stepSJF) (batchStream l) T ≤ runWait (onlineRun select) (batchStream l) T := by
+    runWait (runSteps · stepSJF) (batchStream l) T ≤
+      runWait (onlineRun select) (batchStream l) T := by
   have h_known : knownAt (batchStream l) 0 = batchStream l := by
     funext j
     cases j <;> rfl
