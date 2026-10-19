@@ -79,4 +79,51 @@ theorem totalWait_swap_far_lt (mid post : List ℕ) {a b : ℕ} (h : b < a) :
     Nat.mul_lt_mul_of_pos_right h (Nat.succ_pos _)
   omega
 
+/-! ## Shortest first is optimal -/
+
+open scoped List
+
+/-- The swap in `totalWait_swap_far` only reorders the batch. -/
+theorem perm_swap_far {α : Type} (a b : α) (mid post : List α) :
+    a :: (mid ++ b :: post) ~ b :: (mid ++ a :: post) :=
+  calc a :: (mid ++ b :: post) ~ a :: b :: (mid ++ post) := List.Perm.cons _ List.perm_middle
+    _ ~ b :: a :: (mid ++ post) := List.Perm.swap b a _
+    _ ~ b :: (mid ++ a :: post) := List.Perm.cons _ List.perm_middle.symm
+
+/-- **Shortest first minimises total waiting time.** Running a batch in
+non-decreasing order of burst waits no longer than running it in any other
+order.  Exchange argument: move the shortest job to the front of the other
+order with one `totalWait_swap_far` (which cannot make it worse), then recurse
+on the rest. -/
+theorem totalWait_sorted_le {bs cs : List ℕ} (h_sorted : bs.Pairwise (· ≤ ·))
+    (h_perm : bs ~ cs) : totalWait bs ≤ totalWait cs := by
+  induction bs generalizing cs with
+  | nil => rw [List.nil_perm.mp h_perm]
+  | cons m rest ih =>
+    obtain ⟨h_min, h_rest⟩ := List.pairwise_cons.mp h_sorted
+    -- split the other order at the shortest job `m`
+    obtain ⟨pre, post, rfl⟩ := List.append_of_mem (h_perm.subset (List.mem_cons_self ..))
+    -- `X` is the rest of the other order once `m` has been moved to its front
+    obtain ⟨X, hX_perm, hX_le⟩ : ∃ X, m :: X ~ pre ++ m :: post ∧
+        totalWait (m :: X) ≤ totalWait (pre ++ m :: post) := by
+      cases pre with
+      | nil => exact ⟨post, List.Perm.refl _, le_rfl⟩
+      | cons a mid =>
+        -- `a` runs first in the other order; `m` is no longer than it
+        have h_ma : m ≤ a := by
+          rcases List.mem_cons.mp (h_perm.symm.subset (List.mem_cons_self ..)) with h | h
+          · omega
+          · exact h_min a h
+        refine ⟨mid ++ a :: post, (perm_swap_far a m mid post).symm, ?_⟩
+        have h_eq := totalWait_swap_far mid post a m
+        have h_mul : m * (mid.length + 1) ≤ a * (mid.length + 1) :=
+          Nat.mul_le_mul_right _ h_ma
+        simp only [List.cons_append]
+        omega
+    have h_rest_perm : rest ~ X := (h_perm.trans hX_perm.symm).cons_inv
+    have h_ih := ih h_rest h_rest_perm
+    simp only [totalWait_cons] at hX_le ⊢
+    rw [h_rest_perm.length_eq]
+    omega
+
 end ConvoyEffect
