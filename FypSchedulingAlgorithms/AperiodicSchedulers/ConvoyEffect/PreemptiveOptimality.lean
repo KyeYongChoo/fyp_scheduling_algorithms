@@ -38,9 +38,10 @@ unfinished jobs of the schedule is enough.
 
 **The general theorem** (`SRTFMinimisesWait`, Schrage 1968): on every
 well-formed stream, at every horizon, SRTF waits no longer than any admissible
-schedule.  It is stated here as a proposition; `srtf_le_onlineRun_of` derives
-from it that SRTF waits no longer than any online non-preemptive policy on every
-stream, the contrast with `no_optimal_online_nonPreemptive`.
+schedule.  It is stated here as a proposition and proved in `SRTFOptimality`
+(`srtfMinimisesWait`); `srtf_le_onlineRun_of` derives from it that SRTF waits
+no longer than any online non-preemptive policy on every stream, the contrast
+with `no_optimal_online_nonPreemptive`.
 -/
 
 namespace ConvoyEffect
@@ -283,7 +284,8 @@ well-formed stream without repeats, at every horizon `T`, SRTF's run waits no
 longer than any admissible schedule, preemptive or not, online or clairvoyant.
 SRTF itself is online: its step sees only the current state.
 
-Not yet proved here.  The plan, in the model of `Schedules`:
+Proved in `SRTFOptimality` (`srtfMinimisesWait`), along these lines, in the
+model of `Schedules`:
 
 1. *Pointwise reduction.*  Every admissible schedule leaves all its unfinished
    jobs but at most one waiting (`length_unfinished_sub_one_le`), and SRTF
