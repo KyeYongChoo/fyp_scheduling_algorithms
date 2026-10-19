@@ -31,10 +31,8 @@ instance : SchedStateMethods AperiodicProcess where
 
 instance : SchedStateMethods PeriodicProcess where
   init := {time := 0, ready := [], running := none, completed := []}
-  add_arrival s processes :=
-    let processes_to_add := processes.filter fun p => s.time % p.period = 0
-    let arrival_updated_processes := processes_to_add.map (fun p => {p with arrival := s.time})
-    {s with ready := s.ready ++ (arrival_updated_processes)}
+  -- the same releases as `Process.convert_to_arrival_stream`
+  add_arrival s processes := {s with ready := s.ready ++ PeriodicProcess.releasesAt processes s.time}
   get_missed_processes s := (s.ready ++ s.running.toList).filter (fun p => s.time > (p.arrival + p.deadline))
   extra_csv_field_names := " with deadline,missed_deadlines"
   extra_csv_content s :=
