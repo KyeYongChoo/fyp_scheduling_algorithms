@@ -18,6 +18,8 @@ abbrev PeriodicSchedState := SchedStateG PeriodicProcess
 class SchedStateMethods(process_type : Type) where
   init                  : SchedStateG process_type
   add_arrival           : SchedStateG process_type → List process_type → SchedStateG process_type
+  -- the unfinished jobs already past their deadline; late jobs are not aborted, so
+  -- a job that misses its deadline is listed again at every step until it finishes
   get_missed_processes  : SchedStateG process_type → List process_type
   extra_csv_field_names : String -- of form ",field_name1,field_name2" for new fields
   extra_csv_content     : SchedStateG process_type → String -- of form ",content1,content2" for new fields
@@ -40,9 +42,9 @@ instance : SchedStateMethods PeriodicProcess where
     let missed_processes := (s.ready ++ s.running.toList).filter (fun p => s.time > (p.arrival + p.deadline))
     let tickInfo :=
       missed_processes.map fun p =>
-      "P" ++ toString (Process.id p) ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
-    let tickField := ",".intercalate tickInfo
-    s!",{tickField}"
+      "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
+    let tickField := "|".intercalate tickInfo
+    s!",\"{tickField}\""
 
 -- # For RR, need to track quantum usage, so there is a separate function
 

@@ -4,12 +4,16 @@
 
 `SampleSchedules/` holds CSV traces of each scheduler on the sample process sets in
 `FypSchedulingAlgorithms/Test.lean`, so you can read what the schedulers actually do.
-They are not produced by `lake build`. Regenerate them from the repository root with
+They are not produced by `lake build`. Regenerate them by running, from the repository root,
 
 ```
-lake build
-lake env lean --run Main.lean
+lake build && lake env lean --run Main.lean
 ```
+
+`lean --run` uses the compiled library modules as they are, so always rebuild first after
+editing anything (otherwise it runs a stale `Test.olean`). `Main.lean` itself is not part of
+the library, so `lake build` does not check it; after changing `Test.lean` you can type-check
+the generator without running it with `lake env lean Main.lean`.
 
 `Main.lean` runs in the Lean interpreter (a compiled `lake exe` would first have to compile
 all of the imported Mathlib modules to native code). It overwrites the aperiodic traces
@@ -19,21 +23,26 @@ all of the imported Mathlib modules to native code). It overwrites the aperiodic
 
 Each file has one row per step: the row with `time = k + 1` is the state after step `k`,
 i.e. `runSteps arrivals step k` (`runStepsRR` for RR), after the jobs arriving at times
-`0..k` have been added. Columns:
+`0..k` have been added. Jobs are labelled by id; a periodic task releases a new job every
+period, so periodic jobs are labelled `<id>@<release time>` (e.g. `2@7`) to tell the jobs of
+one task apart. Columns:
 
 - `time`: the clock after the step.
-- `running`: id of the job on the CPU (`0` when idle).
-- `ready_queue`: ids of the waiting jobs, in queue order.
-- `completed`: ids of the finished jobs, in completion order.
-- `process_ticks`: `P<id>:<ticks run>/<burst>` for every job seen so far, sorted by id; periodic
-  jobs also show their absolute deadline as `d<deadline>`.
+- `running`: the job on the CPU, or `0` when idle (the sample jobs have ids ≥ 1).
+- `ready_queue`: the waiting jobs, in queue order.
+- `completed`: the finished jobs, in completion order.
+- `process_ticks` (`process_ticks with deadline` in the periodic files):
+  `P<label>:<ticks run>/<burst>` for every job seen so far, sorted by id and then release time,
+  separated by `|`; periodic jobs also show their absolute deadline as `d<deadline>`,
+  e.g. `P2@7:1/4d14`.
 - `missed_deadlines` (periodic only): the unfinished jobs already past their deadline in that
-  row. Late jobs are not aborted, so one miss shows up on every row until the job finishes.
+  row, in the same `P<label>:...` format, separated by `|`. Late jobs are not aborted, so one
+  miss shows up on every row until the job finishes.
 
 To add a scenario, define its arrival stream next to the others in `Test.lean` (a list of
 processes passed to `Process.convert_to_arrival_stream`), then add a `writeCSV` line for it in
 `main` in `Main.lean` (the `subdir` argument picks the folder under `SampleSchedules/`), and
-rerun the commands above.
+rerun the command above.
 
 ## TODO
 

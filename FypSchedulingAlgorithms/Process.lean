@@ -41,6 +41,8 @@ class Process (α : Type) extends BEq α where
   ticksUsed     : α → Nat
   tick          : α → α
   deadline_info : α → String
+  -- How a job is printed in the sample-schedule CSVs
+  label         : α → String
   -- Let arrival stream be a function that takes time as argument and returns list of arriving processes
   convert_to_arrival_stream : List α → Nat → List α
   tick_decrements : ∀ p, remaining (tick p) = remaining p - 1
@@ -56,6 +58,7 @@ instance : Process AperiodicProcess where
   ticksUsed p := p.burst - p.remaining
   tick p := {p with remaining := p.remaining - 1}
   deadline_info _ := ""
+  label p := toString p.id
   convert_to_arrival_stream original_process_list :=
     fun current_time =>
       original_process_list.filter (fun p => current_time = p.arrival)
@@ -81,6 +84,8 @@ instance : Process PeriodicProcess where
   ticksUsed p := p.burst - p.remaining
   tick p := {p with remaining := p.remaining - 1}
   deadline_info p := s!"d{p.deadline + p.arrival}"
+  -- task id and release time, so the jobs of one task can be told apart
+  label p := s!"{p.id}@{p.arrival}"
   convert_to_arrival_stream := PeriodicProcess.releasesAt
   tick_decrements _p := rfl
   id_invariant_wrt_tick _p := rfl

@@ -70,15 +70,17 @@ def bothFail [Process PeriodicProcess]: Nat → List PeriodicProcess :=
 -- # CSV output
 
 def stateToCSV {process_type: Type} [Process process_type] [SchedStateMethods process_type] (s : SchedStateG process_type) : String :=
-  let running := s.running.map (fun p => (Process.id p)) |>.getD 0 |> toString
-  let readyIds := ",".intercalate (s.ready.map (fun p => (Process.id p)) |> List.map toString)
-  let completedIds := ",".intercalate (s.completed.map (fun p => (Process.id p)) |> List.map toString)
+  let running := s.running.map Process.label |>.getD "0"
+  let readyIds := ",".intercalate (s.ready.map Process.label)
+  let completedIds := ",".intercalate (s.completed.map Process.label)
 
-  -- Tick information for all processes, sorted by ID
+  -- Tick information for all processes, sorted by id, then release time
   let allProcesses := s.ready ++ s.completed ++ (s.running.toList)
-  let sortedProcesses := List.mergeSort allProcesses (fun p1 p2 => Process.id p1 < Process.id p2)
+  let sortedProcesses := List.mergeSort allProcesses (fun p1 p2 =>
+    Process.id p1 < Process.id p2 ||
+      (Process.id p1 = Process.id p2 && Process.arrival p1 ≤ Process.arrival p2))
   let tickInfo := sortedProcesses.map fun p =>
-    "P" ++ toString (Process.id p) ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
+    "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
   let tickField := "|".intercalate tickInfo
 
   -- Wrap lists in quotes
