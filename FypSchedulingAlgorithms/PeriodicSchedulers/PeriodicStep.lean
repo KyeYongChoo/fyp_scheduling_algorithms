@@ -32,4 +32,4 @@ def stepRMS : PeriodicSchedState → PeriodicSchedState :=
 
 -- Earliest Deadline First (EDF) Scheduler - Preemptively picks the earliest deadline to run
 def stepEDF : PeriodicSchedState -> PeriodicSchedState :=
-  stepPreemptive PeriodicProcess (fun p => 1/(p.deadline))
+  stepPreemptive PeriodicProcess (fun p => 1/(p.deadline + p.arrival))
