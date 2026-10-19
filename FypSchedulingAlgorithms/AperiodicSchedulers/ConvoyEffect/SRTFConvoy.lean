@@ -168,7 +168,8 @@ theorem srtf_not_hasOnlineConvoyEffect : ¬ HasOnlineConvoyEffect stepSRTF :=
 /-- **SRTF preempts the convoy.** On the late-arrival convoy (with `L ≥ 3`, so
 the long job still has more than one tick left at time 1), the short job is
 dispatched at step 1 -- the step it arrives, preempting the long job -- and
-completes at step 2, after its single tick.  It never waits in `ready`. -/
+completes at step 2, after its single tick -- so it never waits in `ready`
+(compare `sjf_late_convoy_waiting`). -/
 theorem srtf_late_convoy_completes (L : ℕ) (hL : 2 < L) :
     (runSteps (lateConvoyArrivalStream L (by omega)) stepSRTF 1).running = some lateShortJob ∧
       (runSteps (lateConvoyArrivalStream L (by omega)) stepSRTF 2).completed =

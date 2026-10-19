@@ -16,7 +16,8 @@ proofs that use them so that several schedulers can share one witness (and one
 `WellFormedStream` proof) without importing each other's files.
 
 `starvation_stream` defeats both SJF (`SJFStarvation`) and SRTF
-(`SRTFStarvation`), by quite different routes -- see those files.
+(`SRTFStarvation`) in the same way: the victim waits in `ready` forever, because
+a fresh unit job is always there to take the CPU ahead of it.
 -/
 
 namespace StarvationWitnesses

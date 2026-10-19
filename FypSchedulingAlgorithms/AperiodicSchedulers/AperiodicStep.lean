@@ -23,7 +23,8 @@ who runs next):
   `ready` is dispatched, unticked;
 * the tick that uses up the quantum: the ticked job goes to the back of `ready`
   and the head of `ready` is dispatched, unticked (if `ready` is empty the job
-  keeps the CPU and starts a new slice, `ticksUsed := 1`);
+  keeps the CPU with a fresh quantum, `ticksUsed := 0`, so every slice is
+  `quantum` ticks long);
 * otherwise the running job is ticked and keeps the CPU.
 
 `ticksUsed` counts the ticks of the current slice taken before this step. -/
@@ -65,7 +66,7 @@ def stepRR (quantum : Nat) : RRState → RRState :=
               sched     := { s with
                               time    := s.time + 1
                               running := some { p with remaining := p.remaining - 1 } }
-              ticksUsed := 1 }
+              ticksUsed := 0 }
         | nx :: ps =>
           { rs with
               sched     := { s with
