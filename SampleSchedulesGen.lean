@@ -22,7 +22,9 @@ rewrites them.
 
 A CSV that cannot be written (e.g. one held open, and so locked, by a spreadsheet on Windows)
 only produces a warning, so the build still succeeds.  Lake then caches this module as built,
-so close the file and rerun `lake env lean --run Main.lean` to catch up.
+so close the file and rerun `lake env lean --run Main.lean` to catch up.  A plain `lake build`
+keeps replaying that cached warning until this module is next rebuilt; once the manual command
+has run, the warning is stale and harmless.
 -/
 
 open Lean Elab Command in
