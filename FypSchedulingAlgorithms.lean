@@ -26,7 +26,14 @@ import FypSchedulingAlgorithms.PeriodicSchedulers.PeriodicStep
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.RunStepsLemmas
-import FypSchedulingAlgorithms.SampleSchedules
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 import FypSchedulingAlgorithms.Step
+
+/-!
+# The proof library
+
+Imports every module under `FypSchedulingAlgorithms/` except `SampleSchedules`, the
+sample data and CSV rendering, which only the `SampleSchedulesGen` library imports:
+the proof library contains no CSV code.
+-/

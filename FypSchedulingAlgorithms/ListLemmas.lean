@@ -375,8 +375,8 @@ theorem smallSum_cons_mono {x y : List ℕ} (hlen : y.length = x.length)
     rw [show m + A.length + 1 = A.length + 1 + m by omega, Nat.add_comm m A.length] at h1
     omega
 
-/-- Appending the same list to two such lists keeps the majorisation (the
-releases of one step). -/
+/-- Appending the same list to two lists of the same length keeps the
+majorisation (`∀ k, smallSum y k ≤ smallSum x k`): the releases of one step. -/
 theorem smallSum_append_mono {x y : List ℕ} (hlen : y.length = x.length)
     (h : ∀ j, smallSum y j ≤ smallSum x j) (L : List ℕ) (k : ℕ) :
     smallSum (y ++ L) k ≤ smallSum (x ++ L) k := by
