@@ -494,14 +494,9 @@ theorem waitFrom_sjf_step_lt_of_convoy (select : SchedState → Option Aperiodic
 
 /-! ## Switching policy at a given time
 
-The instance known at time `t` and the state a step starts from (`knownAt`,
-`stateBefore`, `runSteps_knownAt`, `runSteps_eq_step_stateBefore`,
-`stateBefore_congr`) are in `RunStepsLemmas`; the wait on the known instance
-(`runWait_knownAt`, `runWait_eq_of_agree`) is in `RunWait`; the clock and the
-untouched queue of a non-preemptive run (`runSteps_online_time`,
-`stateBefore_online_time`, `stateBefore_ready_fresh`) and the one-step facts
-(`stepNonPreemptiveOnline_congr`, `stepNonPreemptiveOnline_decide`,
-`stepNonPreemptiveOnline_eq_of_tick`) are in `NonPreemptiveLemmas`. -/
+The general facts used here are in `RunStepsLemmas` (`knownAt`, `stateBefore`),
+`RunWait` (the wait on the known instance) and `NonPreemptiveLemmas` (one
+non-preemptive step, the clock and the untouched queue). -/
 
 /-- Two policies that choose alike whenever the clock reads less than `t` have
 the same run before time `t`. -/
