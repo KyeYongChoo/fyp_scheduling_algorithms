@@ -41,7 +41,7 @@ unfinished jobs of the schedule is enough.
 well-formed stream without repeats, at every horizon, SRTF waits no longer than
 any admissible schedule.  It is stated here as a proposition and proved in
 `SRTFOptimality` (`srtfMinimisesWait`); `srtf_le_onlineRun_of` derives from it
-that SRTF waits no longer than any online non-preemptive policy on every
+that SRTF waits no longer than any online non-preemptive policy on every such
 stream, the contrast with `no_optimal_online_nonPreemptive`.
 -/
 

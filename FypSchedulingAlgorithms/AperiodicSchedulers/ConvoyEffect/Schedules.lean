@@ -53,8 +53,9 @@ twice at the same time, and then a run holds two copies of it that a schedule,
 which names jobs by id, cannot tell apart).  Round Robin is not covered by the
 bridge here, but only because of its state type: `stepRR` acts on an `RRState`,
 and its choice depends on the slice counter `ticksUsed`, so it is not a
-`SchedState → SchedState`.  It does conserve jobs, neither inventing nor losing
-any.
+`SchedState → SchedState`.  Its step also neither invents nor loses jobs, so an
+`RRState` version of `ConservesJobs` should hold, but it is not stated or proved
+here.
 -/
 
 namespace ConvoyEffect

@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.PreemptiveOptimality
+import FypSchedulingAlgorithms.ListLemmas
 
 /-!
 # SRTF waits least among all admissible schedules
