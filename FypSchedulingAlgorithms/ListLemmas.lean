@@ -1,5 +1,32 @@
+/-
+Copyright (c) 2026 Choo Kye Yong. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Choo Kye Yong
+-/
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Ring
+
+/-!
+# List lemmas
+
+General facts about lists, with nothing about scheduling in them.
+
+* Folds: a fold of a monotone accumulator never drops below its start, nor
+  below the fold over a prefix (`foldl_ge_init`, `foldl_prefix_le`; currently
+  unused).
+* Ready-queue facts, used by the Starvation files: a member splits a list at
+  its first occurrence (`mem_split_canonical`, `erase_head_split`), and a
+  per-element invariant survives a dispatch or a preemption
+  (`dispatch_preserves`, `expire_swap_preserves`).
+* Sums of lists of naturals: termwise bounds on mapped sums
+  (`sum_map_le_sum_map`, `sum_map_lt_sum_map`, `sum_map_const_add`), and sorted
+  order has the least prefix sums among the list's permutations
+  (`sum_take_sorted_le`).
+* The sum of the `k` smallest entries (`smallSum`): it is the least `k`-prefix
+  sum over all orderings, how it changes when one entry is lowered by 1 or the
+  same entries are added to two lists, and how it bounds the number of positive
+  entries (`length_filter_pos_le`).
+-/
 
 /-- Folding a monotone accumulator function never drops below the initial
 value: if `f acc x ≥ acc` for every `acc, x`, then `l.foldl f init ≥ init`. -/
