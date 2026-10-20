@@ -96,7 +96,11 @@ Try to show optimality of EDF compared to RMS
 
 #### SJF minimizes average waiting time — among all non-preemptive algorithms with the same workload, SJF achieves the minimum sum of waiting times. This is an exchange argument proof — swap any two adjacent jobs out-of-SJF-order and show the sum decreases.
 
-#### SRTF (preemptive SJF) minimizes average response time — same result for the preemptive case. Requires reasoning about preemption points.
+Proved for batches (all jobs released at time 0), against every online non-preemptive policy and at every horizon: `ConvoyEffect.runWait_sjf_le_online_batch` (OnlineOptimality.lean). With later arrivals the claim fails: no online non-preemptive policy is optimal on every stream (`ConvoyEffect.no_optimal_online_nonPreemptive`, OnlineImpossibility.lean). What does hold is optimality given only the past: on the jobs known at any time `t`, SJF waits no longer than any online non-preemptive policy whose run agrees with SJF's before `t` (`ConvoyEffect.runWait_sjf_le_knownAt`, OnlineOptimality.lean).
+
+#### SRTF (preemptive SJF) minimizes average waiting time — same result for the preemptive case. Requires reasoning about preemption points.
+
+Proved: `ConvoyEffect.srtfMinimisesWait` (SRTFOptimality.lean). On every well-formed stream without repeats (`NoRepeats`), at every horizon, SRTF's total waiting time is at most that of any admissible schedule, preemptive or not, online or clairvoyant. This is in the discrete tick model with no context-switch cost, and optimality is weak (`≤`). Corollaries: SRTF waits no longer than any online non-preemptive policy (`srtf_le_onlineRun`) or any job-conserving step function (`srtf_le_runWait_of_conservesJobs`); Round Robin is not covered.
 
 #### EDF is optimal for single-processor deadline scheduling — if any algorithm can meet all deadlines, EDF can. The proof is a classic exchange argument; very doable to formalize.
 
