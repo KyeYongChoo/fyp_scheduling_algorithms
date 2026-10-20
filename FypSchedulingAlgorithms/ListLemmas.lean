@@ -9,13 +9,15 @@ import Mathlib.Tactic.Ring
 /-!
 # List lemmas
 
-General facts about lists, with nothing about scheduling in them.
+General facts about lists: their statements mention nothing about scheduling
+(some docstrings say where a scheduler uses them).
 
 * Folds: a fold of a monotone accumulator never drops below its start, nor
   below the fold over a prefix (`foldl_ge_init`, `foldl_prefix_le`; currently
   unused).
 * Ready-queue facts, used by the Starvation files: a member splits a list at
-  its first occurrence (`mem_split_canonical`, `erase_head_split`), and a
+  its first occurrence (`mem_split_canonical`), and taking the head off either
+  removes that member or shortens the split before it (`erase_head_split`); a
   per-element invariant survives a dispatch or a preemption
   (`dispatch_preserves`, `expire_swap_preserves`).
 * Sums of lists of naturals: termwise bounds on mapped sums
@@ -252,7 +254,8 @@ theorem sum_take_sub_one_eq (A R : List ℕ) {v k : ℕ} (hv : 0 < v) (hk : A.le
     have := ih (k := k) (by simp at hk; omega)
     omega
 
-/-- **A tick lowers the `k` smallest by at most 1**, whichever entry it lowers. -/
+/-- **Lowering one entry by 1 lowers the sum of the `k` smallest by at most 1**,
+whichever entry it is (a tick of any schedule, in `SRTFOptimality`). -/
 theorem smallSum_cons_le (v : ℕ) (X : List ℕ) (k : ℕ) :
     smallSum (v :: X) k ≤ smallSum ((v - 1) :: X) k + 1 := by
   set c := ((v - 1) :: X).mergeSort fun a b => decide (a ≤ b)
@@ -264,8 +267,9 @@ theorem smallSum_cons_le (v : ℕ) (X : List ℕ) (k : ℕ) :
     _ ≤ ((A ++ (v - 1) :: B).take k).sum + 1 := sum_take_sub_one_le A B v k
     _ = smallSum ((v - 1) :: X) k + 1 := by rw [← hAB]; rfl
 
-/-- **SRTF's tick lowers the `k` smallest by exactly 1**, unless they are all 0
-already: it lowers a least positive entry. -/
+/-- **Lowering a least positive entry by 1 lowers the sum of the `k` smallest by
+at least 1** (so by exactly 1, with `smallSum_cons_le`), unless that sum is 0
+afterwards (SRTF's tick, in `SRTFOptimality`). -/
 theorem smallSum_cons_sub_one {v : ℕ} {X : List ℕ} (hv : 0 < v)
     (h_min : ∀ u ∈ X, 0 < u → v ≤ u) (k : ℕ) :
     smallSum ((v - 1) :: X) k + 1 ≤ smallSum (v :: X) k ∨ smallSum ((v - 1) :: X) k = 0 := by
@@ -327,8 +331,10 @@ theorem smallSum_cons_sub_one {v : ℕ} {X : List ℕ} (hv : 0 < v)
       List.sum_eq_zero_iff_forall_eq_nat.mpr h_zero] at h1
     omega
 
-/-- **Releases preserve the majorisation**: adding the same entry to two lists
-of the same length keeps "the `k` smallest sum to no more" for every `k`. -/
+/-- **Adding the same entry keeps the majorisation**: if, for every `k`, the `k`
+smallest entries of `y` sum to no more than those of `x` (two lists of the same
+length), the same holds after adding one entry to both (a release, in
+`SRTFOptimality`). -/
 theorem smallSum_cons_mono {x y : List ℕ} (hlen : y.length = x.length)
     (h : ∀ j, smallSum y j ≤ smallSum x j) (b k : ℕ) :
     smallSum (b :: y) k ≤ smallSum (b :: x) k := by
@@ -369,7 +375,8 @@ theorem smallSum_cons_mono {x y : List ℕ} (hlen : y.length = x.length)
     rw [show m + A.length + 1 = A.length + 1 + m by omega, Nat.add_comm m A.length] at h1
     omega
 
-/-- Releases of a whole list preserve the majorisation. -/
+/-- Appending the same list to two such lists keeps the majorisation (the
+releases of one step). -/
 theorem smallSum_append_mono {x y : List ℕ} (hlen : y.length = x.length)
     (h : ∀ j, smallSum y j ≤ smallSum x j) (L : List ℕ) (k : ℕ) :
     smallSum (y ++ L) k ≤ smallSum (x ++ L) k := by
@@ -383,10 +390,10 @@ theorem smallSum_append_mono {x y : List ℕ} (hlen : y.length = x.length)
     have := ih (x := x ++ [b]) (y := y ++ [b]) (by simp [hlen]) h'
     simpa using this
 
-/-- **Counting finished jobs.** If, for every `k`, the `k` smallest entries of
-`y` sum to no more than those of `x` (two lists of the same length), then `y`
+/-- **Counting positive entries.** If, for every `k`, the `k` smallest entries
+of `y` sum to no more than those of `x` (two lists of the same length), then `y`
 has no more positive entries than `x`: the `z` zeros of `x` force `z` zeros on
-`y`. -/
+`y` (SRTF's unfinished jobs, in `SRTFOptimality`). -/
 theorem length_filter_pos_le {x y : List ℕ} (hlen : y.length = x.length)
     (h : ∀ k, smallSum y k ≤ smallSum x k) :
     (y.filter fun a => 0 < a).length ≤ (x.filter fun a => 0 < a).length := by
