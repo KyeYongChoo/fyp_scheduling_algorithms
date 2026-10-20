@@ -13,9 +13,9 @@ import Std.Data.String
 
 The file defines sample process sets and the CSV rendering of a run, so the user can check
 that the scheduling algorithms behave as intended.  Nothing here writes files: the CSVs in
-`SampleSchedules/` are written by `writeSampleSchedules` in `Main.lean`, which `lake build` runs
-through the `SampleSchedulesGen` library whenever this file or a scheduler changes (manual
-fallback: `lake env lean --run Main.lean` from the repository root).
+`SampleSchedules/` are written by `writeSampleSchedules` in `SampleSchedulesGen.lean`, which
+`lake build` elaborates whenever this file or a scheduler changes (manual fallback:
+`lake env lean SampleSchedulesGen.lean` from the repository root).
 -/
 
 -- # Sample data
@@ -98,7 +98,8 @@ def outputCSV {α} [Process α] [SchedStateMethods α] (states : List (SchedStat
   (header :: rows) |> "\n".intercalate
 
 /-- Write `content` to `dir ++ subdir ++ "/" ++ filename`, creating the directory if needed.
-Paths are relative to the working directory, so run the generator from the repository root. -/
+A relative `dir` is relative to the working directory; `SampleSchedulesGen` passes one built
+from its own location. -/
 def writeCSV (filename : String) (content : String) (dir: String := "SampleSchedules/") (subdir: String := ""): IO Unit := do
   IO.FS.createDirAll (dir ++ subdir)
   IO.FS.writeFile (dir ++ subdir ++ "/" ++ filename) content

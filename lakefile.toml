@@ -20,9 +20,9 @@ rev = "v4.33.1"
 [[lean_lib]]
 name = "FypSchedulingAlgorithms"
 
-# Not part of the proofs: compiling its module `SampleSchedulesGen` rewrites the CSVs in
+# Not part of the proofs: compiling its only module, `SampleSchedulesGen`, rewrites the CSVs in
 # SampleSchedules/ (see README.md), so `lake build` refreshes them whenever the schedulers or
 # the sample data change.
 [[lean_lib]]
 name = "SampleSchedulesGen"
-roots = ["Main", "SampleSchedulesGen"]
+roots = ["SampleSchedulesGen"]
