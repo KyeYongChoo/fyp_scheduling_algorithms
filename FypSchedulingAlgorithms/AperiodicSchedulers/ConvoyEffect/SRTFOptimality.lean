@@ -18,6 +18,13 @@ optimal on every stream, and it is SRTF; in particular it waits no longer than
 any online non-preemptive policy (`srtf_le_onlineRun`) or any other
 job-conserving step function (`srtf_le_runWait_of_conservesJobs`).
 
+**Scope.**  The result holds inside the discrete model of `Schedules`: the
+shared tick convention of `Step`, no context-switch cost, and streams without
+repeats (`NoRepeats`).  "Optimal" means against every admissible schedule.  The
+corollaries do not cover Round Robin, which has no bridge for its `RRState`.
+Optimality is weak (`≤`): strictly less waiting is only claimed on the witness
+streams of `PreemptiveOptimality` (`srtf_beats_online_nonPreemptive`).
+
 **Stronger, pointwise.**  After every step SRTF has no more unfinished jobs
 than any admissible schedule (`srtf_unfinished_le`), and so no more waiting
 jobs (`srtf_ready_le_waiting`): every schedule leaves all its unfinished jobs

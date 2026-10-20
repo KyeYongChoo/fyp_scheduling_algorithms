@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineImpossibility
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SRTFConvoy
+import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
 
 /-!
 # Admissible schedules
@@ -50,8 +50,11 @@ the schedule gave it.
 **Assumptions.**  Streams are well formed (`WellFormedStream`) and list no job
 twice in one release (`NoRepeats`; `WellFormedStream` allows a job to be listed
 twice at the same time, and then a run holds two copies of it that a schedule,
-which names jobs by id, cannot tell apart).  Round Robin (`stepRR`, whose state
-is an `RRState`) is not covered by the bridge here.
+which names jobs by id, cannot tell apart).  Round Robin is not covered by the
+bridge here, but only because of its state type: `stepRR` acts on an `RRState`,
+and its choice depends on the slice counter `ticksUsed`, so it is not a
+`SchedState → SchedState`.  It does conserve jobs, neither inventing nor losing
+any.
 -/
 
 namespace ConvoyEffect
@@ -291,6 +294,14 @@ theorem length_unfinished_sub_one_le {arrival_stream : ℕ → List AperiodicPro
   rw [length_waiting h_wf h_rep h_adm]
   rcases σ t <;> simp
 
+/-- Waiting can only grow with the horizon. -/
+theorem schedWait_mono (arrival_stream : ℕ → List AperiodicProcess) (σ : Schedule) {T T' : ℕ}
+    (h : T ≤ T') : schedWait arrival_stream σ T ≤ schedWait arrival_stream σ T' := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+  unfold schedWait
+  rw [List.range_add, List.map_append, List.sum_append]
+  exact Nat.le_add_right _ _
+
 /-! ## Runs as schedules -/
 
 /-- The schedule a run of `step` follows: the id of the job on the CPU after each
@@ -392,8 +403,9 @@ theorem inSystem_perm (t : ℕ) :
     unfold unfinished
     rw [arrivedBy_succ, List.filter_append, List.map_append, h_arr]
     -- the jobs released earlier: only the one on the CPU has changed
-    suffices h : S.ready ++ (S.running.toList.map fun b => { b with remaining := b.remaining - 1 }).filter
-        (fun b => 0 < b.remaining) ~ ((arrivedBy arrival_stream t).filter
+    suffices h : S.ready ++
+        (S.running.toList.map fun b => { b with remaining := b.remaining - 1 }).filter
+          (fun b => 0 < b.remaining) ~ ((arrivedBy arrival_stream t).filter
           fun p => ticksBefore σ p.id (t + 1) < p.burst).map (jobAt σ (t + 1)) by
       rw [List.append_assoc]
       exact (List.Perm.append_left _ List.perm_append_comm).trans
@@ -444,7 +456,8 @@ theorem inSystem_perm (t : ℕ) :
 
 /-- **A run is an admissible schedule**: it only ever runs a released job with
 work left. -/
-theorem runSchedule_isAdmissible : IsAdmissible arrival_stream (runSchedule step arrival_stream) := by
+theorem runSchedule_isAdmissible :
+    IsAdmissible arrival_stream (runSchedule step arrival_stream) := by
   intro t i h
   obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp h
   obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ((inSystem_perm h_step h_wf h_rep t).subset
