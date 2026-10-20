@@ -8,10 +8,10 @@
 `SampleSchedulesGen` (listed in `defaultTargets` in `lakefile.toml`), whose module
 `SampleSchedulesGen.lean` writes every CSV while it is compiled. Lake only recompiles it when it
 or something it imports changes (the schedulers, the sample data, the CSV rendering), so a build
-rewrites the CSVs exactly when they could change and otherwise writes
-nothing. The proofs do not rely on the CSVs, and `lake build` now also type-checks
-the generator. The files always land in `SampleSchedules/` at the repository root (opening
-`SampleSchedulesGen.lean` in an editor rewrites them too).
+rewrites the CSVs exactly when they could change and otherwise writes nothing. The proof library
+imports none of the CSV code, and the proofs do not depend on the CSVs; `lake build` also
+type-checks the generator. The files always land in `SampleSchedules/` at the repository root
+(opening `SampleSchedulesGen.lean` in an editor rewrites them too).
 
 As a manual fallback (e.g. after editing or deleting a CSV by hand, which `lake build` does not
 notice), run from the repository root
