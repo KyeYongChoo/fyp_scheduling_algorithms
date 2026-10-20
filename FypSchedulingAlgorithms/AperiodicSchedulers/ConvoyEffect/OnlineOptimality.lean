@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineImpossibility
+import FypSchedulingAlgorithms.ListLemmas
 
 /-!
 # SJF is optimal given only the past
@@ -86,37 +87,6 @@ open NonPreemptive
 
 /-! ## Waiting over a horizon, back to back -/
 
-/-- Adding a constant to every term adds it once per term. -/
-theorem sum_map_const_add {α : Type} (l : List α) (c : ℕ) (f : α → ℕ) :
-    (l.map fun i => c + f i).sum = c * l.length + (l.map f).sum := by
-  induction l with
-  | nil => simp
-  | cons x l ih => simp only [List.map_cons, List.sum_cons, ih, List.length_cons]; ring
-
-/-- Termwise `≤` gives `≤` of the sums. -/
-theorem sum_map_le_sum_map {α : Type} (l : List α) {f g : α → ℕ} (h : ∀ i ∈ l, f i ≤ g i) :
-    (l.map f).sum ≤ (l.map g).sum := by
-  induction l with
-  | nil => simp
-  | cons x l ih =>
-    simp only [List.map_cons, List.sum_cons]
-    exact Nat.add_le_add (h x (List.mem_cons_self ..))
-      (ih fun i hi => h i (List.mem_cons_of_mem _ hi))
-
-/-- Termwise `≤`, strict at one term, gives `<` of the sums. -/
-theorem sum_map_lt_sum_map {α : Type} (l : List α) {f g : α → ℕ} (h : ∀ i ∈ l, f i ≤ g i)
-    {j : α} (hj : j ∈ l) (h_lt : f j < g j) : (l.map f).sum < (l.map g).sum := by
-  induction l with
-  | nil => simp at hj
-  | cons x l ih =>
-    simp only [List.map_cons, List.sum_cons]
-    have hx := h x (List.mem_cons_self ..)
-    have hl := sum_map_le_sum_map l fun i hi => h i (List.mem_cons_of_mem _ hi)
-    rcases List.mem_cons.mp hj with rfl | hj
-    · omega
-    · have := ih (fun i hi => h i (List.mem_cons_of_mem _ hi)) hj
-      omega
-
 /-- Waiting time over the first `T` steps when a job with `r` ticks left holds
 the CPU and the jobs with bursts `bs` then run back to back, in list order.
 Each job of `bs` waits until it is dispatched, so while the first `r` steps last
@@ -188,40 +158,6 @@ theorem truncWait_of_le (r : ℕ) (bs : List ℕ) (T : ℕ) (hT : r + bs.sum ≤
   | cons b bs ih =>
     rw [truncWait_cons, ih b (T - r) (by simp at hT; omega), Nat.min_eq_left (by simp at hT; omega),
       totalWait_cons, List.length_cons]
-
-/-- Moving a job no longer than every job ahead of it to the front lowers every
-prefix sum. -/
-theorem sum_take_cons_le (m : ℕ) (pre post : List ℕ) (h : ∀ a ∈ pre, m ≤ a) (i : ℕ) :
-    ((m :: (pre ++ post)).take i).sum ≤ ((pre ++ m :: post).take i).sum := by
-  induction pre generalizing i with
-  | nil => simp
-  | cons a pre ih =>
-    have ha := h a (List.mem_cons_self ..)
-    rcases i with _ | _ | i
-    · simp
-    · simpa using ha
-    · have := ih (fun x hx => h x (List.mem_cons_of_mem _ hx)) (i + 1)
-      simp only [List.cons_append, List.take_succ_cons, List.sum_cons] at this ⊢
-      omega
-
-/-- **Shortest first has the least prefix sums**: the first `i` jobs of the
-sorted order are the `i` shortest. -/
-theorem sum_take_sorted_le {bs cs : List ℕ} (h_sorted : bs.Pairwise (· ≤ ·)) (h_perm : bs ~ cs)
-    (i : ℕ) : (bs.take i).sum ≤ (cs.take i).sum := by
-  induction bs generalizing cs i with
-  | nil => rw [List.nil_perm.mp h_perm]
-  | cons m rest ih =>
-    obtain ⟨h_min, h_rest⟩ := List.pairwise_cons.mp h_sorted
-    obtain ⟨pre, post, rfl⟩ := List.append_of_mem (h_perm.subset (List.mem_cons_self ..))
-    have h_rest_perm : rest ~ pre ++ post := (h_perm.trans List.perm_middle).cons_inv
-    have h_pre : ∀ a ∈ pre, m ≤ a := fun a ha =>
-      h_min a (h_rest_perm.symm.subset (List.mem_append_left _ ha))
-    refine le_trans ?_ (sum_take_cons_le m pre post h_pre i)
-    cases i with
-    | zero => simp
-    | succ i =>
-      simp only [List.take_succ_cons, List.sum_cons]
-      exact Nat.add_le_add_left (ih h_rest h_rest_perm i) m
 
 /-- **Shortest first is optimal at every horizon.** Running the jobs in
 non-decreasing order of burst waits no longer than any other order, over any
