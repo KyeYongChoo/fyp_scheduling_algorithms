@@ -46,11 +46,13 @@ one task apart. Columns:
   `P<label>:<ticks run>/<burst>` for every job seen so far, sorted by id and then release time,
   separated by `|`; periodic jobs also show their absolute deadline as `d<deadline>`,
   e.g. `P2@7:1/4d14`.
-- `missed_deadlines` (periodic only): the jobs that can no longer meet their deadline: still
-  unfinished at or after it. A job with absolute deadline `D` must finish by time `D`, so it is
-  listed from the row `time = D` on if it is still ready or running there. Same
-  `P<label>:...` format, separated by `|`. Late jobs are not aborted, so one miss shows up on
-  every row until the job finishes.
+- `missed_deadlines` (periodic only): the jobs that have missed their deadline. A job released
+  at time `r` is not ticked before step `r+1` (one tick of dispatch latency, see the tick
+  convention in `Step.lean`), so a job with absolute deadline `d = r + D` gets the `D` ticks of
+  steps `r+1 … d` and must be finished in the row `time = d + 1`, the state after step `d`. It
+  is listed from that row on if it is still ready or running there, i.e. on every row with
+  `time > d`. Same `P<label>:...` format, separated by `|`. Late jobs are not aborted, so one
+  miss shows up on every row until the job finishes.
 
 To add a scenario, define its arrival stream next to the others in `SampleSchedules.lean` (a
 list of processes passed to `Process.convert_to_arrival_stream`), then add a `writeCSV` line for

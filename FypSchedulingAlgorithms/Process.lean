@@ -27,7 +27,7 @@ structure PeriodicProcess where
   burst_exceed_zero : burst > 0
   -- Add `valid` back in if turns out the inequalities are useful in the proof
   -- valid     : 0 < burst ∧ remaining ≤ burst ∧ burst ≤ deadline ∧ deadline ≤ period
-deriving BEq, Repr
+deriving DecidableEq, BEq, ReflBEq, LawfulBEq, Repr
 
 -- #eval PeriodicProcess.mk 1 0 10 5 7 5 (by omega) ⟨by omega, by omega, by omega, by omega⟩
 
