@@ -5,6 +5,7 @@ Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineImpossibility
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
+import FypSchedulingAlgorithms.PreemptiveRuns
 
 /-!
 # Admissible schedules
@@ -111,50 +112,30 @@ def NoRepeats (arrival_stream : ℕ → List AperiodicProcess) : Prop :=
 /-- A step **conserves jobs** if the jobs in the system after it (ready or on
 the CPU) are those before it, with the running job ticked, and dropped exactly
 when that tick finished it.  The step may reorder `ready` and swap the job on
-the CPU, but it adds and loses nothing. -/
+the CPU, but it adds and loses nothing.  This is `PreemptiveRuns.ConservesJobs`
+spelled with the `AperiodicProcess` record update (`conservesJobs_iff`). -/
 def ConservesJobs (step : SchedState → SchedState) : Prop :=
   ∀ s : SchedState,
     (step s).ready ++ (step s).running.toList ~
       s.ready ++ (s.running.toList.map fun b => { b with remaining := b.remaining - 1 }).filter
         fun b => 0 < b.remaining
 
+/-- `ConservesJobs` is the job-type-generic `PreemptiveRuns.ConservesJobs`, by
+definition. -/
+theorem conservesJobs_iff (step : SchedState → SchedState) :
+    ConservesJobs step ↔ PreemptiveRuns.ConservesJobs step :=
+  Iff.rfl
+
 /-- Dispatching a member of the queue keeps the jobs in the system. -/
 theorem erase_append_singleton_perm {l : List AperiodicProcess} {p : AperiodicProcess}
     (h : p ∈ l) : l.erase p ++ [p] ~ l :=
   (List.perm_append_singleton p _).trans (List.perm_cons_erase h).symm
 
-/-- **Every preemptive scheduler conserves jobs**, whatever its priority function. -/
+/-- **Every preemptive scheduler conserves jobs**, whatever its priority function
+(the `AperiodicProcess` case of `PreemptiveRuns.stepPreemptive_conservesJobs`). -/
 theorem stepPreemptive_conservesJobs (f : AperiodicProcess → ℤ) :
-    ConservesJobs (stepPreemptive AperiodicProcess f) := by
-  intro s
-  unfold stepPreemptive
-  rcases hr : s.running with _ | b
-  · simp only [Option.toList_none, List.map_nil, List.filter_nil, List.append_nil]
-    split
-    · simp
-    · rename_i p h_sel
-      exact erase_append_singleton_perm (selectByPriority_spec f _ p h_sel).1
-  · simp only [AperiodicProcess.process_tick, AperiodicProcess.process_remaining,
-      Option.toList_some, List.map_cons, List.map_nil]
-    split_ifs with h_done
-    · have h0 : ¬ (0 < b.remaining - 1) := by omega
-      simp only [List.filter_cons, List.filter_nil, h0, decide_false, Bool.false_eq_true,
-        ↓reduceIte, List.append_nil]
-      split
-      · simp
-      · rename_i p h_sel
-        exact erase_append_singleton_perm (selectByPriority_spec f _ p h_sel).1
-    · have h0 : 0 < b.remaining - 1 := by omega
-      simp only [List.filter_cons, List.filter_nil, h0, decide_true, ↓reduceIte]
-      split
-      · simp
-      · rename_i p h_sel
-        split_ifs
-        · simp only [Option.toList_some, List.append_assoc, List.singleton_append]
-          refine ((List.Perm.swap p _ []).append_left (s.ready.erase p)).trans ?_
-          rw [← List.singleton_append, ← List.append_assoc]
-          exact (erase_append_singleton_perm (selectByPriority_spec f _ p h_sel).1).append_right _
-        · simp
+    ConservesJobs (stepPreemptive AperiodicProcess f) :=
+  PreemptiveRuns.stepPreemptive_conservesJobs f
 
 /-- **Every online non-preemptive policy conserves jobs** (it only ever
 dispatches a waiting job). -/

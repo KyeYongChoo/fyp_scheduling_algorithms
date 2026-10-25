@@ -51,19 +51,12 @@ open Preemptive
 
 /-! ## SRTF never idles while a job waits -/
 
-/-- A preemptive step leaves the CPU idle only when nothing is waiting. -/
+/-- A preemptive step leaves the CPU idle only when nothing is waiting (the
+`AperiodicProcess` case of `PreemptiveRuns.stepPreemptive_ready_nil_of_idle`). -/
 theorem stepPreemptive_ready_nil_of_idle (f : AperiodicProcess → ℤ) (s : SchedState)
     (h : (stepPreemptive AperiodicProcess f s).running = none) :
-    (stepPreemptive AperiodicProcess f s).ready = [] := by
-  unfold stepPreemptive at *
-  rcases hr : s.running with _ | b <;> simp only [hr] at h ⊢
-  · cases h_sel : selectByPriority f s.ready <;> simp only [h_sel] at h ⊢
-    · exact selectByPriority_eq_none f _ h_sel
-    · simp at h
-  · simp only [AperiodicProcess.process_tick, AperiodicProcess.process_remaining] at h ⊢
-    split_ifs at h ⊢ <;> cases h_sel : selectByPriority f s.ready <;> simp only [h_sel] at h ⊢
-    · exact selectByPriority_eq_none f _ h_sel
-    all_goals (try split_ifs at h ⊢) <;> simp at h
+    (stepPreemptive AperiodicProcess f s).ready = [] :=
+  PreemptiveRuns.stepPreemptive_ready_nil_of_idle f s h
 
 /-- SRTF conserves jobs, so its runs are admissible schedules. -/
 theorem stepSRTF_conservesJobs : ConservesJobs stepSRTF := stepPreemptive_conservesJobs _
