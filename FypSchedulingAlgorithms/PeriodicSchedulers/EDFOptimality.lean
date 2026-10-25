@@ -23,8 +23,8 @@ deadline `D` gets the `D` ticks of steps `r+1 … r+D` and is late at `t` iff `r
 and it is still unfinished after step `t`.  The only hypothesis is that task ids are
 distinct, so that a job is named by its key `(id, arrival)`.  Periodicity is never used
 beyond that: the jobs come from `PeriodicProcess.releasesAt`, but the proof only needs
-them to be fresh at release.  Deadlines may exceed periods, and periods need not be
-positive.
+them to be fresh at release, stamped with their release time, and uniquely named by
+`(id, arrival)`.  Deadlines may exceed periods, and periods need not be positive.
 
 **How.**  Compare the work still owed by the jobs with absolute deadline `≤ d`
 (`workDue tasks σ t d`).  After every step and for every `d`, EDF's is no larger than
@@ -48,35 +48,31 @@ namespace Periodic
 open scoped List
 open PreemptiveRuns
 
-/-! ## Work due under a schedule -/
+/-! ## Work due under a schedule
+
+`workDue`, `workAfter` and `workReleased` are `workOf`, `workOfAfter` and `releasedOf`
+(`PeriodicSchedules`) for the jobs with absolute deadline `≤ d`, and their lemmas are
+those of `workOf`.
+-/
 
 /-- Work still owed, after step `t` of `σ`, by the jobs released by time `t` with
 absolute deadline `≤ d`. -/
 def workDue (tasks : List PeriodicProcess) (σ : PSchedule) (t d : ℕ) : ℕ :=
-  (((jobsBy tasks t).filter (absDeadline · ≤ d)).map
-    fun p => p.burst - ticksBefore σ (key p) t).sum
+  workOf tasks σ (absDeadline · ≤ d) t
 
 /-- The work the same jobs still owe once step `t + 1` has ticked `σ`'s job of step `t`,
 before the releases of time `t + 1`. -/
 def workAfter (tasks : List PeriodicProcess) (σ : PSchedule) (t d : ℕ) : ℕ :=
-  (((jobsBy tasks t).filter (absDeadline · ≤ d)).map
-    fun p => p.burst - ticksBefore σ (key p) (t + 1)).sum
+  workOfAfter tasks σ (absDeadline · ≤ d) t
 
 /-- The work released at time `t` with absolute deadline `≤ d`. -/
 def workReleased (tasks : List PeriodicProcess) (t d : ℕ) : ℕ :=
-  (((PeriodicProcess.releasesAt tasks t).filter (absDeadline · ≤ d)).map (·.burst)).sum
+  releasedOf tasks (absDeadline · ≤ d) t
 
 /-- **Work is due iff a job with deadline `≤ d` is unfinished.** -/
 theorem workDue_pos_iff {tasks : List PeriodicProcess} {σ : PSchedule} {t d : ℕ} :
-    0 < workDue tasks σ t d ↔ ∃ p ∈ unfinished tasks σ t, absDeadline p ≤ d := by
-  rw [Nat.pos_iff_ne_zero, workDue, Ne, List.sum_eq_zero_iff_forall_eq_nat]
-  simp only [List.mem_map, List.mem_filter, decide_eq_true_eq, mem_unfinished,
-    forall_exists_index, and_imp, not_forall]
-  constructor
-  · rintro ⟨_, p, hp, hd, rfl, h⟩
-    exact ⟨p, ⟨hp, by omega⟩, hd⟩
-  · rintro ⟨p, ⟨hp, h⟩, hd⟩
-    exact ⟨_, p, hp, hd, rfl, by omega⟩
+    0 < workDue tasks σ t d ↔ ∃ p ∈ unfinished tasks σ t, absDeadline p ≤ d :=
+  workOf_pos_iff
 
 /-- **Lateness is work due by now**: `σ` is late at `t` iff the jobs with deadline `≤ t`
 still owe work after step `t`. -/
@@ -86,32 +82,26 @@ theorem lateAt_iff_workDue_pos {tasks : List PeriodicProcess} {σ : PSchedule} {
 
 /-- Before any tick, every schedule owes the same work. -/
 theorem workDue_zero (tasks : List PeriodicProcess) (σ σ' : PSchedule) (d : ℕ) :
-    workDue tasks σ 0 d = workDue tasks σ' 0 d := by
-  simp [workDue]
+    workDue tasks σ 0 d = workDue tasks σ' 0 d :=
+  workOf_zero.trans workOf_zero.symm
 
 /-- **One step of work due**: the tick, then the releases, fresh. -/
 theorem workDue_succ {tasks : List PeriodicProcess} {σ : PSchedule}
     (h_adm : IsAdmissible tasks σ) (t d : ℕ) :
-    workDue tasks σ (t + 1) d = workAfter tasks σ t d + workReleased tasks (t + 1) d := by
-  unfold workDue workAfter workReleased
-  rw [jobsBy_succ, List.filter_append, List.map_append, List.sum_append]
-  congr 1
-  refine congrArg List.sum (List.map_congr_left fun p hp => ?_)
-  rw [ticksBefore_of_mem_releasesAt h_adm (List.mem_filter.mp hp).1, Nat.sub_zero]
+    workDue tasks σ (t + 1) d = workAfter tasks σ t d + workReleased tasks (t + 1) d :=
+  workOf_succ h_adm t
 
 /-- A tick never adds work. -/
 theorem workAfter_le (tasks : List PeriodicProcess) (σ : PSchedule) (t d : ℕ) :
     workAfter tasks σ t d ≤ workDue tasks σ t d :=
-  sum_map_le_sum_map _ fun p _ => Nat.sub_le_sub_left (ticksBefore_mono σ _ (by omega)) _
+  workOfAfter_le t
 
 /-- If `σ` runs none of the jobs with deadline `≤ d` after step `t`, their work stays
 the same. -/
 theorem workAfter_eq_of_forall_ne {tasks : List PeriodicProcess} {σ : PSchedule} {t d : ℕ}
     (h : ∀ p ∈ (jobsBy tasks t).filter (absDeadline · ≤ d), σ t ≠ some (key p)) :
-    workAfter tasks σ t d = workDue tasks σ t d := by
-  unfold workAfter workDue
-  exact congrArg List.sum (List.map_congr_left fun p hp => by
-    rw [ticksBefore_succ_of_ne (h p hp)])
+    workAfter tasks σ t d = workDue tasks σ t d :=
+  workOfAfter_eq_of_forall_ne h
 
 /-- **A tick on a job with deadline `≤ d`**: if `σ` runs `p0` after step `t`, `p0` takes
 the whole change in work, a drop of one unless `p0` is already finished. -/
@@ -120,39 +110,22 @@ theorem workAfter_tick {tasks : List PeriodicProcess}
     {p0 : PeriodicProcess} (hσ : σ t = some (key p0))
     (hp0 : p0 ∈ (jobsBy tasks t).filter (absDeadline · ≤ d)) :
     workDue tasks σ t d + (p0.burst - ticksBefore σ (key p0) t - 1) =
-      workAfter tasks σ t d + (p0.burst - ticksBefore σ (key p0) t) := by
-  have h_tick : ticksBefore σ (key p0) (t + 1) = ticksBefore σ (key p0) t + 1 := by
-    simp [ticksBefore_succ, hσ]
-  have := sum_map_update ((jobsBy_nodup h_ids t).filter _) hp0
-    (fun p => p.burst - ticksBefore σ (key p) t) (fun p => p.burst - ticksBefore σ (key p) (t + 1))
-    (fun p hp h_ne => by
-      have h_key : key p ≠ key p0 := fun h =>
-        h_ne (key_injective h_ids (List.mem_filter.mp hp).1 (List.mem_filter.mp hp0).1 h)
-      rw [ticksBefore_succ_of_ne (by rw [hσ]; simpa using h_key.symm)])
-  simp only [h_tick] at this
-  unfold workDue workAfter
-  omega
+      workAfter tasks σ t d + (p0.burst - ticksBefore σ (key p0) t) :=
+  workOf_tick h_ids hσ hp0
 
 /-- **A tick lowers work due by at most one**, for any schedule. -/
 theorem workDue_sub_one_le {tasks : List PeriodicProcess}
     (h_ids : (tasks.map PeriodicProcess.id).Nodup) (σ : PSchedule) (t d : ℕ) :
-    workDue tasks σ t d - 1 ≤ workAfter tasks σ t d := by
-  by_cases h : ∃ p0 ∈ (jobsBy tasks t).filter (absDeadline · ≤ d), σ t = some (key p0)
-  · obtain ⟨p0, hp0, hσ⟩ := h
-    have := workAfter_tick h_ids hσ hp0
-    omega
-  · push Not at h
-    rw [workAfter_eq_of_forall_ne h]
-    omega
+    workDue tasks σ t d - 1 ≤ workAfter tasks σ t d :=
+  workOf_sub_one_le h_ids t
 
 /-- **A tick on an unfinished job with deadline `≤ d` lowers work due by exactly one.** -/
 theorem workAfter_add_one {tasks : List PeriodicProcess}
     (h_ids : (tasks.map PeriodicProcess.id).Nodup) {σ : PSchedule} {t d : ℕ}
     {p0 : PeriodicProcess} (hσ : σ t = some (key p0)) (hp0 : p0 ∈ jobsBy tasks t)
     (hd : absDeadline p0 ≤ d) (h_pos : ticksBefore σ (key p0) t < p0.burst) :
-    workAfter tasks σ t d + 1 = workDue tasks σ t d := by
-  have := workAfter_tick h_ids hσ (List.mem_filter.mpr ⟨hp0, by simpa using hd⟩)
-  omega
+    workAfter tasks σ t d + 1 = workDue tasks σ t d :=
+  workOfAfter_add_one h_ids hσ hp0 hd h_pos
 
 /-! ## EDF's ticks -/
 

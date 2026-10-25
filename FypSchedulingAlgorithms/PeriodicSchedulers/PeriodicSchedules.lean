@@ -508,4 +508,114 @@ theorem runSchedule_stepPreemptive_max (f : PeriodicProcess → ℤ) {tasks : Li
         (by simpa using congrArg key h')
     exact runSteps_running_max f _ t _ hb _ hp_ready
 
+/-! ## Work owed by a class of jobs -/
+
+section Work
+
+variable {tasks : List PeriodicProcess} {σ : PSchedule} {P : PeriodicProcess → Prop}
+  [DecidablePred P]
+
+variable (tasks σ P) in
+/-- Work still owed, after step `t` of `σ`, by the jobs released by time `t` that
+satisfy `P`. -/
+def workOf (t : ℕ) : ℕ :=
+  (((jobsBy tasks t).filter (P ·)).map fun p => p.burst - ticksBefore σ (key p) t).sum
+
+variable (tasks σ P) in
+/-- The work the same jobs still owe once step `t + 1` has ticked `σ`'s job of step `t`,
+before the releases of time `t + 1`. -/
+def workOfAfter (t : ℕ) : ℕ :=
+  (((jobsBy tasks t).filter (P ·)).map fun p => p.burst - ticksBefore σ (key p) (t + 1)).sum
+
+variable (tasks P) in
+/-- The work released at time `t` by jobs that satisfy `P`. -/
+def releasedOf (t : ℕ) : ℕ :=
+  (((PeriodicProcess.releasesAt tasks t).filter (P ·)).map (·.burst)).sum
+
+/-- **Work is owed iff an unfinished job satisfies `P`.** -/
+theorem workOf_pos_iff {t : ℕ} :
+    0 < workOf tasks σ P t ↔ ∃ p ∈ unfinished tasks σ t, P p := by
+  rw [Nat.pos_iff_ne_zero, workOf, Ne, List.sum_eq_zero_iff_forall_eq_nat]
+  simp only [List.mem_map, List.mem_filter, decide_eq_true_eq, mem_unfinished,
+    forall_exists_index, and_imp, not_forall]
+  constructor
+  · rintro ⟨_, p, hp, hP, rfl, h⟩
+    exact ⟨p, ⟨hp, by omega⟩, hP⟩
+  · rintro ⟨p, ⟨hp, h⟩, hP⟩
+    exact ⟨_, p, hp, hP, rfl, by omega⟩
+
+/-- Before any tick, the work owed is the work released at time 0. -/
+theorem workOf_zero : workOf tasks σ P 0 = releasedOf tasks P 0 := by
+  simp [workOf, releasedOf]
+
+/-- **One step of work owed**: the tick, then the releases, fresh. -/
+theorem workOf_succ (h_adm : IsAdmissible tasks σ) (t : ℕ) :
+    workOf tasks σ P (t + 1) = workOfAfter tasks σ P t + releasedOf tasks P (t + 1) := by
+  unfold workOf workOfAfter releasedOf
+  rw [jobsBy_succ, List.filter_append, List.map_append, List.sum_append]
+  congr 1
+  refine congrArg List.sum (List.map_congr_left fun p hp => ?_)
+  rw [ticksBefore_of_mem_releasesAt h_adm (List.mem_filter.mp hp).1, Nat.sub_zero]
+
+/-- A tick never adds work. -/
+theorem workOfAfter_le (t : ℕ) : workOfAfter tasks σ P t ≤ workOf tasks σ P t :=
+  sum_map_le_sum_map _ fun _ _ => Nat.sub_le_sub_left (ticksBefore_mono σ _ (by omega)) _
+
+/-- If `σ` runs none of the jobs that satisfy `P` after step `t`, their work stays the
+same. -/
+theorem workOfAfter_eq_of_forall_ne {t : ℕ}
+    (h : ∀ p ∈ (jobsBy tasks t).filter (P ·), σ t ≠ some (key p)) :
+    workOfAfter tasks σ P t = workOf tasks σ P t := by
+  unfold workOfAfter workOf
+  exact congrArg List.sum (List.map_congr_left fun p hp => by
+    rw [ticksBefore_succ_of_ne (h p hp)])
+
+/-- **A tick on a job `p0` that satisfies `P`**: `p0` takes the whole change in work, a
+drop of one unless `p0` is already finished. -/
+theorem workOf_tick (h_ids : (tasks.map PeriodicProcess.id).Nodup) {t : ℕ}
+    {p0 : PeriodicProcess} (hσ : σ t = some (key p0)) (hp0 : p0 ∈ (jobsBy tasks t).filter (P ·)) :
+    workOf tasks σ P t + (p0.burst - ticksBefore σ (key p0) t - 1) =
+      workOfAfter tasks σ P t + (p0.burst - ticksBefore σ (key p0) t) := by
+  have h_tick : ticksBefore σ (key p0) (t + 1) = ticksBefore σ (key p0) t + 1 := by
+    simp [ticksBefore_succ, hσ]
+  have := sum_map_update ((jobsBy_nodup h_ids t).filter _) hp0
+    (fun p => p.burst - ticksBefore σ (key p) t) (fun p => p.burst - ticksBefore σ (key p) (t + 1))
+    (fun p hp h_ne => by
+      have h_key : key p ≠ key p0 := fun h =>
+        h_ne (key_injective h_ids (List.mem_filter.mp hp).1 (List.mem_filter.mp hp0).1 h)
+      rw [ticksBefore_succ_of_ne (by rw [hσ]; simpa using h_key.symm)])
+  simp only [h_tick] at this
+  unfold workOf workOfAfter
+  omega
+
+/-- **A tick lowers the work owed by at most one**, for any schedule. -/
+theorem workOf_sub_one_le (h_ids : (tasks.map PeriodicProcess.id).Nodup) (t : ℕ) :
+    workOf tasks σ P t - 1 ≤ workOfAfter tasks σ P t := by
+  by_cases h : ∃ p0 ∈ (jobsBy tasks t).filter (P ·), σ t = some (key p0)
+  · obtain ⟨p0, hp0, hσ⟩ := h
+    have := workOf_tick h_ids hσ hp0
+    omega
+  · push Not at h
+    rw [workOfAfter_eq_of_forall_ne h]
+    omega
+
+/-- **A tick on an unfinished job that satisfies `P` lowers the work by exactly one.** -/
+theorem workOfAfter_add_one (h_ids : (tasks.map PeriodicProcess.id).Nodup) {t : ℕ}
+    {p0 : PeriodicProcess} (hσ : σ t = some (key p0)) (hp0 : p0 ∈ jobsBy tasks t) (hP : P p0)
+    (h_pos : ticksBefore σ (key p0) t < p0.burst) :
+    workOfAfter tasks σ P t + 1 = workOf tasks σ P t := by
+  have := workOf_tick h_ids hσ (List.mem_filter.mpr ⟨hp0, by simpa using hP⟩)
+  omega
+
+/-- **No work left after the tick**: every job released by `t` that satisfies `P` has had
+its whole burst by the state after step `t + 1`. -/
+theorem burst_le_ticksBefore_of_workOfAfter_eq_zero {t : ℕ} (h : workOfAfter tasks σ P t = 0)
+    {p : PeriodicProcess} (hp : p ∈ jobsBy tasks t) (hP : P p) :
+    p.burst ≤ ticksBefore σ (key p) (t + 1) := by
+  rw [workOfAfter, List.sum_eq_zero_iff_forall_eq_nat] at h
+  have := h _ (List.mem_map_of_mem (List.mem_filter.mpr ⟨hp, by simpa using hP⟩))
+  omega
+
+end Work
+
 end Periodic
