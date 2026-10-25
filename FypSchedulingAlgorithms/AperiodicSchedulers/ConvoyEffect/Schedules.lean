@@ -6,6 +6,7 @@ Authors: Choo Kye Yong
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineImpossibility
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
 import FypSchedulingAlgorithms.PreemptiveRuns
+import FypSchedulingAlgorithms.ListLemmas
 
 /-!
 # Admissible schedules
@@ -299,28 +300,6 @@ def inSystem (s : SchedState) : List AperiodicProcess := s.ready ++ s.running.to
 /-- Job `p` as it stands after step `t` of `σ`: its burst less the ticks it has had. -/
 def jobAt (σ : Schedule) (t : ℕ) (p : AperiodicProcess) : AperiodicProcess :=
   { p with remaining := p.burst - ticksBefore σ p.id t }
-
-/-- Updating one job of a list without repeats: the rest is common to both
-sides. -/
-theorem filter_map_update {α β : Type} {L : List α} (h_nodup : L.Nodup)
-    {q : α} (hq : q ∈ L) (P P' : α → Bool) (J J' : α → β)
-    (h : ∀ p ∈ L, p ≠ q → P' p = P p ∧ J' p = J p) :
-    ∃ rest, (L.filter P).map J ~ (if P q then [J q] else []) ++ rest ∧
-      (L.filter P').map J' ~ (if P' q then [J' q] else []) ++ rest := by
-  classical
-  have h_perm := List.perm_cons_erase hq
-  have h_rest : ((L.erase q).filter P').map J' = ((L.erase q).filter P).map J := by
-    have h' : ∀ p ∈ L.erase q, P' p = P p ∧ J' p = J p := fun p hp =>
-      h p (List.mem_of_mem_erase hp) ((h_nodup.mem_erase_iff).mp hp).1
-    rw [List.filter_congr fun p hp => (h' p hp).1]
-    exact List.map_congr_left fun p hp => (h' p (List.mem_of_mem_filter hp)).2
-  refine ⟨((L.erase q).filter P).map J, ?_, ?_⟩
-  · refine ((h_perm.filter P).map J).trans ?_
-    rw [List.filter_cons]
-    split <;> simp
-  · refine ((h_perm.filter P').map J').trans ?_
-    rw [List.filter_cons, ← h_rest]
-    split <;> simp
 
 /-- A fresh job, as it stands before its first tick, is itself. -/
 theorem jobAt_fresh {σ : Schedule} {t : ℕ} {p : AperiodicProcess}

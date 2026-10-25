@@ -28,6 +28,9 @@ General facts about lists: their statements mention nothing about scheduling
   sum over all orderings, how it changes when one entry is lowered by 1 or the
   same entries are added to two lists, and how it bounds the number of positive
   entries (`length_filter_pos_le`).
+* Updating one entry of a list without repeats under a filter and a map: the
+  rest is common to both sides (`filter_map_update`; used by the schedule
+  bridges, `Schedules` and `PeriodicSchedules`).
 -/
 
 /-- Folding a monotone accumulator function never drops below the initial
@@ -426,3 +429,34 @@ theorem length_filter_pos_le {x y : List ℕ} (hlen : y.length = x.length)
   omega
 
 end Sums
+
+/-! ## Updating one entry under a filter and a map -/
+
+section Update
+
+open scoped List
+
+/-- Updating one entry `q` of a list without repeats: if `P'` and `J'` agree with
+`P` and `J` away from `q`, the two filtered and mapped lists differ at most in
+`q`'s image, and the rest is common to both sides. -/
+theorem filter_map_update {α β : Type} {L : List α} (h_nodup : L.Nodup)
+    {q : α} (hq : q ∈ L) (P P' : α → Bool) (J J' : α → β)
+    (h : ∀ p ∈ L, p ≠ q → P' p = P p ∧ J' p = J p) :
+    ∃ rest, (L.filter P).map J ~ (if P q then [J q] else []) ++ rest ∧
+      (L.filter P').map J' ~ (if P' q then [J' q] else []) ++ rest := by
+  classical
+  have h_perm := List.perm_cons_erase hq
+  have h_rest : ((L.erase q).filter P').map J' = ((L.erase q).filter P).map J := by
+    have h' : ∀ p ∈ L.erase q, P' p = P p ∧ J' p = J p := fun p hp =>
+      h p (List.mem_of_mem_erase hp) ((h_nodup.mem_erase_iff).mp hp).1
+    rw [List.filter_congr fun p hp => (h' p hp).1]
+    exact List.map_congr_left fun p hp => (h' p (List.mem_filter.mp hp).1).2
+  refine ⟨((L.erase q).filter P).map J, ?_, ?_⟩
+  · refine ((h_perm.filter P).map J).trans ?_
+    rw [List.filter_cons]
+    split <;> simp
+  · refine ((h_perm.filter P').map J').trans ?_
+    rw [List.filter_cons, ← h_rest]
+    split <;> simp
+
+end Update
