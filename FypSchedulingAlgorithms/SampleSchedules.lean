@@ -7,12 +7,14 @@ Authors: Choo Kye Yong
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.PeriodicSchedulers.PeriodicStep
+import FypSchedulingAlgorithms.PeriodicSchedulers.SampleTaskSets
 import Std.Data.String
 /-!
 # Sample schedules
 
 The file defines sample process sets and the CSV rendering of a run, so the user can check
-that the scheduling algorithms behave as intended.  Nothing here writes files: the CSVs in
+that the scheduling algorithms behave as intended.  The periodic task lists themselves are in
+`PeriodicSchedulers/SampleTaskSets.lean`, in the proof library, so theorems can use them.  Nothing here writes files: the CSVs in
 `SampleSchedules/` are written by `writeSampleSchedules` in `SampleSchedulesGen.lean`, which
 `lake build` elaborates whenever this file or a scheduler changes (manual fallback:
 `lake env lean SampleSchedulesGen.lean` from the repository root).
@@ -32,37 +34,18 @@ def aperiodicArrivals [Process AperiodicProcess]: Nat → List AperiodicProcess 
     { id := 6, arrival := 27, burst := 1, remaining := 1, burst_exceed_zero := (by omega)  },
   ]
 
--- Periodic sample data
+-- Periodic sample data: the task lists are in `SampleTaskSets` (proof library)
 def singleRecurrentProcess [Process PeriodicProcess]: Nat → List PeriodicProcess :=
-  Process.convert_to_arrival_stream
-  [
-    { id := 1, arrival := 0, period := 6,  burst := 3, deadline := 4,  remaining := 3, burst_exceed_zero := (by omega)  }
-  ]
+  Process.convert_to_arrival_stream SampleTaskSets.singleRecurrent
 
--- Utilization = 1/4 + 2/6 ≈ 0.583, under the 2-task RM bound (2(2^(1/2)−1) ≈ 0.828)
 def rmsSucceedsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProcess :=
-  Process.convert_to_arrival_stream
-  [
-    { id := 1, arrival := 0, period := 4,  burst := 1, deadline := 4,  remaining := 1, burst_exceed_zero := (by omega)  },
-    { id := 2, arrival := 0, period := 6,  burst := 2, deadline := 6,  remaining := 2, burst_exceed_zero := (by omega)  }
-  ]
+  Process.convert_to_arrival_stream SampleTaskSets.rmsSucceedsEdfSucceeds
 
--- Utilization = 2/5 + 4/7 ≈ 0.971, above the 2-task RM bound (2(2^(1/2)−1) ≈ 0.828)
--- and will trigger rms deadline miss
 def rmsFailsEdfSucceeds [Process PeriodicProcess]: Nat → List PeriodicProcess :=
-  Process.convert_to_arrival_stream
-  [
-    { id := 1, arrival := 0, period := 5, burst := 2, deadline := 5, remaining := 2, burst_exceed_zero := (by omega)  },
-    { id := 2, arrival := 0, period := 7, burst := 4, deadline := 7, remaining := 4, burst_exceed_zero := (by omega)  }
-  ]
+  Process.convert_to_arrival_stream SampleTaskSets.rmsFailsEdfSucceeds
 
--- Utilization = 3/4 + 3/5 = 1.35 > 1, impossible to schedule
 def bothFail [Process PeriodicProcess]: Nat → List PeriodicProcess :=
-  Process.convert_to_arrival_stream
-  [
-    { id := 1, arrival := 0, period := 4, burst := 3, deadline := 4, remaining := 3, burst_exceed_zero := (by omega)  },
-    { id := 2, arrival := 0, period := 5, burst := 3, deadline := 5, remaining := 3, burst_exceed_zero := (by omega)  }
-  ]
+  Process.convert_to_arrival_stream SampleTaskSets.bothFail
 
 -- run SRTF for 30 (default 30) ticks
 #eval (runStepsAccumulateResults aperiodicArrivals stepSRTF).map fun s =>

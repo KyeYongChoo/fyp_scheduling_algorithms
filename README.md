@@ -55,7 +55,8 @@ one task apart. Columns:
   miss shows up on every row until the job finishes.
 
 To add a scenario, define its arrival stream next to the others in `SampleSchedules.lean` (a
-list of processes passed to `Process.convert_to_arrival_stream`), then add a `writeCSV` line for
+list of processes passed to `Process.convert_to_arrival_stream`; periodic task lists go in
+`PeriodicSchedulers/SampleTaskSets.lean`, in the proof library, so theorems can use them), then add a `writeCSV` line for
 it in `writeSampleSchedules` in `SampleSchedulesGen.lean` (the `subdir` argument picks the
 folder under `SampleSchedules/`), and run `lake build`.
 
