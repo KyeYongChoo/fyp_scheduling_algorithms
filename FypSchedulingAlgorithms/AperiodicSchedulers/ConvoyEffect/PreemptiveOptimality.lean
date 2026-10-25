@@ -64,9 +64,8 @@ theorem stepSRTF_conservesJobs : ConservesJobs stepSRTF := stepPreemptive_conser
 /-- In an SRTF run the CPU is idle only when nothing is waiting. -/
 theorem srtf_ready_nil_of_idle (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ)
     (h : (runSteps arrival_stream stepSRTF t).running = none) :
-    (runSteps arrival_stream stepSRTF t).ready = [] := by
-  rw [runSteps_eq_step_stateBefore] at *
-  exact stepPreemptive_ready_nil_of_idle _ _ h
+    (runSteps arrival_stream stepSRTF t).ready = [] :=
+  PreemptiveRuns.runSteps_ready_nil_of_idle _ arrival_stream t h
 
 /-- **SRTF leaves waiting all its unfinished jobs but one**: the one it runs. -/
 theorem srtf_ready_length {arrival_stream : ℕ → List AperiodicProcess}

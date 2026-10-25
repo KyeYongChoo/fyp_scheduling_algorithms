@@ -126,10 +126,11 @@ theorem conservesJobs_iff (step : SchedState → SchedState) :
     ConservesJobs step ↔ PreemptiveRuns.ConservesJobs step :=
   Iff.rfl
 
-/-- Dispatching a member of the queue keeps the jobs in the system. -/
+/-- Dispatching a member of the queue keeps the jobs in the system (the
+`AperiodicProcess` case of `PreemptiveRuns.erase_append_singleton_perm`). -/
 theorem erase_append_singleton_perm {l : List AperiodicProcess} {p : AperiodicProcess}
     (h : p ∈ l) : l.erase p ++ [p] ~ l :=
-  (List.perm_append_singleton p _).trans (List.perm_cons_erase h).symm
+  PreemptiveRuns.erase_append_singleton_perm h
 
 /-- **Every preemptive scheduler conserves jobs**, whatever its priority function
 (the `AperiodicProcess` case of `PreemptiveRuns.stepPreemptive_conservesJobs`). -/
