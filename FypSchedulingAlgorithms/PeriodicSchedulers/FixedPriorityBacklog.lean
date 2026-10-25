@@ -129,21 +129,6 @@ section Mono
 
 variable {tasks : List PeriodicProcess} {S S' : ℕ → Prop} [DecidablePred S] [DecidablePred S']
 
-/-- A filtered sum grows with the filter. -/
-theorem sum_map_filter_le_of_imp {α : Type} (l : List α) (g : α → ℕ) {P Q : α → Prop}
-    [DecidablePred P] [DecidablePred Q] (h : ∀ x, P x → Q x) :
-    ((l.filter (P ·)).map g).sum ≤ ((l.filter (Q ·)).map g).sum := by
-  induction l with
-  | nil => simp
-  | cons x xs ih =>
-    by_cases hP : P x
-    · simp [hP, h x hP]
-      omega
-    · by_cases hQ : Q x
-      · simp [hP, hQ]
-        omega
-      · simpa [List.filter_cons, hP, hQ] using ih
-
 /-- **More tasks, more released work.** -/
 theorem levelRel_mono (h : ∀ i, S i → S' i) (t : ℕ) :
     levelRel tasks S t ≤ levelRel tasks S' t :=
@@ -221,6 +206,18 @@ theorem workOf_eq_levelBacklog (t : ℕ) :
       have := workOfAfter_add_one h_ids hσ hp0'.1 (P := fun p => S p.id) hS0 hp0'.2
       omega
 
+/-- **The backlog before `t + 1` is what is left after the tick of step `t + 1`**: the
+work the jobs of `S` released by `t` still owe in the state after step `t + 1`. -/
+theorem pre_succ_eq_workOfAfter (t : ℕ) :
+    pre tasks S (t + 1) =
+      workOfAfter tasks (runSchedule (stepPreemptive PeriodicProcess f) tasks)
+        (fun p => S p.id) t := by
+  have h1 := workOf_succ (P := fun p => S p.id)
+    (runSchedule_stepPreemptive_isAdmissible f h_ids) t
+  rw [workOf_eq_levelBacklog hf h_ids hS, levelBacklog_eq_pre_add] at h1
+  change _ + levelRel tasks S (t + 1) = _ + levelRel tasks S (t + 1) at h1
+  omega
+
 /-! ## R3: sufficiency -/
 
 /-- **R3.**  At a drain point `e` of `S`, every job of `S` released before `e` is finished
@@ -235,11 +232,8 @@ theorem ticksBefore_eq_burst_of_pre_eq_zero {e : ℕ} (h_pre : pre tasks S e = 0
   | succ t =>
     -- the work left after the tick of step `t + 1` is the backlog before `t + 1`
     have h_after : workOfAfter tasks σ (fun p => S p.id) t = 0 := by
-      have h1 := workOf_succ (P := fun p => S p.id) h_adm t
-      rw [workOf_eq_levelBacklog hf h_ids hS, levelBacklog] at h1
-      rw [pre_succ] at h_pre
-      change _ = workOfAfter tasks σ (fun p => S p.id) t + levelRel tasks S (t + 1) at h1
-      omega
+      rw [← pre_succ_eq_workOfAfter hf h_ids hS]
+      exact h_pre
     have hp_t : p ∈ jobsBy tasks t := by
       rw [jobsBy_succ] at hp
       refine (List.mem_append.mp hp).resolve_right fun h => ?_

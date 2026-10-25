@@ -21,7 +21,9 @@ General facts about lists: their statements mention nothing about scheduling
   per-element invariant survives a dispatch or a preemption
   (`dispatch_preserves`, `expire_swap_preserves`).
 * Sums of lists of naturals: termwise bounds on mapped sums
-  (`sum_map_le_sum_map`, `sum_map_lt_sum_map`, `sum_map_const_add`), and sorted
+  (`sum_map_le_sum_map`, `sum_map_lt_sum_map`, `sum_map_const_add`), filtered
+  sums grow with the filter (`sum_map_filter_le_of_imp`), a nonempty list has an
+  entry of least image (`exists_min_image_of_ne_nil`), and sorted
   order has the least prefix sums among the list's permutations
   (`sum_take_sorted_le`).
 * The sum of the `k` smallest entries (`smallSum`): it is the least `k`-prefix
@@ -135,6 +137,41 @@ theorem sum_map_const_add {α : Type} (l : List α) (c : ℕ) (f : α → ℕ) :
   induction l with
   | nil => simp
   | cons x l ih => simp only [List.map_cons, List.sum_cons, ih, List.length_cons]; ring
+
+/-- A nonempty list has an entry of least image. -/
+theorem exists_min_image_of_ne_nil {α β : Type} [LinearOrder β] (l : List α) (f : α → β)
+    (h : l ≠ []) : ∃ a ∈ l, ∀ b ∈ l, f a ≤ f b := by
+  induction l with
+  | nil => exact absurd rfl h
+  | cons x xs ih =>
+    by_cases h_xs : xs = []
+    · subst h_xs
+      exact ⟨x, List.mem_singleton_self x, fun b hb => by simp_all⟩
+    obtain ⟨a, ha, h_min⟩ := ih h_xs
+    by_cases h_le : f x ≤ f a
+    · refine ⟨x, List.mem_cons_self .., fun b hb => ?_⟩
+      rcases List.mem_cons.mp hb with rfl | hb
+      · exact le_rfl
+      · exact h_le.trans (h_min b hb)
+    · refine ⟨a, List.mem_cons_of_mem _ ha, fun b hb => ?_⟩
+      rcases List.mem_cons.mp hb with rfl | hb
+      · exact (lt_of_not_ge h_le).le
+      · exact h_min b hb
+
+/-- A filtered sum grows with the filter. -/
+theorem sum_map_filter_le_of_imp {α : Type} (l : List α) (g : α → ℕ) {P Q : α → Prop}
+    [DecidablePred P] [DecidablePred Q] (h : ∀ x, P x → Q x) :
+    ((l.filter (P ·)).map g).sum ≤ ((l.filter (Q ·)).map g).sum := by
+  induction l with
+  | nil => simp
+  | cons x xs ih =>
+    by_cases hP : P x
+    · simp [hP, h x hP]
+      omega
+    · by_cases hQ : Q x
+      · simp [hP, hQ]
+        omega
+      · simpa [hP, hQ] using ih
 
 /-- Termwise `≤` gives `≤` of the sums. -/
 theorem sum_map_le_sum_map {α : Type} (l : List α) {f g : α → ℕ} (h : ∀ i ∈ l, f i ≤ g i) :

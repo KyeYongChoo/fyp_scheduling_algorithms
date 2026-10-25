@@ -616,6 +616,63 @@ theorem burst_le_ticksBefore_of_workOfAfter_eq_zero {t : ℕ} (h : workOfAfter t
   have := h _ (List.mem_map_of_mem (List.mem_filter.mpr ⟨hp, by simpa using hP⟩))
   omega
 
+/-- **No work left after the tick** iff every job released by `t` that satisfies `P` has
+had its whole burst by the state after step `t + 1`. -/
+theorem workOfAfter_eq_zero_iff {t : ℕ} :
+    workOfAfter tasks σ P t = 0 ↔
+      ∀ p ∈ jobsBy tasks t, P p → p.burst ≤ ticksBefore σ (key p) (t + 1) := by
+  refine ⟨fun h p hp hP => burst_le_ticksBefore_of_workOfAfter_eq_zero h hp hP, fun h => ?_⟩
+  rw [workOfAfter, List.sum_eq_zero_iff_forall_eq_nat]
+  intro x hx
+  obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hx
+  obtain ⟨hp_by, hP⟩ := List.mem_filter.mp hp
+  have := h p hp_by (by simpa using hP)
+  omega
+
 end Work
+
+/-! ## Meeting deadlines -/
+
+/-- Job `p` **meets its deadline** under `σ`: it has had its whole burst by the state after
+step `absDeadline p`, the last of its usable ticks. -/
+def MeetsDeadline (σ : PSchedule) (p : PeriodicProcess) : Prop :=
+  ticksBefore σ (key p) (absDeadline p) = p.burst
+
+instance (σ : PSchedule) (p : PeriodicProcess) : Decidable (MeetsDeadline σ p) :=
+  inferInstanceAs (Decidable (ticksBefore σ (key p) (absDeadline p) = p.burst))
+
+/-- The **first job** of task `m`: the one it releases at time 0. -/
+def firstJob (m : PeriodicProcess) : PeriodicProcess :=
+  { m with arrival := 0, remaining := m.burst }
+
+@[simp] theorem key_firstJob (m : PeriodicProcess) : key (firstJob m) = (m.id, 0) := rfl
+
+@[simp] theorem absDeadline_firstJob (m : PeriodicProcess) :
+    absDeadline (firstJob m) = m.deadline := by
+  simp [absDeadline, firstJob]
+
+@[simp] theorem burst_firstJob (m : PeriodicProcess) : (firstJob m).burst = m.burst := rfl
+
+/-- A task's first job is released at time 0, so it is among the jobs released by any
+time. -/
+theorem firstJob_mem_jobsBy {tasks : List PeriodicProcess} {m : PeriodicProcess}
+    (hm : m ∈ tasks) (t : ℕ) : firstJob m ∈ jobsBy tasks t :=
+  mem_jobsBy.mpr ⟨0, Nat.zero_le _, mem_releasesAt.mpr ⟨m, hm, Nat.zero_mod _, rfl⟩⟩
+
+/-- **A schedule that is never late meets every deadline.**  For an admissible schedule,
+a job that is not late at its absolute deadline has met it. -/
+theorem meetsDeadline_of_not_lateAt {tasks : List PeriodicProcess}
+    (h_ids : (tasks.map PeriodicProcess.id).Nodup) {σ : PSchedule}
+    (h_adm : IsAdmissible tasks σ) {p : PeriodicProcess} {t : ℕ} (hp : p ∈ jobsBy tasks t)
+    (h : ¬ LateAt tasks σ (absDeadline p)) : MeetsDeadline σ p := by
+  have hp' : p ∈ jobsBy tasks (absDeadline p) := by
+    obtain ⟨t', -, hp'⟩ := mem_jobsBy.mp hp
+    exact mem_jobsBy.mpr ⟨t', by rw [← arrival_of_mem_releasesAt hp']; unfold absDeadline; omega,
+      hp'⟩
+  have h_le := ticksBefore_le_burst h_ids h_adm hp'
+  unfold MeetsDeadline
+  by_contra h_ne
+  exact h ⟨p, mem_unfinished.mpr ⟨hp', by omega⟩, le_rfl⟩
+
 
 end Periodic
