@@ -19,10 +19,12 @@ class SchedStateMethods(process_type : Type) where
   init                  : SchedStateG process_type
   add_arrival           : SchedStateG process_type → List process_type → SchedStateG process_type
   -- the unfinished jobs that have missed their deadline; late jobs are not aborted, so a
-  -- job that misses its deadline is listed again at every step until it finishes.  A job
-  -- released at time `r` is not ticked before step `r+1` (the tick convention in Step.lean),
-  -- so with relative deadline `D` it gets the `D` ticks of steps `r+1 … r+D` and is late
-  -- once it is unfinished in a state with `time > r + D`
+  -- job that misses its deadline is listed again at every step until it finishes.  Aperiodic
+  -- jobs have no deadlines (the instance returns `[]`).  For periodic jobs
+  -- (`PeriodicProcess.missedDeadlines`): a job released at time `r` is not ticked before
+  -- step `r+1` (the tick convention in Step.lean), so with relative deadline `D` it gets the
+  -- `D` ticks of steps `r+1 … r+D` and is late once it is unfinished in a state with
+  -- `time > r + D`
   get_missed_processes  : SchedStateG process_type → List process_type
   extra_csv_field_names : String -- of form ",field_name1,field_name2" for new fields
   extra_csv_content     : SchedStateG process_type → String -- of form ",content1,content2" for new fields

@@ -16,7 +16,9 @@ deriving DecidableEq, BEq, ReflBEq, LawfulBEq, Repr
 /-- A periodic task, and also each job it releases.  The task releases a fresh
 job at time 0 and then every `period` ticks (`PeriodicProcess.releasesAt`); a
 released job carries its release time in `arrival` and must finish by
-`arrival + deadline` (a relative deadline). -/
+`arrival + deadline` (a relative deadline), in the sense of
+`PeriodicProcess.missedDeadlines`: it must be finished in the state after step
+`arrival + deadline`. -/
 structure PeriodicProcess where
   id        : Nat
   arrival   : Nat -- release time of this job (overwritten at each release)
