@@ -33,6 +33,8 @@ the convoy-effect files.
 * **Positivity** (`ConservesJobs.remaining_pos`, `runSteps_remaining_pos`): if every
   arriving job has work left, then so does every job in the system, for any step that
   conserves jobs.
+* **The clock** (`stepPreemptive_time`, `runSteps_stepPreemptive_time`): every step
+  advances `time` by one, so the state after step `t` has `time = t + 1`.
 
 The job type needs `[LawfulBEq α]` only where a dispatched job is erased from the
 queue and the proof needs `List.erase` to remove that very job.
@@ -92,6 +94,24 @@ theorem stepPreemptive_conservesJobs [LawfulBEq α] (f : α → ℤ) :
           rw [← List.singleton_append, ← List.append_assoc]
           exact (erase_append_singleton_perm (selectByPriority_spec f _ p h_sel).1).append_right _
         · simp
+
+/-! ## The clock -/
+
+/-- **Every preemptive step advances the clock by one.** -/
+theorem stepPreemptive_time (f : α → ℤ) (s : SchedStateG α) :
+    (stepPreemptive α f s).time = s.time + 1 := by
+  unfold stepPreemptive
+  cases s.running <;> dsimp only <;> (try split_ifs) <;> split <;> (try split_ifs) <;> rfl
+
+/-- **After step `t` of a preemptive run the clock reads `t + 1`**, provided the
+initial state reads `0`, as it does for both job types (`rfl`). -/
+theorem runSteps_stepPreemptive_time [SchedStateMethods α] (f : α → ℤ)
+    (h_init : (SchedStateMethods.init : SchedStateG α).time = 0)
+    (arrival_stream : ℕ → List α) (t : ℕ) :
+    (runSteps arrival_stream (stepPreemptive α f) t).time = t + 1 := by
+  induction t with
+  | zero => simp [runSteps, stepPreemptive_time, h_init]
+  | succ t ih => simp [runSteps, stepPreemptive_time, ih]
 
 /-! ## Work conservation -/
 
