@@ -7,6 +7,7 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoySpec
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoyWitnesses
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
+import FypSchedulingAlgorithms.PreemptiveRuns
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 
@@ -57,68 +58,14 @@ theorem srtf_step_spec (s : SchedState)
     (∀ q ∈ (stepSRTF s).ready, 0 < q.remaining) ∧
       ∀ p, (stepSRTF s).running = some p →
         0 < p.remaining ∧ ∀ q ∈ (stepSRTF s).ready, p.remaining ≤ q.remaining := by
-  have h_ready : ∀ q ∈ s.ready, 0 < q.remaining :=
-    fun q hq => h_pos q (List.mem_append_left _ hq)
-  -- Dispatching the shortest job `q` of `ready`: it has work left, and what stays
-  -- behind in `ready` still has work left, and at least as much as `q`.
-  have h_dispatch : ∀ q, selectByPriority (fun p : AperiodicProcess => -(p.remaining : ℤ))
-      s.ready = some q →
-      0 < q.remaining ∧ ∀ r ∈ s.ready.erase q, 0 < r.remaining ∧ q.remaining ≤ r.remaining := by
-    intro q hq
-    have h_min := srtf_runs_shortest_remaining _ q hq h_ready
-    exact ⟨h_ready q (selectByPriority_spec _ _ q hq).1, fun r hr =>
-      ⟨h_ready r (List.mem_of_mem_erase hr), h_min r (List.mem_of_mem_erase hr)⟩⟩
-  unfold stepSRTF stepPreemptive
-  rcases hr : s.running with _ | b
-  · -- idle CPU: dispatch the shortest job of `ready`, if any
-    simp only
-    split
-    · exact ⟨h_ready, by simp⟩
-    · rename_i q h_sel
-      obtain ⟨hq_pos, h_rest⟩ := h_dispatch q h_sel
-      refine ⟨fun r hr => (h_rest r hr).1, fun p hp => ?_⟩
-      simp only [Option.some.injEq] at hp
-      subst hp
-      exact ⟨hq_pos, fun r hr => (h_rest r hr).2⟩
-  · have hb_pos : 0 < b.remaining := h_pos b (by simp [hr])
-    simp only [AperiodicProcess.process_tick, AperiodicProcess.process_remaining]
-    split_ifs with h_done
-    · -- `b` finished: dispatch, exactly as from an idle CPU
-      split
-      · exact ⟨h_ready, by simp⟩
-      · rename_i q h_sel
-        obtain ⟨hq_pos, h_rest⟩ := h_dispatch q h_sel
-        refine ⟨fun r hr => (h_rest r hr).1, fun p hp => ?_⟩
-        simp only [Option.some.injEq] at hp
-        subst hp
-        exact ⟨hq_pos, fun r hr => (h_rest r hr).2⟩
-    · -- `b` still has work left after its tick
-      have hb'_pos : 0 < b.remaining - 1 := by omega
-      split
-      · -- nothing is waiting: `b` keeps the CPU
-        rename_i h_sel
-        rw [selectByPriority_eq_none _ _ h_sel]
-        simpa using hb'_pos
-      · rename_i q h_sel
-        obtain ⟨hq_pos, h_rest⟩ := h_dispatch q h_sel
-        have h_min := srtf_runs_shortest_remaining _ q h_sel h_ready
-        split_ifs with h_pre
-        · -- `q` is strictly shorter than `b`: it preempts, `b` rejoins `ready`
-          refine ⟨fun r hr => ?_, fun p hp => ?_⟩
-          · rcases List.mem_append.mp hr with hr | hr
-            · exact (h_rest r hr).1
-            · simp only [List.mem_singleton] at hr; subst hr; exact hb'_pos
-          · simp only [Option.some.injEq] at hp
-            subst hp
-            refine ⟨hq_pos, fun r hr => ?_⟩
-            rcases List.mem_append.mp hr with hr | hr
-            · exact (h_rest r hr).2
-            · simp only [List.mem_singleton] at hr; subst hr; simp only; omega
-        · -- `b` is no longer than the shortest waiting job `q`: it keeps the CPU
-          refine ⟨h_ready, fun p hp => ?_⟩
-          simp only [Option.some.injEq] at hp
-          subst hp
-          exact ⟨hb'_pos, fun r hr => by have := h_min r hr; simp only; omega⟩
+  -- both halves are generic facts about `stepPreemptive` (`PreemptiveRuns`)
+  have h_all := (PreemptiveRuns.stepPreemptive_conservesJobs _ :
+    PreemptiveRuns.ConservesJobs stepSRTF).remaining_pos s h_pos
+  refine ⟨fun q hq => h_all q (List.mem_append_left _ hq), fun p hp =>
+    ⟨h_all p (List.mem_append_right _ (Option.mem_toList.mpr hp)), fun q hq => ?_⟩⟩
+  have h_le : -(q.remaining : ℤ) ≤ -(p.remaining : ℤ) :=
+    PreemptiveRuns.stepPreemptive_running_max _ s p hp q hq
+  omega
 
 /-- **SRTF invariant.** On a well-formed stream, at every step every job in the
 system has work left, and the running job has no more work left than any job
@@ -129,26 +76,17 @@ theorem srtf_run_invariant (arrival_stream : ℕ → List AperiodicProcess)
       ∀ p, (runSteps arrival_stream stepSRTF t).running = some p →
         0 < p.remaining ∧
           ∀ q ∈ (runSteps arrival_stream stepSRTF t).ready, p.remaining ≤ q.remaining := by
+  -- both halves are generic run invariants of `stepPreemptive` (`PreemptiveRuns`);
   -- a fresh arrival has work left: its `remaining` is its (positive) burst
-  have h_arr : ∀ t, ∀ q ∈ arrival_stream t, 0 < q.remaining := fun t q hq => by
-    rw [h_wf.fresh q t hq]; exact q.burst_exceed_zero
-  induction t with
-  | zero =>
-    simp only [runSteps]
-    apply srtf_step_spec
-    intro q hq
-    simp only [SchedStateG.init_aperiodic, Option.toList_none, List.append_nil] at hq
-    exact h_arr 0 q hq
-  | succ t ih =>
-    obtain ⟨ih_ready, ih_running⟩ := ih
-    simp only [runSteps]
-    apply srtf_step_spec
-    intro q hq
-    rcases List.mem_append.mp hq with hq | hq
-    · rcases List.mem_append.mp hq with hq | hq
-      · exact ih_ready q hq
-      · exact h_arr _ q hq
-    · exact (ih_running q (Option.mem_toList.mp hq)).1
+  have h_all := PreemptiveRuns.runSteps_remaining_pos
+    (PreemptiveRuns.stepPreemptive_conservesJobs _ : PreemptiveRuns.ConservesJobs stepSRTF) rfl
+    (fun t q hq => by
+      rw [AperiodicProcess.process_remaining, h_wf.fresh q t hq]; exact q.burst_exceed_zero) t
+  refine ⟨fun q hq => h_all q (List.mem_append_left _ hq), fun p hp =>
+    ⟨h_all p (List.mem_append_right _ (Option.mem_toList.mpr hp)), fun q hq => ?_⟩⟩
+  have h_le : -(q.remaining : ℤ) ≤ -(p.remaining : ℤ) :=
+    PreemptiveRuns.runSteps_running_max _ arrival_stream t p hp q hq
+  omega
 
 /-- **SRTF always runs the shortest remaining job**, on every well-formed
 stream and at every step. -/
