@@ -6,6 +6,7 @@ Authors: Choo Kye Yong
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
 import FypSchedulingAlgorithms.Step
+import Mathlib.Tactic.Push
 
 /-!
 # What it means for a scheduler to be starvation-free

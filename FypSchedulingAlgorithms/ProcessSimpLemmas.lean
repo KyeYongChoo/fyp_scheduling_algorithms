@@ -36,27 +36,27 @@ end AperiodicProcess
 namespace PeriodicProcess
 
 @[simp]
-theorem process_id (p : AperiodicProcess) :
+theorem process_id (p : PeriodicProcess) :
     Process.id p = p.id := by
   rfl
 
 @[simp]
-theorem process_arrival (p : AperiodicProcess) :
+theorem process_arrival (p : PeriodicProcess) :
     Process.arrival p = p.arrival := by
   rfl
 
 @[simp]
-theorem process_remaining (p : AperiodicProcess) :
+theorem process_remaining (p : PeriodicProcess) :
     Process.remaining p = p.remaining := by
   rfl
 
 @[simp]
-theorem process_burst (p : AperiodicProcess) :
+theorem process_burst (p : PeriodicProcess) :
     Process.burst p = p.burst := by
   rfl
 
 @[simp]
-theorem process_tick (p : AperiodicProcess) :
+theorem process_tick (p : PeriodicProcess) :
     Process.tick p = { p with remaining := p.remaining - 1 } := by
   rfl
 

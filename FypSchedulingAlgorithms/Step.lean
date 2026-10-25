@@ -5,7 +5,10 @@ Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
-import Mathlib.Data.Int.Order.Basic -- the linear order on ℤ, the type of priorities
+-- The linear order on ℤ, the type of priorities.  It is the only Mathlib import of the base
+-- modules, so it also brings basic Mathlib to the files that import `Step`.  Files known to
+-- need more (`split_ifs`, `push`, `tauto`, `f^[n]`) import those modules themselves.
+import Mathlib.Data.Int.Order.Basic
 
 /-!
 # Scheduling Generic Functions
