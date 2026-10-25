@@ -30,7 +30,8 @@ General facts about lists: their statements mention nothing about scheduling
   entries (`length_filter_pos_le`).
 * Updating one entry of a list without repeats under a filter and a map: the
   rest is common to both sides (`filter_map_update`; used by the schedule
-  bridges, `Schedules` and `PeriodicSchedules`).
+  bridges, `Schedules` and `PeriodicSchedules`), and a mapped sum changes by the
+  change at that entry (`sum_map_update`; used by `EDFOptimality`).
 -/
 
 /-- Folding a monotone accumulator function never drops below the initial
@@ -458,5 +459,20 @@ theorem filter_map_update {α β : Type} {L : List α} (h_nodup : L.Nodup)
   · refine ((h_perm.filter P').map J').trans ?_
     rw [List.filter_cons, ← h_rest]
     split <;> simp
+
+/-- Changing one entry `q` of a list without repeats changes the sum of a map by the
+change at `q`: if `f` and `g` agree away from `q`, then
+`(L.map f).sum + g q = (L.map g).sum + f q`. -/
+theorem sum_map_update {α : Type} {L : List α} (h_nodup : L.Nodup) {q : α} (hq : q ∈ L)
+    (f g : α → ℕ) (h : ∀ p ∈ L, p ≠ q → f p = g p) :
+    (L.map f).sum + g q = (L.map g).sum + f q := by
+  classical
+  have h_perm := List.perm_cons_erase hq
+  have h_rest : (L.erase q).map f = (L.erase q).map g :=
+    List.map_congr_left fun p hp =>
+      h p (List.mem_of_mem_erase hp) ((h_nodup.mem_erase_iff).mp hp).1
+  rw [(h_perm.map f).sum_nat, (h_perm.map g).sum_nat, List.map_cons, List.map_cons,
+    List.sum_cons, List.sum_cons, h_rest]
+  omega
 
 end Update

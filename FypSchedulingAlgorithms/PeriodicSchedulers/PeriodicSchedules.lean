@@ -49,6 +49,12 @@ a run is described by its schedule `runSchedule step tasks`:
   schedule is late at `t` (for steps that advance the clock by one, as every
   `stepPreemptive f` does: `missedDeadlines_ne_nil_iff_preemptive`).
 
+Facts used by the optimality proofs: an admissible schedule gives a job no tick before
+its release (`ticksBefore_of_mem_releasesAt`) and never more ticks than its burst
+(`ticksBefore_le_burst`); a preemptive scheduler idles only when every released job is
+finished (`unfinished_eq_nil_of_idle`) and runs an unfinished job of highest priority
+(`runSchedule_stepPreemptive_max`).
+
 **Assumption.**  Task ids are distinct (`(tasks.map PeriodicProcess.id).Nodup`).  Then
 keys are unique among released jobs (`key_injective`, `jobsBy_nodup`).  `TaskSet`
 bundles this with positive periods, which the bridge does not need.
@@ -228,6 +234,42 @@ theorem ticksBefore_mono (σ : PSchedule) (k : ℕ × ℕ) {t t' : ℕ} (h : t �
 theorem ticksBefore_succ_of_ne {σ : PSchedule} {k : ℕ × ℕ} {t : ℕ} (h : σ t ≠ some k) :
     ticksBefore σ k (t + 1) = ticksBefore σ k t := by
   simp [ticksBefore_succ, h]
+
+/-- An admissible schedule has not run a job before its release. -/
+theorem ticksBefore_of_mem_releasesAt {tasks : List PeriodicProcess} {σ : PSchedule}
+    (h_adm : IsAdmissible tasks σ) {t : ℕ} {p : PeriodicProcess}
+    (hp : p ∈ PeriodicProcess.releasesAt tasks t) : ticksBefore σ (key p) t = 0 := by
+  refine ticksBefore_eq_zero fun t' ht' h_eq => ?_
+  obtain ⟨q, hq, h_key, -⟩ := h_adm t' _ h_eq
+  have h1 := arrival_le_of_mem_jobsBy hq
+  have h2 := arrival_of_mem_releasesAt hp
+  have h3 : q.arrival = p.arrival := congrArg Prod.snd h_key
+  omega
+
+/-- **An admissible schedule never over-ticks a released job**, so
+`p.burst - ticksBefore σ (key p) t` is exactly the work `p` still owes. -/
+theorem ticksBefore_le_burst {tasks : List PeriodicProcess}
+    (h_ids : (tasks.map PeriodicProcess.id).Nodup) {σ : PSchedule}
+    (h_adm : IsAdmissible tasks σ) {p : PeriodicProcess} {t : ℕ} (hp : p ∈ jobsBy tasks t) :
+    ticksBefore σ (key p) t ≤ p.burst := by
+  induction t with
+  | zero => simp
+  | succ t ih =>
+    rw [ticksBefore_succ]
+    by_cases h : σ t = some (key p)
+    · obtain ⟨q, hq, h_key, h_lt⟩ := h_adm t _ h
+      obtain rfl := key_injective h_ids hq hp h_key
+      simp only [h, ↓reduceIte]
+      omega
+    · simp only [h, ↓reduceIte, Nat.add_zero]
+      by_cases hpt : p ∈ jobsBy tasks t
+      · exact ih hpt
+      · have hp' : p ∈ PeriodicProcess.releasesAt tasks (t + 1) := by
+          rw [jobsBy_succ] at hp
+          exact (List.mem_append.mp hp).resolve_left hpt
+        have h0 := ticksBefore_of_mem_releasesAt h_adm hp'
+        have hm := ticksBefore_mono σ (key p) (show t ≤ t + 1 by omega)
+        omega
 
 /-! ## Runs as schedules -/
 
@@ -423,5 +465,47 @@ theorem missedDeadlines_ne_nil_iff_preemptive (f : PeriodicProcess → ℤ)
       LateAt tasks (runSchedule (stepPreemptive PeriodicProcess f) tasks) t :=
   missedDeadlines_ne_nil_iff (stepPreemptive_conservesJobs f) h_ids
     (stepPreemptive_time f) t
+
+/-- **A preemptive scheduler idles only when every released job is finished.** -/
+theorem unfinished_eq_nil_of_idle (f : PeriodicProcess → ℤ) {tasks : List PeriodicProcess}
+    (h_ids : (tasks.map PeriodicProcess.id).Nodup) {t : ℕ}
+    (h : runSchedule (stepPreemptive PeriodicProcess f) tasks t = none) :
+    unfinished tasks (runSchedule (stepPreemptive PeriodicProcess f) tasks) t = [] := by
+  have h_run :
+      (runSteps (PeriodicProcess.releasesAt tasks) (stepPreemptive PeriodicProcess f) t).running =
+        none := by
+    simpa [runSchedule] using h
+  have h_sys := inSystem_perm (stepPreemptive_conservesJobs f) h_ids t
+  rw [inSystem, runSteps_ready_nil_of_idle f _ t h_run, h_run] at h_sys
+  simpa using h_sys.symm
+
+/-- **A preemptive scheduler runs an unfinished job of highest priority.** If the run of
+`stepPreemptive f` has job `k` on the CPU after step `t`, then `k` is the key of an
+unfinished job `p0`, and no unfinished job, as it stands after step `t`, has a higher
+`f`-value than `p0`. -/
+theorem runSchedule_stepPreemptive_max (f : PeriodicProcess → ℤ) {tasks : List PeriodicProcess}
+    (h_ids : (tasks.map PeriodicProcess.id).Nodup) {t : ℕ} {k : ℕ × ℕ}
+    (h : runSchedule (stepPreemptive PeriodicProcess f) tasks t = some k) :
+    ∃ p0 ∈ unfinished tasks (runSchedule (stepPreemptive PeriodicProcess f) tasks) t,
+      key p0 = k ∧ ∀ p ∈ unfinished tasks (runSchedule (stepPreemptive PeriodicProcess f) tasks) t,
+        f (jobAt (runSchedule (stepPreemptive PeriodicProcess f) tasks) t p) ≤
+          f (jobAt (runSchedule (stepPreemptive PeriodicProcess f) tasks) t p0) := by
+  set σ := runSchedule (stepPreemptive PeriodicProcess f) tasks
+  obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp h
+  have h_sys := inSystem_perm (stepPreemptive_conservesJobs f) h_ids t
+  obtain ⟨p0, hp0, rfl⟩ := List.mem_map.mp
+    (h_sys.subset (show b ∈ inSystem _ by simp [inSystem, hb]))
+  refine ⟨p0, hp0, rfl, fun p hp => ?_⟩
+  by_cases h_eq : p = p0
+  · subst h_eq
+    exact le_rfl
+  · have hp_sys : jobAt σ t p ∈ inSystem _ := h_sys.symm.subset (List.mem_map_of_mem hp)
+    have hp_ready : jobAt σ t p ∈
+        (runSteps (PeriodicProcess.releasesAt tasks) (stepPreemptive PeriodicProcess f) t).ready := by
+      simp only [inSystem, hb, Option.toList_some, List.mem_append, List.mem_singleton] at hp_sys
+      refine hp_sys.resolve_right fun h' => h_eq ?_
+      exact key_injective h_ids (mem_unfinished.mp hp).1 (mem_unfinished.mp hp0).1
+        (by simpa using congrArg key h')
+    exact runSteps_running_max f _ t _ hb _ hp_ready
 
 end Periodic
