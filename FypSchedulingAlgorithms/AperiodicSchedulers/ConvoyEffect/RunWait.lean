@@ -465,8 +465,8 @@ theorem hasBatchConvoyEffect_iff_runWait (select : List AperiodicProcess → Opt
 
 A batch with bursts `[5, 1, 3, 2]` (total work 11).  FCFS dispatches it in list
 order and waits `totalWait [5, 1, 3, 2] = 20`; SJF dispatches `[1, 2, 3, 5]` and
-waits 10.  (SRTF also waits 10 on this batch, by `#eval`; `decide` cannot
-evaluate its `ℚ` priorities.) -/
+waits 10.  SRTF also waits 10 on this batch: with nothing arriving later it never
+preempts, so it runs the jobs in SJF order. -/
 
 /-- The sample batch: bursts 5, 1, 3, 2, ids 0..3, all at time 0. -/
 def sampleBatch : List AperiodicProcess :=
@@ -475,6 +475,7 @@ def sampleBatch : List AperiodicProcess :=
 example : runWait (runSteps · stepFCFS) (batchStream sampleBatch) 11 = 20 := by decide
 example : totalWait [5, 1, 3, 2] = 20 := rfl
 example : runWait (runSteps · stepSJF) (batchStream sampleBatch) 11 = 10 := by decide
+example : runWait (runSteps · stepSRTF) (batchStream sampleBatch) 11 = 10 := by decide
 example : totalWait [1, 2, 3, 5] = 10 := rfl
 
 end ConvoyEffect

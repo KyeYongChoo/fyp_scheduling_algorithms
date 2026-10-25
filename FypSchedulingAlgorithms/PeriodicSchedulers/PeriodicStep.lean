@@ -15,9 +15,10 @@ This file defines the step functions for the two classic periodic schedulers,
 priority function to `stepPreemptive`; see `FypSchedulingAlgorithms.Step` for the
 shared machinery.
 
-`stepPreemptive` runs the candidate with the *highest* priority number, so a
-policy that wants the *smallest* value of some field `f` passes `fun p => 1 / f p`
-(the priority is a `ℚ`, so this is genuine reciprocal, not `Nat` division).
+`stepPreemptive` runs the candidate with the *highest* priority, an integer, so a
+policy that wants the *smallest* value of some natural-number field `f` passes its
+negation, `fun p => -(f p : ℤ)`.  Negation reverses the order on all of `ℕ`, `0`
+included, so comparing priorities needs no positivity side conditions.
 
 * `stepRMS` -- Rate Monotonic: the shortest period gets the CPU.
 * `stepEDF` -- Earliest Deadline First: the nearest deadline gets the CPU.
@@ -28,8 +29,8 @@ exercised by the simulator in `FypSchedulingAlgorithms.SampleSchedules`.
 
 -- Rate Monotonic (RM) scheduler - Preemptively runs the process with the shortest period
 def stepRMS : PeriodicSchedState → PeriodicSchedState :=
-  stepPreemptive PeriodicProcess (fun p => 1/(p.period))
+  stepPreemptive PeriodicProcess (fun p => -(p.period : ℤ))
 
 -- Earliest Deadline First (EDF) Scheduler - Preemptively picks the earliest deadline to run
 def stepEDF : PeriodicSchedState -> PeriodicSchedState :=
-  stepPreemptive PeriodicProcess (fun p => 1/(p.deadline + p.arrival))
+  stepPreemptive PeriodicProcess (fun p => -((p.arrival + p.deadline : ℕ) : ℤ))

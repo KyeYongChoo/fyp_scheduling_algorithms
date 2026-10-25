@@ -52,7 +52,7 @@ open Preemptive
 /-! ## SRTF never idles while a job waits -/
 
 /-- A preemptive step leaves the CPU idle only when nothing is waiting. -/
-theorem stepPreemptive_ready_nil_of_idle (f : AperiodicProcess → ℚ) (s : SchedState)
+theorem stepPreemptive_ready_nil_of_idle (f : AperiodicProcess → ℤ) (s : SchedState)
     (h : (stepPreemptive AperiodicProcess f s).running = none) :
     (stepPreemptive AperiodicProcess f s).ready = [] := by
   unfold stepPreemptive at *

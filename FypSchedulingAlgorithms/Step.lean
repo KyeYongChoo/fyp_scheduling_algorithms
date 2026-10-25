@@ -5,8 +5,7 @@ Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.SchedState
-import Mathlib.Data.Rat.Init
-import Mathlib.Algebra.Order.Ring.Rat -- <, ≤, LT, LE instances for ℚ
+import Mathlib.Data.Int.Order.Basic -- the linear order on ℤ, the type of priorities
 
 /-!
 # Scheduling Generic Functions
@@ -53,7 +52,7 @@ def default_num_steps := 30
 /-- The candidate with the *highest* `priority_func` value; among equal-priority
 candidates the **earliest** in the list wins (FIFO ties): a later candidate replaces
 the best so far only if its priority is strictly higher. -/
-def selectByPriority {process_type} (priority_func : process_type → ℚ) (candidates : List process_type) : Option process_type :=
+def selectByPriority {process_type} (priority_func : process_type → ℤ) (candidates : List process_type) : Option process_type :=
   candidates.foldl (fun best p =>
     match best with
     | none   => some p
@@ -148,7 +147,7 @@ testing jobs for equality.  Among the jobs in `ready`, ties go to the one neares
 front of the queue.  A job newly put on the CPU is not ticked until the next
 step. -/
 def stepPreemptive (process_type : Type) [Process process_type]
-  (priority_func : process_type → ℚ) :
+  (priority_func : process_type → ℤ) :
   SchedStateG process_type → SchedStateG process_type :=
   fun s =>
     match s.running with

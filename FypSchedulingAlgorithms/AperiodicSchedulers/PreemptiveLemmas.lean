@@ -11,7 +11,7 @@ import FypSchedulingAlgorithms.Step
 The lemmas here hold for *every* preemptive scheduler, i.e. every scheduler of
 the form `stepPreemptive process_type priority_func`: they are about
 `selectByPriority`, which picks the candidate run at each step, and are stated
-for an arbitrary priority function rather than for SRTF's `1 / remaining`
+for an arbitrary priority function rather than for SRTF's `-remaining`
 specifically.  This is the preemptive counterpart of `NonPreemptiveLemmas`.
 -/
 
@@ -20,7 +20,7 @@ namespace Preemptive
 /-- Invariant of the `foldl` inside `selectByPriority`: the result is either the
 starting accumulator or one of the scanned jobs, and its priority is at least
 that of the accumulator and of every scanned job. -/
-theorem selectByPriority_foldl_spec {α : Type} (f : α → ℚ) (l : List α)
+theorem selectByPriority_foldl_spec {α : Type} (f : α → ℤ) (l : List α)
     (init : Option α) (p : α)
     (h : l.foldl (fun best q =>
         match best with
@@ -73,14 +73,14 @@ theorem selectByPriority_foldl_spec {α : Type} (f : α → ℚ) (l : List α)
 /-- **Every preemptive scheduler runs a highest-priority candidate.** The job
 `selectByPriority` returns is one of the candidates, and no candidate has
 strictly higher priority. -/
-theorem selectByPriority_spec {α : Type} (f : α → ℚ) (l : List α) (p : α)
+theorem selectByPriority_spec {α : Type} (f : α → ℤ) (l : List α) (p : α)
     (h : selectByPriority f l = some p) : p ∈ l ∧ ∀ q ∈ l, f q ≤ f p := by
   obtain ⟨h_mem, -, h_max⟩ := selectByPriority_foldl_spec f l none p h
   exact ⟨h_mem.resolve_left (by simp), h_max⟩
 
 /-- `selectByPriority` comes back empty-handed only when there are no
 candidates: once it has seen one job it always holds some best-so-far. -/
-theorem selectByPriority_eq_none {α : Type} (f : α → ℚ) (l : List α)
+theorem selectByPriority_eq_none {α : Type} (f : α → ℤ) (l : List α)
     (h : selectByPriority f l = none) : l = [] := by
   cases l with
   | nil => rfl
@@ -102,7 +102,7 @@ theorem selectByPriority_eq_none {α : Type} (f : α → ℚ) (l : List α)
 /-- **Ties go to the earlier candidate.** Selecting from `l ++ [b]` returns the
 best job `q` of `l` unless `b` has strictly higher priority.  Not used by `stepPreemptive`,
 which compares the running job with the winner of `ready` explicitly. -/
-theorem selectByPriority_append_singleton {α : Type} (f : α → ℚ) (l : List α) (b : α) :
+theorem selectByPriority_append_singleton {α : Type} (f : α → ℤ) (l : List α) (b : α) :
     selectByPriority f (l ++ [b]) =
       match selectByPriority f l with
       | none   => some b
@@ -113,7 +113,7 @@ theorem selectByPriority_append_singleton {α : Type} (f : α → ℚ) (l : List
 
 /-- One scan step from the front: `x` replaces `b` as best-so-far only if it has
 strictly higher priority. -/
-theorem selectByPriority_cons_cons {α : Type} (f : α → ℚ) (b x : α) (xs : List α) :
+theorem selectByPriority_cons_cons {α : Type} (f : α → ℤ) (b x : α) (xs : List α) :
     selectByPriority f (b :: x :: xs) =
       if f b < f x then selectByPriority f (x :: xs) else selectByPriority f (b :: xs) := by
   unfold selectByPriority
@@ -124,7 +124,7 @@ theorem selectByPriority_cons_cons {α : Type} (f : α → ℚ) (b x : α) (xs :
 scanned first, then the ready queue `l`) returns `b` unless the best job of `l`
 has strictly higher priority.  This is how `stepPreemptive` decides whether to
 preempt the running job `b`. -/
-theorem selectByPriority_cons {α : Type} (f : α → ℚ) (l : List α) (b : α) :
+theorem selectByPriority_cons {α : Type} (f : α → ℤ) (l : List α) (b : α) :
     selectByPriority f (b :: l) =
       match selectByPriority f l with
       | none   => some b

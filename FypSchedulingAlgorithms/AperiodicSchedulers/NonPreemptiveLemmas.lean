@@ -9,6 +9,7 @@ import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.RunStepsLemmas
+import Mathlib.Tactic.Tauto
 
 /-!
 # Scheduler-agnostic facts about `stepNonPreemptive`

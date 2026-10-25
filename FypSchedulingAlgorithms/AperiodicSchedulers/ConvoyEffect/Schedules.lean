@@ -124,7 +124,7 @@ theorem erase_append_singleton_perm {l : List AperiodicProcess} {p : AperiodicPr
   (List.perm_append_singleton p _).trans (List.perm_cons_erase h).symm
 
 /-- **Every preemptive scheduler conserves jobs**, whatever its priority function. -/
-theorem stepPreemptive_conservesJobs (f : AperiodicProcess → ℚ) :
+theorem stepPreemptive_conservesJobs (f : AperiodicProcess → ℤ) :
     ConservesJobs (stepPreemptive AperiodicProcess f) := by
   intro s
   unfold stepPreemptive

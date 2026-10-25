@@ -9,7 +9,7 @@ import FypSchedulingAlgorithms.Step
 
 -- ─── SRTF (preemptive: on every tick, run the shortest remaining time) ─────────
 def stepSRTF : SchedState -> SchedState:=
-  stepPreemptive AperiodicProcess (fun p => 1/(p.remaining))
+  stepPreemptive AperiodicProcess (fun p => -(p.remaining : ℤ))
 
 -- ─── Round Robin ─────────────────────────────────────────────────────────────
 -- RR needs a quantum counter; hence the repeated code

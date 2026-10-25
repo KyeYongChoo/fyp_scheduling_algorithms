@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.Step
+import Mathlib.Logic.Function.Iterate
 
 /-!
 # General facts about `runSteps`
