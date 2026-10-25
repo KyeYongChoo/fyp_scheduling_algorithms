@@ -14,10 +14,12 @@ import FypSchedulingAlgorithms.SchedStateSimpLemmas
 /-! # SRTF: preemption removes the late-arrival convoy
 
 SRTF is preemptive, so it is described by a priority function (`-remaining`)
-passed to `stepPreemptive`, not by a `select` function.  Every step runs a
-candidate with the least *remaining* time (`srtf_runs_shortest_remaining`), which
-follows from a lemma about `selectByPriority` that holds for every preemptive
-scheduler (`Preemptive.selectByPriority_spec`, in `PreemptiveLemmas`).  So SRTF
+passed to `stepPreemptive`, not by a `select` function.  In every state of an SRTF
+run the job on the CPU has the least *remaining* time of the jobs in the system
+(`srtf_run_invariant`), an instance of the priority run invariant that holds for every
+preemptive scheduler (`PreemptiveRuns.runSteps_running_max`).  For a single selection,
+the job SRTF picks from a list of candidates has the least remaining time among them
+(`srtf_runs_shortest_remaining`, from `Preemptive.selectByPriority_spec`).  So SRTF
 has neither the online convoy effect nor, in particular, the convoy effect
 (`srtf_not_hasConvoyEffect`).
 
