@@ -39,7 +39,7 @@ theorem starvation_stream_invariant (t : ℕ) :
     ∀ p ∈ (runSteps starvation_stream stepSRTF t).completed, p.id ≠ 0 := by
   induction t with
   | zero =>
-    -- the CPU is idle and `ready = [victim, flood 0]`: priority 1/2 vs 1/1, so
+    -- the CPU is idle and `ready = [victim, flood 0]`: priority -2 vs -1, so
     -- `flood 0` is dispatched (unticked) and the victim stays behind
     refine ⟨?_, ?_, ?_⟩ <;>
       norm_num [runSteps, stepSRTF, stepPreemptive, selectByPriority, starvation_stream,
@@ -50,15 +50,12 @@ theorem starvation_stream_invariant (t : ℕ) :
     -- here, or the rewrite targets `(runSteps .. stepSRTF t).ready` disappear too.
     simp only [runSteps, starvation_stream, ih_ready, ih_running]
     -- Stage 2: `flood t` uses its single tick and retires; the arriving `flood (t+1)`
-    -- outranks the victim (1/1 > 1/2), so it is dispatched in its place
+    -- outranks the victim (-1 > -2), so it is dispatched in its place
     refine ⟨?_, ?_, ?_⟩ <;>
       norm_num [stepSRTF, stepPreemptive, selectByPriority, victim, flood]
     intro p hp
     rcases hp with hp | rfl
-    -- `norm_num` normalised `1 / x` to `x⁻¹` inside the scheduler, so line the IH up
-    -- with `hp` before using it (the two forms are equal, but not definitionally)
-    · simp only [stepSRTF, one_div] at ih_completed
-      exact ih_completed p hp
+    · exact ih_completed p hp
     · simp
 
 /-- **Main theorem.** SRTF is *not* starvation-free: `starvation_stream` is well

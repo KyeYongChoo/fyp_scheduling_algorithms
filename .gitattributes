@@ -1,0 +1,3 @@
+# The sample-schedule CSVs are written with LF line endings by the generator; keep them LF
+# in the working tree too, so regenerating unchanged CSVs leaves `git status` clean.
+*.csv text eol=lf

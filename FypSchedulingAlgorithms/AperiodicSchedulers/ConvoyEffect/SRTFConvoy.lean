@@ -7,17 +7,19 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoySpec
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoyWitnesses
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
+import FypSchedulingAlgorithms.PreemptiveRuns
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
-import Mathlib.Algebra.Order.Field.Basic
 
 /-! # SRTF: preemption removes the late-arrival convoy
 
-SRTF is preemptive, so it is described by a priority function (`1 / remaining`)
-passed to `stepPreemptive`, not by a `select` function.  Every step runs a
-candidate with the least *remaining* time (`srtf_runs_shortest_remaining`), which
-follows from a lemma about `selectByPriority` that holds for every preemptive
-scheduler (`Preemptive.selectByPriority_spec`, in `PreemptiveLemmas`).  So SRTF
+SRTF is preemptive, so it is described by a priority function (`-remaining`)
+passed to `stepPreemptive`, not by a `select` function.  In every state of an SRTF
+run the job on the CPU has the least *remaining* time of the jobs in the system
+(`srtf_run_invariant`), an instance of the priority run invariant that holds for every
+preemptive scheduler (`PreemptiveRuns.runSteps_running_max`).  For a single selection,
+the job SRTF picks from a list of candidates has the least remaining time among them
+(`srtf_runs_shortest_remaining`, from `Preemptive.selectByPriority_spec`).  So SRTF
 has neither the online convoy effect nor, in particular, the convoy effect
 (`srtf_not_hasConvoyEffect`).
 
@@ -34,24 +36,21 @@ namespace ConvoyEffect
 open Preemptive
 
 /-- **SRTF runs the shortest remaining job.** Among candidates that all still
-have work left, the one SRTF picks has the least remaining time. -/
+have work left, the one SRTF picks has the least remaining time.
+
+The positivity hypothesis `_h_pos` is no longer used: SRTF's priority is the
+negated remaining time, which reverses the order on all of `ℕ`.  It was needed
+when the priority was `1 / remaining`; it is kept so that the hypotheses and the
+call sites stay as they were. -/
 theorem srtf_runs_shortest_remaining (candidates : List AperiodicProcess)
     (p : AperiodicProcess)
-    (h : selectByPriority (fun p : AperiodicProcess => (1 : ℚ) / p.remaining) candidates = some p)
-    (h_pos : ∀ q ∈ candidates, 0 < q.remaining) :
+    (h : selectByPriority (fun p : AperiodicProcess => -(p.remaining : ℤ)) candidates = some p)
+    (_h_pos : ∀ q ∈ candidates, 0 < q.remaining) :
     ∀ q ∈ candidates, p.remaining ≤ q.remaining := by
-  obtain ⟨hp_mem, h_max⟩ := selectByPriority_spec _ candidates p h
   intro q hq
-  have hp : (0 : ℚ) < p.remaining := by exact_mod_cast h_pos p hp_mem
-  have hq' : (0 : ℚ) < q.remaining := by exact_mod_cast h_pos q hq
-  exact_mod_cast (one_div_le_one_div hq' hp).mp (h_max q hq)
-
-/-- SRTF's priority `1 / remaining` reverses the order on (positive) remaining
-times. -/
-theorem one_div_remaining_lt_iff (a c : ℕ) (ha : 0 < a) (hc : 0 < c) :
-    (1 : ℚ) / a < 1 / c ↔ c < a := by
-  rw [one_div_lt_one_div (by exact_mod_cast ha) (by exact_mod_cast hc)]
-  exact Nat.cast_lt
+  have h_le : -(q.remaining : ℤ) ≤ -(p.remaining : ℤ) :=
+    (selectByPriority_spec _ candidates p h).2 q hq
+  omega
 
 /-- **One SRTF step.** If every job in the system still has work left, then
 after one step that is still true, and the job on the CPU has no more work left
@@ -61,70 +60,14 @@ theorem srtf_step_spec (s : SchedState)
     (∀ q ∈ (stepSRTF s).ready, 0 < q.remaining) ∧
       ∀ p, (stepSRTF s).running = some p →
         0 < p.remaining ∧ ∀ q ∈ (stepSRTF s).ready, p.remaining ≤ q.remaining := by
-  have h_ready : ∀ q ∈ s.ready, 0 < q.remaining :=
-    fun q hq => h_pos q (List.mem_append_left _ hq)
-  -- Dispatching the shortest job `q` of `ready`: it has work left, and what stays
-  -- behind in `ready` still has work left, and at least as much as `q`.
-  have h_dispatch : ∀ q, selectByPriority (fun p : AperiodicProcess => (1 : ℚ) / p.remaining)
-      s.ready = some q →
-      0 < q.remaining ∧ ∀ r ∈ s.ready.erase q, 0 < r.remaining ∧ q.remaining ≤ r.remaining := by
-    intro q hq
-    have h_min := srtf_runs_shortest_remaining _ q hq h_ready
-    exact ⟨h_ready q (selectByPriority_spec _ _ q hq).1, fun r hr =>
-      ⟨h_ready r (List.mem_of_mem_erase hr), h_min r (List.mem_of_mem_erase hr)⟩⟩
-  unfold stepSRTF stepPreemptive
-  rcases hr : s.running with _ | b
-  · -- idle CPU: dispatch the shortest job of `ready`, if any
-    simp only
-    split
-    · exact ⟨h_ready, by simp⟩
-    · rename_i q h_sel
-      obtain ⟨hq_pos, h_rest⟩ := h_dispatch q h_sel
-      refine ⟨fun r hr => (h_rest r hr).1, fun p hp => ?_⟩
-      simp only [Option.some.injEq] at hp
-      subst hp
-      exact ⟨hq_pos, fun r hr => (h_rest r hr).2⟩
-  · have hb_pos : 0 < b.remaining := h_pos b (by simp [hr])
-    simp only [AperiodicProcess.process_tick, AperiodicProcess.process_remaining]
-    split_ifs with h_done
-    · -- `b` finished: dispatch, exactly as from an idle CPU
-      split
-      · exact ⟨h_ready, by simp⟩
-      · rename_i q h_sel
-        obtain ⟨hq_pos, h_rest⟩ := h_dispatch q h_sel
-        refine ⟨fun r hr => (h_rest r hr).1, fun p hp => ?_⟩
-        simp only [Option.some.injEq] at hp
-        subst hp
-        exact ⟨hq_pos, fun r hr => (h_rest r hr).2⟩
-    · -- `b` still has work left after its tick
-      have hb'_pos : 0 < b.remaining - 1 := by omega
-      split
-      · -- nothing is waiting: `b` keeps the CPU
-        rename_i h_sel
-        rw [selectByPriority_eq_none _ _ h_sel]
-        simpa using hb'_pos
-      · rename_i q h_sel
-        obtain ⟨hq_pos, h_rest⟩ := h_dispatch q h_sel
-        have h_min := srtf_runs_shortest_remaining _ q h_sel h_ready
-        split_ifs with h_pre
-        · -- `q` is strictly shorter than `b`: it preempts, `b` rejoins `ready`
-          rw [one_div_remaining_lt_iff _ _ hb'_pos hq_pos] at h_pre
-          refine ⟨fun r hr => ?_, fun p hp => ?_⟩
-          · rcases List.mem_append.mp hr with hr | hr
-            · exact (h_rest r hr).1
-            · simp only [List.mem_singleton] at hr; subst hr; exact hb'_pos
-          · simp only [Option.some.injEq] at hp
-            subst hp
-            refine ⟨hq_pos, fun r hr => ?_⟩
-            rcases List.mem_append.mp hr with hr | hr
-            · exact (h_rest r hr).2
-            · simp only [List.mem_singleton] at hr; subst hr; simp only; omega
-        · -- `b` is no longer than the shortest waiting job `q`: it keeps the CPU
-          rw [one_div_remaining_lt_iff _ _ hb'_pos hq_pos] at h_pre
-          refine ⟨h_ready, fun p hp => ?_⟩
-          simp only [Option.some.injEq] at hp
-          subst hp
-          exact ⟨hb'_pos, fun r hr => by have := h_min r hr; simp only; omega⟩
+  -- both halves are generic facts about `stepPreemptive` (`PreemptiveRuns`)
+  have h_all := (PreemptiveRuns.stepPreemptive_conservesJobs _ :
+    PreemptiveRuns.ConservesJobs stepSRTF).remaining_pos s h_pos
+  refine ⟨fun q hq => h_all q (List.mem_append_left _ hq), fun p hp =>
+    ⟨h_all p (List.mem_append_right _ (Option.mem_toList.mpr hp)), fun q hq => ?_⟩⟩
+  have h_le : -(q.remaining : ℤ) ≤ -(p.remaining : ℤ) :=
+    PreemptiveRuns.stepPreemptive_running_max _ s p hp q hq
+  omega
 
 /-- **SRTF invariant.** On a well-formed stream, at every step every job in the
 system has work left, and the running job has no more work left than any job
@@ -135,26 +78,17 @@ theorem srtf_run_invariant (arrival_stream : ℕ → List AperiodicProcess)
       ∀ p, (runSteps arrival_stream stepSRTF t).running = some p →
         0 < p.remaining ∧
           ∀ q ∈ (runSteps arrival_stream stepSRTF t).ready, p.remaining ≤ q.remaining := by
+  -- both halves are generic run invariants of `stepPreemptive` (`PreemptiveRuns`);
   -- a fresh arrival has work left: its `remaining` is its (positive) burst
-  have h_arr : ∀ t, ∀ q ∈ arrival_stream t, 0 < q.remaining := fun t q hq => by
-    rw [h_wf.fresh q t hq]; exact q.burst_exceed_zero
-  induction t with
-  | zero =>
-    simp only [runSteps]
-    apply srtf_step_spec
-    intro q hq
-    simp only [SchedStateG.init_aperiodic, Option.toList_none, List.append_nil] at hq
-    exact h_arr 0 q hq
-  | succ t ih =>
-    obtain ⟨ih_ready, ih_running⟩ := ih
-    simp only [runSteps]
-    apply srtf_step_spec
-    intro q hq
-    rcases List.mem_append.mp hq with hq | hq
-    · rcases List.mem_append.mp hq with hq | hq
-      · exact ih_ready q hq
-      · exact h_arr _ q hq
-    · exact (ih_running q (Option.mem_toList.mp hq)).1
+  have h_all := PreemptiveRuns.runSteps_remaining_pos
+    (PreemptiveRuns.stepPreemptive_conservesJobs _ : PreemptiveRuns.ConservesJobs stepSRTF) rfl
+    (fun t q hq => by
+      rw [AperiodicProcess.process_remaining, h_wf.fresh q t hq]; exact q.burst_exceed_zero) t
+  refine ⟨fun q hq => h_all q (List.mem_append_left _ hq), fun p hp =>
+    ⟨h_all p (List.mem_append_right _ (Option.mem_toList.mpr hp)), fun q hq => ?_⟩⟩
+  have h_le : -(q.remaining : ℤ) ≤ -(p.remaining : ℤ) :=
+    PreemptiveRuns.runSteps_running_max _ arrival_stream t p hp q hq
+  omega
 
 /-- **SRTF always runs the shortest remaining job**, on every well-formed
 stream and at every step. -/
@@ -193,10 +127,9 @@ theorem srtf_late_convoy_completes (L : ℕ) (hL : 2 < L) :
     refine ⟨?_, ?_, ?_⟩ <;>
       simp [runSteps, stepSRTF, stepPreemptive, selectByPriority, lateConvoyArrivalStream]
   obtain ⟨h_running0, h_ready0, h_completed0⟩ := h0
-  -- Stage 2: the long job uses a tick (`L - 1` left); the short job (priority 1/1)
-  -- outranks it (1/(L-1)), so it preempts, unticked, and the long job rejoins `ready`
-  have h_prio : ((L - 1 : ℕ) : ℚ)⁻¹ < 1 :=
-    inv_lt_one_of_one_lt₀ (by exact_mod_cast (by omega : 1 < L - 1))
+  -- Stage 2: the long job uses a tick (`L - 1` left); the short job (priority -1)
+  -- outranks it (-(L-1)), so it preempts, unticked, and the long job rejoins `ready`
+  have h_prio : 1 < L - 1 := by omega
   have h1 :
       (runSteps (lateConvoyArrivalStream L (by omega)) stepSRTF 1).running =
           some lateShortJob ∧

@@ -8,6 +8,7 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SJFConvoy
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.AperiodicSchedulers.NonPreemptiveLemmas
 import FypSchedulingAlgorithms.ProcessSimpLemmas
+import FypSchedulingAlgorithms.RunStepsLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 
 /-!
@@ -71,25 +72,10 @@ theorem waitFrom_succ (step : SchedState → SchedState) (s : SchedState) (T : �
     Function.iterate_zero_apply]
   congr 2
 
-/-! ### Runs with no arrivals for a while -/
+/-! ### Runs with no arrivals for a while
 
-/-- When nothing arrives at time `t + 1`, run step `t + 1` is just one `step`. -/
-theorem runSteps_succ_of_nil (step : SchedState → SchedState)
-    (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (h : arrival_stream (t + 1) = []) :
-    runSteps arrival_stream step (t + 1) = step (runSteps arrival_stream step t) := by
-  simp [runSteps, h]
-
-/-- When nothing arrives in `(t, t + k]`, the run from time `t` on is `step`
-iterated. -/
-theorem runSteps_add_eq_iterate (step : SchedState → SchedState)
-    (arrival_stream : ℕ → List AperiodicProcess) (t k : ℕ)
-    (h : ∀ j, t < j → j ≤ t + k → arrival_stream j = []) :
-    runSteps arrival_stream step (t + k) = step^[k] (runSteps arrival_stream step t) := by
-  induction k with
-  | zero => rfl
-  | succ k ih =>
-    rw [← Nat.add_assoc, runSteps_succ_of_nil _ _ _ (h _ (by omega) (by omega)),
-      ih (fun j h1 h2 => h j h1 (by omega)), Function.iterate_succ_apply']
+`runSteps_succ_of_nil` and `runSteps_add_eq_iterate` (in `RunStepsLemmas`) turn
+such a run into `step` iterated. -/
 
 /-- **Splitting a run's waiting time.** When nothing arrives in `(t, t + T)`, the
 wait over the first `t + T` steps is the wait up to `t` plus the wait still to
@@ -108,6 +94,15 @@ theorem runWait_add (step : SchedState → SchedState)
   have hk' := List.mem_range.mp hk
   simp only [Function.comp_apply]
   rw [runSteps_add_eq_iterate step arrival_stream t k (fun j h1 h2 => h j h1 (by omega))]
+
+/-- A longer horizon never waits less: `runWait` only adds terms as `T` grows. -/
+theorem runWait_mono (run : (ℕ → List AperiodicProcess) → ℕ → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) {T T' : ℕ} (h : T ≤ T') :
+    runWait run arrival_stream T ≤ runWait run arrival_stream T' := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+  unfold runWait
+  rw [List.range_add, List.map_append, List.sum_append]
+  exact Nat.le_add_right _ _
 
 /-- On a batch nothing arrives after time 0, so each run step is one `step`. -/
 theorem runSteps_batch_succ (step : SchedState → SchedState) (l : List AperiodicProcess)
@@ -136,6 +131,36 @@ theorem runWait_batch_eq_waitFrom (step : SchedState → SchedState) (l : List A
   rw [Nat.zero_add] at this
   rw [this]
   exact Nat.zero_add _
+
+/-! ### Waiting on the instance known at time `t` -/
+
+/-- **Waiting on the known instance.** Over `t + T` steps on the instance known
+at `t`, a run waits what it waited on the stream up to `t`, plus the wait still
+to come once it has made its decision at time `t`. -/
+theorem runWait_knownAt (arrival_stream : ℕ → List AperiodicProcess)
+    (step : SchedState → SchedState) (t T : ℕ) :
+    runWait (runSteps · step) (knownAt arrival_stream t) (t + T) =
+      runWait (runSteps · step) arrival_stream t +
+        waitFrom step (step (stateBefore arrival_stream step t)) T := by
+  rw [runWait_add _ _ t T fun j h _ => knownAt_of_lt arrival_stream h,
+    runSteps_knownAt _ _ le_rfl, runSteps_eq_step_stateBefore]
+  congr 1
+  unfold runWait
+  congr 1
+  refine List.map_congr_left fun k hk => ?_
+  dsimp only
+  rw [runSteps_knownAt _ _ (List.mem_range.mp hk).le]
+
+/-- Two runs that agree before time `t` have waited the same up to `t`. -/
+theorem runWait_eq_of_agree (arrival_stream : ℕ → List AperiodicProcess)
+    {step step' : SchedState → SchedState} {t : ℕ}
+    (h : ∀ k < t, runSteps arrival_stream step k = runSteps arrival_stream step' k) :
+    runWait (runSteps · step) arrival_stream t = runWait (runSteps · step') arrival_stream t := by
+  unfold runWait
+  congr 1
+  refine List.map_congr_left fun k hk => ?_
+  dsimp only
+  rw [h k (List.mem_range.mp hk)]
 
 /-! ## Dispatch order of a non-preemptive policy -/
 
@@ -373,7 +398,9 @@ theorem dispatchOrder_burst_perm
 
 /-- **SJF is optimal on a batch.** Among non-preemptive policies that never idle
 while a job is waiting (`h_none`), none waits less than SJF on a batch released
-at time 0, once the horizon covers the total work. -/
+at time 0, once the horizon covers the total work.  (`OnlineOptimality`
+strengthens this to every horizon and to policies that idle or read the whole
+state, `runWait_sjf_le_online_batch`.) -/
 theorem runWait_sjf_le {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
     (l : List AperiodicProcess) (h_batch : IsBatch l) (T : ℕ) (hT : (l.map (·.burst)).sum ≤ T) :
@@ -438,8 +465,8 @@ theorem hasBatchConvoyEffect_iff_runWait (select : List AperiodicProcess → Opt
 
 A batch with bursts `[5, 1, 3, 2]` (total work 11).  FCFS dispatches it in list
 order and waits `totalWait [5, 1, 3, 2] = 20`; SJF dispatches `[1, 2, 3, 5]` and
-waits 10.  (SRTF also waits 10 on this batch, by `#eval`; `decide` cannot
-evaluate its `ℚ` priorities.) -/
+waits 10.  SRTF also waits 10 on this batch: with nothing arriving later it never
+preempts, so it runs the jobs in SJF order. -/
 
 /-- The sample batch: bursts 5, 1, 3, 2, ids 0..3, all at time 0. -/
 def sampleBatch : List AperiodicProcess :=
@@ -448,6 +475,7 @@ def sampleBatch : List AperiodicProcess :=
 example : runWait (runSteps · stepFCFS) (batchStream sampleBatch) 11 = 20 := by decide
 example : totalWait [5, 1, 3, 2] = 20 := rfl
 example : runWait (runSteps · stepSJF) (batchStream sampleBatch) 11 = 10 := by decide
+example : runWait (runSteps · stepSRTF) (batchStream sampleBatch) 11 = 10 := by decide
 example : totalWait [1, 2, 3, 5] = 10 := rfl
 
 end ConvoyEffect

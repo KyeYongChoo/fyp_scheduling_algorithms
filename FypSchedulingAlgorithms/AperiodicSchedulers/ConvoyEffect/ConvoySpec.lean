@@ -42,12 +42,18 @@ Two related notions:
   cost is visible: for a batch, swapping the two jobs strictly lowers total
   waiting time (`hasBatchConvoyEffect_iff_swap_improves`), and in `RunWait` a
   policy has the batch convoy effect exactly when its run waits strictly longer
-  than SJF's on some batch (`hasBatchConvoyEffect_iff_runWait`).
+  than SJF's on some batch (`hasBatchConvoyEffect_iff_runWait`).  Off batches
+  the cost is in `OnlineOptimality`: at a convoy dispatch of any online
+  non-preemptive run, switching to SJF strictly lowers the wait on the instance
+  known at that moment, over every horizon that outlasts the shorter waiting
+  job's work (`runWait_switchToSJF_lt_of_convoy`).
 * The **online convoy effect** (`HasOnlineConvoyEffect`) is weaker: a shorter
   job waits behind the running one at *any* step, not just at a dispatch.  The
   convoy effect implies it (`hasConvoyEffectRun_imp_online`), but not
   conversely: SJF has the online convoy effect without the convoy effect
-  (`online_convoy_not_imp_convoy`).
+  (`online_convoy_not_imp_convoy`).  Here "online" means "at any step"; it is
+  unrelated to the *online policies* of `OnlineImpossibility`, which are
+  schedulers that cannot see future arrivals.
 
 `remaining` rather than `burst` is the right measure in the run-based notions,
 because a preempted job re-enters the queue with part of its burst done.
@@ -65,7 +71,9 @@ the arrival streams in `ConvoyWitnesses`.  The cost side is in `TotalWait`, and
 a batch run of a non-preemptive policy waits exactly `totalWait` of its dispatch
 order, and `hasBatchConvoyEffect_iff_runWait` restates `HasBatchConvoyEffect` as
 "on some batch, the run waits strictly longer than SJF's".  `OnlineImpossibility`
-shows that no online non-preemptive policy waits least on every stream.
+shows that no online non-preemptive policy waits least on every stream, and
+`OnlineOptimality` that SJF nevertheless waits least given only the past (on
+the instance known so far, against policies with the same past).
 -/
 
 namespace ConvoyEffect

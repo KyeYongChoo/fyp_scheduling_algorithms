@@ -16,7 +16,9 @@ deriving DecidableEq, BEq, ReflBEq, LawfulBEq, Repr
 /-- A periodic task, and also each job it releases.  The task releases a fresh
 job at time 0 and then every `period` ticks (`PeriodicProcess.releasesAt`); a
 released job carries its release time in `arrival` and must finish by
-`arrival + deadline` (a relative deadline). -/
+`arrival + deadline` (a relative deadline), in the sense of
+`PeriodicProcess.missedDeadlines`: it must be finished in the state after step
+`arrival + deadline`. -/
 structure PeriodicProcess where
   id        : Nat
   arrival   : Nat -- release time of this job (overwritten at each release)
@@ -27,7 +29,7 @@ structure PeriodicProcess where
   burst_exceed_zero : burst > 0
   -- Add `valid` back in if turns out the inequalities are useful in the proof
   -- valid     : 0 < burst ∧ remaining ≤ burst ∧ burst ≤ deadline ∧ deadline ≤ period
-deriving BEq, Repr
+deriving DecidableEq, BEq, ReflBEq, LawfulBEq, Repr
 
 -- #eval PeriodicProcess.mk 1 0 10 5 7 5 (by omega) ⟨by omega, by omega, by omega, by omega⟩
 
@@ -41,6 +43,8 @@ class Process (α : Type) extends BEq α where
   ticksUsed     : α → Nat
   tick          : α → α
   deadline_info : α → String
+  -- How a job is printed in the sample-schedule CSVs
+  label         : α → String
   -- Let arrival stream be a function that takes time as argument and returns list of arriving processes
   convert_to_arrival_stream : List α → Nat → List α
   tick_decrements : ∀ p, remaining (tick p) = remaining p - 1
@@ -56,6 +60,7 @@ instance : Process AperiodicProcess where
   ticksUsed p := p.burst - p.remaining
   tick p := {p with remaining := p.remaining - 1}
   deadline_info _ := ""
+  label p := toString p.id
   convert_to_arrival_stream original_process_list :=
     fun current_time =>
       original_process_list.filter (fun p => current_time = p.arrival)
@@ -81,6 +86,8 @@ instance : Process PeriodicProcess where
   ticksUsed p := p.burst - p.remaining
   tick p := {p with remaining := p.remaining - 1}
   deadline_info p := s!"d{p.deadline + p.arrival}"
+  -- task id and release time, so the jobs of one task can be told apart
+  label p := s!"{p.id}@{p.arrival}"
   convert_to_arrival_stream := PeriodicProcess.releasesAt
   tick_decrements _p := rfl
   id_invariant_wrt_tick _p := rfl
