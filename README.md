@@ -60,9 +60,17 @@ list of processes passed to `Process.convert_to_arrival_stream`; periodic task l
 it in `writeSampleSchedules` in `SampleSchedulesGen.lean` (the `subdir` argument picks the
 folder under `SampleSchedules/`), and run `lake build`.
 
-## TODO
+## Periodic results at a glance
 
-Try to show optimality of EDF compared to RMS
+EDF is optimal (`Periodic.edf_optimal`), Deadline Monotonic and Rate Monotonic are optimal
+among fixed-priority assignments with distinct priorities per task
+(`Periodic.fixedPriority_optimal`, `Periodic.dm_optimal`, `Periodic.rm_optimal`), and EDF
+dominates every preemptive priority scheduler, strictly on `rmsFailsEdfSucceeds`
+(`Periodic.edf_dominates`, `Periodic.edf_beats_rms_rmsFails`). Details under
+"Algorithm-Specific Optimality Properties" below. All of them use the miss rule of the CSVs
+above: a job released at `r` with relative deadline `D` gets the `D` ticks of steps
+`r+1 … r+D`, and is late iff it is still unfinished after step `r + D`
+(`PeriodicProcess.missedDeadlines`).
 
 ## List of scheduling properties:
 
@@ -107,6 +115,12 @@ Proved for batches (`IsBatch`: fresh jobs with distinct ids, all released at tim
 Proved: `ConvoyEffect.srtfMinimisesWait` (SRTFOptimality.lean). On every well-formed stream without repeats (`NoRepeats`), at every horizon, SRTF's total waiting time is at most that of any admissible schedule, preemptive or not, online or clairvoyant. This is in the discrete tick model with no context-switch cost, and optimality is weak (`≤`). Corollaries: SRTF waits no longer than any online non-preemptive policy (`ConvoyEffect.srtf_le_onlineRun`) or any job-conserving step function (`ConvoyEffect.srtf_le_runWait_of_conservesJobs`); Round Robin is not covered.
 
 #### EDF is optimal for single-processor deadline scheduling — if any algorithm can meet all deadlines, EDF can. The proof is a classic exchange argument; very doable to formalize.
+
+Proved: `Periodic.edf_optimal` (PeriodicSchedulers/EDFOptimality.lean). On every periodic task set with distinct task ids, if the run of `stepEDF` lists a missed deadline after step `t`, then every admissible schedule (preemptive or not, idling or not, online or clairvoyant) is late at `t`; so if any admissible schedule meets every deadline, EDF does (`Periodic.edf_never_late_of_exists`). Deadlines may exceed periods. The proof is not an exchange argument but a majorisation of the work still owed by jobs with deadline at most `d`, as for SRTF. It is in the discrete tick model with no context-switch cost and the miss rule above (the textbook discrete model shifted by one tick of dispatch latency). Corollaries (PeriodicSchedulers/PeriodicWitnesses.lean): EDF dominates every preemptive priority scheduler, fixed or not (`Periodic.edf_dominates`; `Periodic.edf_dominates_rms`, `Periodic.edf_dominates_dm`). The gap is strict on `SampleTaskSets.rmsFailsEdfSucceeds`: `stepRMS` misses a deadline after step 7 (`Periodic.rms_misses_rmsFails`), `stepEDF` never misses at any step (`Periodic.edf_never_misses_rmsFails`; one hyperperiod checked by `decide`, after which the run repeats, PeriodicSchedulers/Hyperperiod.lean), and no fixed-priority assignment with distinct priorities per task meets every deadline there (`Periodic.no_strict_fixedPriority_rmsFails`).
+
+#### Deadline Monotonic and Rate Monotonic are optimal among fixed-priority assignments — for synchronous tasks with constrained deadlines (D ≤ T), if some fixed-priority assignment with distinct priorities per task meets every deadline, DM does; with D = T, RM does.
+
+Proved: `Periodic.fixedPriority_optimal` (PeriodicSchedulers/FixedPriorityOptimality.lean; Leung and Whitehead 1982). Let `f` and `g` be fixed priorities (`Periodic.FixedPriority`: a job's priority is its task's), `f` strict on the tasks (distinct priorities per task), `g`'s level sets deadline-closed, and `D ≤ T` for every task with a positive period (a task with period 0 releases one job). If the run of `stepPreemptive f` never lists a missed deadline, neither does the run of `stepPreemptive g`. Corollaries: `Periodic.dm_optimal` for `stepDM`, and `Periodic.rm_optimal` for `stepRMS` when `D = T` (Liu and Layland 1973). First-job tests: with distinct relative deadlines (resp. distinct periods and `D = T`), `stepDM` (resp. `stepRMS`) never misses a deadline iff every task's first job meets its deadline (`Periodic.dm_firstJob_test`, `Periodic.rm_firstJob_test`); for example RMS never misses on `rmsSucceedsEdfSucceeds` (`Periodic.rms_never_misses_rmsSucceeds`). The proof goes through the level backlog of a set of tasks (PeriodicSchedulers/FixedPriorityBacklog.lean) and a busy-period bound: the synchronous busy period from time 0 dominates every other; there is no swap argument and no general critical-instant theorem. Scope: `stepPreemptive` breaks priority ties dynamically (the running job keeps the CPU, the queue is FIFO), so a priority function with ties is not a classical fixed-priority assignment and can do better. On `rmsFailsEdfSucceeds` both strict orders miss a deadline while the constant priority never does (`Periodic.tied_priority_never_misses_rmsFails`); hence the "distinct priorities per task" in the comparison class, and the distinct-deadline / distinct-period hypotheses of the first-job tests.
 
 #### Round Robin convergence — with quantum Q → 0, RR approaches Processor Sharing, where each process gets an equal instantaneous fraction of the CPU. A limit argument.
 
