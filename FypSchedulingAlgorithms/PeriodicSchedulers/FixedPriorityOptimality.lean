@@ -6,11 +6,12 @@ Authors: Choo Kye Yong
 import FypSchedulingAlgorithms.PeriodicSchedulers.FixedPriorityBacklog
 
 /-!
-# Deadline Monotonic and Rate Monotonic are optimal among fixed priorities
+# Deadline Monotonic and Rate Monotonic are optimal among fixed-priority assignments
 
 Leung and Whitehead (1982): for synchronous periodic tasks with constrained deadlines
-(`D ≤ T`), if some fixed-priority assignment meets every deadline, Deadline Monotonic does.
-Liu and Layland (1973): with `D = T`, Rate Monotonic does.
+(`D ≤ T`), if some fixed-priority assignment (distinct priorities per task) meets every
+deadline, Deadline Monotonic does.  Liu and Layland (1973): with `D = T`, Rate Monotonic
+does.
 
 **Statement.**  Let `f` and `g` be fixed priorities (`FixedPriority`), with `f` strict on
 the tasks (distinct tasks have distinct priorities) and `g`'s level sets deadline-closed
@@ -30,6 +31,14 @@ the `D` ticks of steps `r+1 … r+D`).  Synchronous releases (`PeriodicProcess.r
 distinct task ids, `f` strict, and `D ≤ T` for every task with a positive period.  A task
 with period 0 releases a single job at time 0 and needs no bound on its deadline; positive
 periods are not needed anywhere.
+
+**Ties.**  The comparison class is the strict fixed priorities: distinct priorities per
+task (`h_strict`).  `stepPreemptive` breaks ties dynamically (the running job keeps the
+CPU, the ready queue is FIFO), so a priority function with ties satisfies
+`FixedPriority` but is not a classical fixed-priority assignment, and it can do better:
+on `SampleTaskSets.rmsFailsEdfSucceeds` both strict orders miss a deadline, while the
+constant priority never does (`tied_priority_never_misses_rmsFails`, in
+`PeriodicWitnesses`).  DM and RM themselves may have ties where they play `g`.
 
 **How.**  Everything goes through the level backlog of `FixedPriorityBacklog` (R1–R3) and
 two more facts:
@@ -153,13 +162,6 @@ theorem levelRel_eq (t : ℕ) :
   | cons τ L ih =>
     by_cases h1 : t % τ.period = 0 <;> by_cases h2 : S τ.id <;>
       simp_all
-
-/-- A sum of sums, mapped. -/
-theorem sum_map_add_eq {α : Type} (l : List α) (f g : α → ℕ) :
-    (l.map fun x => f x + g x).sum = (l.map f).sum + (l.map g).sum := by
-  induction l with
-  | nil => rfl
-  | cons x xs ih => simp only [List.map_cons, List.sum_cons, ih]; omega
 
 /-- The work released by `S` at the times `a, …, a + n - 1`. -/
 def window (a n : ℕ) : ℕ :=

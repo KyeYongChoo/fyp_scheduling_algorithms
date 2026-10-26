@@ -22,7 +22,8 @@ General facts about lists: their statements mention nothing about scheduling
   (`dispatch_preserves`, `expire_swap_preserves`).
 * Sums of lists of naturals: termwise bounds on mapped sums
   (`sum_map_le_sum_map`, `sum_map_lt_sum_map`, `sum_map_const_add`), filtered
-  sums grow with the filter (`sum_map_filter_le_of_imp`), a nonempty list has an
+  sums grow with the filter (`sum_map_filter_le_of_imp`), mapped sums add
+  (`sum_map_add_eq`), a nonempty list has an
   entry of least image (`exists_min_image_of_ne_nil`), and sorted
   order has the least prefix sums among the list's permutations
   (`sum_take_sorted_le`).
@@ -137,6 +138,13 @@ theorem sum_map_const_add {α : Type} (l : List α) (c : ℕ) (f : α → ℕ) :
   induction l with
   | nil => simp
   | cons x l ih => simp only [List.map_cons, List.sum_cons, ih, List.length_cons]; ring
+
+/-- A mapped sum of sums is the sum of the mapped sums. -/
+theorem sum_map_add_eq {α : Type} (l : List α) (f g : α → ℕ) :
+    (l.map fun x => f x + g x).sum = (l.map f).sum + (l.map g).sum := by
+  induction l with
+  | nil => rfl
+  | cons x xs ih => simp only [List.map_cons, List.sum_cons, ih]; omega
 
 /-- A nonempty list has an entry of least image. -/
 theorem exists_min_image_of_ne_nil {α β : Type} [LinearOrder β] (l : List α) (f : α → β)
