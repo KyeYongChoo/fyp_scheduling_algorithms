@@ -111,16 +111,13 @@ theorem no_strict_fixedPriority_rmsFails {f : PeriodicProcess → ℤ} (hf : Fix
 /-- **A tied priority can beat every strict one**: the constant priority never misses a
 deadline on `rmsFailsEdfSucceeds`, at any step (first hyperperiod by `decide`, then
 `missedDeadlines_eq_nil_of_hyperperiod`).  It satisfies `FixedPriority` but is not strict,
-so `rm_optimal` does not apply to it. -/
+so `rm_optimal` does not apply to it (`fixedPriority_const`). -/
 theorem tied_priority_never_misses_rmsFails (t : ℕ) :
     PeriodicProcess.missedDeadlines
       (runSteps (PeriodicProcess.releasesAt rmsFailsEdfSucceeds)
         (stepPreemptive PeriodicProcess (fun _ => 0)) t) = [] :=
   missedDeadlines_eq_nil_of_hyperperiod _ (n := 34) (fun _ _ => Iff.rfl)
     (by decide) (by decide) (by decide) (by decide) t
-
-/-- The constant priority is a fixed priority. -/
-theorem fixedPriority_const (c : ℤ) : FixedPriority (fun _ => c) := fun _ _ _ => rfl
 
 /-! ## RMS never misses on `rmsSucceedsEdfSucceeds` -/
 

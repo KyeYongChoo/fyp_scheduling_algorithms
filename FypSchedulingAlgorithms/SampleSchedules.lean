@@ -14,10 +14,11 @@ import Std.Data.String
 
 The file defines sample process sets and the CSV rendering of a run, so the user can check
 that the scheduling algorithms behave as intended.  The periodic task lists themselves are in
-`PeriodicSchedulers/SampleTaskSets.lean`, in the proof library, so theorems can use them.  Nothing here writes files: the CSVs in
-`SampleSchedules/` are written by `writeSampleSchedules` in `SampleSchedulesGen.lean`, which
-`lake build` elaborates whenever this file or a scheduler changes (manual fallback:
-`lake env lean SampleSchedulesGen.lean` from the repository root).
+`PeriodicSchedulers/SampleTaskSets.lean`, in the proof library, so theorems can use them.
+Nothing here writes files: the CSVs in `SampleSchedules/` are written by
+`writeSampleSchedules` in `SampleSchedulesGen.lean`, which `lake build` elaborates whenever
+this file or a scheduler changes (manual fallback: `lake env lean SampleSchedulesGen.lean`
+from the repository root).
 -/
 
 -- # Sample data

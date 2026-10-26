@@ -66,6 +66,9 @@ theorem fixedPriority_dm : FixedPriority (fun p => -(p.deadline : ℤ)) := fun _
 /-- Any priority given per task id is fixed. -/
 theorem fixedPriority_of_id (π : ℕ → ℤ) : FixedPriority (fun p => π p.id) := fun _ _ _ => rfl
 
+/-- A constant priority is fixed (it ties every pair of tasks). -/
+theorem fixedPriority_const (c : ℤ) : FixedPriority (fun _ => c) := fun _ _ _ => rfl
+
 /-- EDF priorities are not fixed: they depend on the release time. -/
 theorem not_fixedPriority_edf :
     ¬ FixedPriority (fun p => -((p.arrival + p.deadline : ℕ) : ℤ)) := by
