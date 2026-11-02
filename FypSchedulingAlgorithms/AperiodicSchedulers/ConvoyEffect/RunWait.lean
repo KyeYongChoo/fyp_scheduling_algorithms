@@ -26,7 +26,7 @@ to actual executions.
 * `dispatchOrder select l` is the order in which a non-preemptive policy
   dispatches a batch `l`: ask `select`, remove its choice, repeat.  It is a
   permutation of `l` (`dispatchOrder_perm`).
-* **The bridge** (`runWait_batch_eq_totalWait`): releasing a batch at time 0,
+* **The bridge** (`runWait_allArrivalsAtZero_eq_totalWait`): releasing a batch at time 0,
   the run of `stepNonPreemptive select` waits exactly
   `totalWait` of the bursts in dispatch order, once it has run long enough to
   finish everything.
@@ -37,8 +37,8 @@ fresh jobs `R` wait, the wait still to come is `r * R.length` plus `totalWait`
 of `R` in dispatch order.
 
 Combined with `totalWait_sorted_le` (shortest first is optimal) this gives a
-run-level characterisation of the batch convoy effect
-(`hasBatchConvoyEffect_iff_runWait`): a policy has it exactly when, on some batch,
+run-level characterisation of the convoy effect on all arrivals at zero
+(`hasConvoyEffectAllArrivalsAtZero_iff_runWait`): a policy has it exactly when, on some batch,
 its run waits strictly longer than SJF's.
 -/
 
@@ -58,10 +58,10 @@ definition), for any scheduler, preemptive or not.
 The count is cut off at the horizon: waiting after step `T - 1` is not counted, so a
 job still queued then has only part of its wait counted.  `runWait` never decreases
 as `T` grows (`runWait_mono`), and stops growing once the run has drained, with
-nothing waiting and nothing more to arrive (`runWait_online_eq_of_drained`).  So
+nothing waiting and nothing more to arrive (`runWait_stateSelect_eq_of_drained`).  So
 every comparison of schedulers says at which horizons it holds: at every `T`, once
-`T` covers the total work (`runWait_batch_eq_totalWait`), or from some threshold on
-(`T ≥ 4` in `OnlineImpossibility`). -/
+`T` covers the total work (`runWait_allArrivalsAtZero_eq_totalWait`), or from some threshold on
+(`T ≥ 4` in `NoOptimalNonPreemptiveOnEveryStream`). -/
 def runWait (run : (ℕ → List AperiodicProcess) → ℕ → SchedState)
     (arrival_stream : ℕ → List AperiodicProcess) (T : ℕ) : ℕ :=
   ((List.range T).map fun t => (run arrival_stream t).ready.length).sum
@@ -115,29 +115,35 @@ theorem runWait_mono (run : (ℕ → List AperiodicProcess) → ℕ → SchedSta
   exact Nat.le_add_right _ _
 
 /-- On a batch nothing arrives after time 0, so each run step is one `step`. -/
-theorem runSteps_batch_succ (step : SchedState → SchedState) (l : List AperiodicProcess)
-    (t : ℕ) : runSteps (batchStream l) step (t + 1) = step (runSteps (batchStream l) step t) :=
+theorem runSteps_allArrivalsAtZero_succ (step : SchedState → SchedState) (l : List AperiodicProcess)
+    (t : ℕ) :
+    runSteps (allArrivalsAtZeroStream l) step (t + 1) =
+      step (runSteps (allArrivalsAtZeroStream l) step t) :=
   runSteps_succ_of_nil step _ t rfl
 
 /-- After time 0 a batch stream is empty. -/
-theorem batchStream_succ (l : List AperiodicProcess) (j : ℕ) (hj : 0 < j) :
-    batchStream l j = [] := by
+theorem allArrivalsAtZeroStream_succ (l : List AperiodicProcess) (j : ℕ) (hj : 0 < j) :
+    allArrivalsAtZeroStream l j = [] := by
   obtain ⟨i, rfl⟩ : ∃ i, j = i + 1 := ⟨j - 1, by omega⟩
   rfl
 
 /-- On a batch, the run is `step` iterated from the state after step 0. -/
-theorem runSteps_batch_eq_iterate (step : SchedState → SchedState) (l : List AperiodicProcess)
-    (t : ℕ) : runSteps (batchStream l) step t = step^[t] (runSteps (batchStream l) step 0) := by
-  have := runSteps_add_eq_iterate step (batchStream l) 0 t
-    (fun j h1 _ => batchStream_succ l j h1)
+theorem runSteps_allArrivalsAtZero_eq_iterate (step : SchedState → SchedState)
+    (l : List AperiodicProcess) (t : ℕ) :
+    runSteps (allArrivalsAtZeroStream l) step t =
+      step^[t] (runSteps (allArrivalsAtZeroStream l) step 0) := by
+  have := runSteps_add_eq_iterate step (allArrivalsAtZeroStream l) 0 t
+    (fun j h1 _ => allArrivalsAtZeroStream_succ l j h1)
   rwa [Nat.zero_add] at this
 
 /-- On a batch, the run's waiting time is the wait from the state after step 0. -/
-theorem runWait_batch_eq_waitFrom (step : SchedState → SchedState) (l : List AperiodicProcess)
+theorem runWait_allArrivalsAtZero_eq_waitFrom (step : SchedState → SchedState)
+    (l : List AperiodicProcess)
     (T : ℕ) :
-    runWait (fun arrival_stream => runSteps arrival_stream step) (batchStream l) T =
-      waitFrom step (runSteps (batchStream l) step 0) T := by
-  have := runWait_add step (batchStream l) 0 T (fun j h1 _ => batchStream_succ l j h1)
+    runWait (fun arrival_stream => runSteps arrival_stream step) (allArrivalsAtZeroStream l) T =
+      waitFrom step (runSteps (allArrivalsAtZeroStream l) step 0) T := by
+  have := runWait_add step (allArrivalsAtZeroStream l) 0 T
+    (fun j h1 _ => allArrivalsAtZeroStream_succ l j h1)
   rw [Nat.zero_add] at this
   rw [this]
   exact Nat.zero_add _
@@ -262,13 +268,14 @@ theorem dispatchOrder_sorted_of_min {select : List AperiodicProcess → Option A
 batch in non-decreasing order of burst. -/
 theorem dispatchOrder_sorted {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
-    (h_short : RunsShortestProcessBatch select) (l : List AperiodicProcess) (h_batch : IsBatch l) :
+    (h_short : RunsShortestAllArrivalsAtZero select) (l : List AperiodicProcess)
+    (h_atZero : AllArrivalsAtZero l) :
     ((dispatchOrder select l).map (·.burst)).Pairwise (· ≤ ·) :=
   -- what is left of a batch is again a batch
-  dispatchOrder_sorted_on h_mem h_none IsBatch
-    (fun _ _ h_batch => ⟨fun q hq => h_batch.1 q (List.mem_of_mem_erase hq),
-      h_batch.2.sublist ((List.erase_sublist).map _)⟩)
-    (fun l h_batch p h => h_short l h_batch p (h_mem l p h) h) l h_batch
+  dispatchOrder_sorted_on h_mem h_none AllArrivalsAtZero
+    (fun _ _ h_atZero => ⟨fun q hq => h_atZero.1 q (List.mem_of_mem_erase hq),
+      h_atZero.2.sublist ((List.erase_sublist).map _)⟩)
+    (fun l h_atZero p h => h_short l h_atZero p (h_mem l p h) h) l h_atZero
 
 /-- Taking a job out of a batch takes its burst out of the total work. -/
 theorem sum_map_erase (f : AperiodicProcess → ℕ) {l : List AperiodicProcess}
@@ -356,16 +363,17 @@ theorem waitFrom_drain {select : List AperiodicProcess → Option AperiodicProce
 of untouched jobs at time 0 and run `stepNonPreemptive select`; once the
 horizon covers the total work, the run's waiting time is `totalWait` of the
 bursts in the order the policy dispatches them. -/
-theorem runWait_batch_eq_totalWait {select : List AperiodicProcess → Option AperiodicProcess}
+theorem runWait_allArrivalsAtZero_eq_totalWait
+    {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
     (l : List AperiodicProcess) (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (T : ℕ)
     (hT : (l.map (·.burst)).sum ≤ T) :
     runWait (fun arrival_stream => runSteps arrival_stream (stepNonPreemptive select))
-        (batchStream l) T =
+        (allArrivalsAtZeroStream l) T =
       totalWait ((dispatchOrder select l).map (·.burst)) := by
-  rw [runWait_batch_eq_waitFrom]
+  rw [runWait_allArrivalsAtZero_eq_waitFrom]
   -- step 0 starts from an idle CPU with the whole batch waiting
-  have h0 : runSteps (batchStream l) (stepNonPreemptive select) 0 =
+  have h0 : runSteps (allArrivalsAtZeroStream l) (stepNonPreemptive select) 0 =
       stepNonPreemptive select { SchedStateMethods.init with ready := l } := rfl
   cases h_sel : select l with
   | none =>
@@ -391,12 +399,13 @@ theorem runWait_batch_eq_totalWait {select : List AperiodicProcess → Option Ap
 
 /-- SJF's run on a batch waits `totalWait` of its dispatch order, which lists the
 bursts in non-decreasing order. -/
-theorem runWait_sjf_batch (l : List AperiodicProcess) (h_batch : IsBatch l) (T : ℕ)
+theorem runWait_sjf_allArrivalsAtZero (l : List AperiodicProcess)
+    (h_atZero : AllArrivalsAtZero l) (T : ℕ)
     (hT : (l.map (·.burst)).sum ≤ T) :
-    runWait (runSteps · stepSJF) (batchStream l) T =
+    runWait (runSteps · stepSJF) (allArrivalsAtZeroStream l) T =
       totalWait ((dispatchOrder selectSJF l).map (·.burst)) :=
-  runWait_batch_eq_totalWait selectSJF_mem selectSJF_none_imp_empty l
-    (fun p hp => (h_batch.1 p hp).2) T hT
+  runWait_allArrivalsAtZero_eq_totalWait selectSJF_mem selectSJF_none_imp_empty l
+    (fun p hp => (h_atZero.1 p hp).2) T hT
 
 /-- Two policies dispatch a batch in orders that are permutations of each other. -/
 theorem dispatchOrder_burst_perm
@@ -409,22 +418,23 @@ theorem dispatchOrder_burst_perm
 
 /-- **SJF is optimal on a batch.** Among non-preemptive policies that never idle
 while a job is waiting (`h_none`), none waits less than SJF on a batch released
-at time 0, once the horizon covers the total work.  (`OnlineOptimality`
+at time 0, once the horizon covers the total work.  (`SJFOptimalityGivenSamePast`
 strengthens this to every horizon and to policies that idle or read the whole
-state, `runWait_sjf_le_online_batch`.) -/
+state, `runWait_sjf_le_stateSelect_allArrivalsAtZero`.) -/
 theorem runWait_sjf_le {select : List AperiodicProcess → Option AperiodicProcess}
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
-    (l : List AperiodicProcess) (h_batch : IsBatch l) (T : ℕ) (hT : (l.map (·.burst)).sum ≤ T) :
-    runWait (runSteps · stepSJF) (batchStream l) T ≤
-      runWait (runSteps · (stepNonPreemptive select)) (batchStream l) T := by
-  rw [runWait_sjf_batch l h_batch T hT,
-    runWait_batch_eq_totalWait h_mem h_none l (fun p hp => (h_batch.1 p hp).2) T hT]
+    (l : List AperiodicProcess) (h_atZero : AllArrivalsAtZero l) (T : ℕ)
+    (hT : (l.map (·.burst)).sum ≤ T) :
+    runWait (runSteps · stepSJF) (allArrivalsAtZeroStream l) T ≤
+      runWait (runSteps · (stepNonPreemptive select)) (allArrivalsAtZeroStream l) T := by
+  rw [runWait_sjf_allArrivalsAtZero l h_atZero T hT,
+    runWait_allArrivalsAtZero_eq_totalWait h_mem h_none l (fun p hp => (h_atZero.1 p hp).2) T hT]
   exact totalWait_sorted_le
     (dispatchOrder_sorted_of_min selectSJF_mem selectSJF_none_imp_empty selectSJF_min l)
     (dispatchOrder_burst_perm selectSJF_mem selectSJF_none_imp_empty h_mem h_none l)
 
-/-- **The batch convoy effect, measured on runs.** A non-preemptive policy has the
-batch convoy effect exactly when, on some batch released at time 0, its run
+/-- **The convoy effect on all arrivals at zero, measured on runs.** A non-preemptive policy has the
+convoy effect on all arrivals at zero exactly when, on some batch released at time 0, its run
 waits strictly longer than SJF's, over the time it takes to finish the batch.
 
 (→) it passes over a shorter job `q` for `p`; swapping them in its dispatch
@@ -433,23 +443,27 @@ order is no worse than the swapped one (`totalWait_sorted_le`).
 (←) a policy that always picks a shortest job dispatches every batch in sorted
 order, and the sorted permutation of a list of bursts is unique, so its run
 waits exactly as long as SJF's. -/
-theorem hasBatchConvoyEffect_iff_runWait (select : List AperiodicProcess → Option AperiodicProcess)
+theorem hasConvoyEffectAllArrivalsAtZero_iff_runWait
+    (select : List AperiodicProcess → Option AperiodicProcess)
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = []) :
-    HasBatchConvoyEffect select ↔ ∃ l, IsBatch l ∧
-      runWait (runSteps · stepSJF) (batchStream l) (l.map (·.burst)).sum <
-        runWait (runSteps · (stepNonPreemptive select)) (batchStream l) (l.map (·.burst)).sum := by
-  have h_sel : ∀ l, IsBatch l →
-      runWait (runSteps · (stepNonPreemptive select)) (batchStream l) (l.map (·.burst)).sum =
-        totalWait ((dispatchOrder select l).map (·.burst)) := fun l h_batch =>
-    runWait_batch_eq_totalWait h_mem h_none l (fun p hp => (h_batch.1 p hp).2) _ le_rfl
+    HasConvoyEffectAllArrivalsAtZero select ↔ ∃ l, AllArrivalsAtZero l ∧
+      runWait (runSteps · stepSJF) (allArrivalsAtZeroStream l) (l.map (·.burst)).sum <
+        runWait (runSteps · (stepNonPreemptive select)) (allArrivalsAtZeroStream l)
+          (l.map (·.burst)).sum := by
+  have h_sel : ∀ l, AllArrivalsAtZero l →
+      runWait (runSteps · (stepNonPreemptive select)) (allArrivalsAtZeroStream l)
+          (l.map (·.burst)).sum =
+        totalWait ((dispatchOrder select l).map (·.burst)) := fun l h_atZero =>
+    runWait_allArrivalsAtZero_eq_totalWait h_mem h_none l (fun p hp => (h_atZero.1 p hp).2) _ le_rfl
   have h_perm := dispatchOrder_burst_perm selectSJF_mem selectSJF_none_imp_empty h_mem h_none
-  have h_sjf_sorted := fun l (_ : IsBatch l) =>
+  have h_sjf_sorted := fun l (_ : AllArrivalsAtZero l) =>
     dispatchOrder_sorted_of_min selectSJF_mem selectSJF_none_imp_empty selectSJF_min l
   constructor
   · intro h
-    obtain ⟨l, h_batch, p, hp, h_p, q, hq, h_lt⟩ := (hasBatchConvoyEffect_iff select).mp h
-    refine ⟨l, h_batch, ?_⟩
-    rw [runWait_sjf_batch l h_batch _ le_rfl, h_sel l h_batch]
+    obtain ⟨l, h_atZero, p, hp, h_p, q, hq, h_lt⟩ :=
+      (hasConvoyEffectAllArrivalsAtZero_iff select).mp h
+    refine ⟨l, h_atZero, ?_⟩
+    rw [runWait_sjf_allArrivalsAtZero l h_atZero _ le_rfl, h_sel l h_atZero]
     -- `q` is dispatched somewhere after `p`
     have h_ne : q ≠ p := fun h_eq => by subst h_eq; omega
     have hq' : q.burst ∈ (dispatchOrder select (l.erase p)).map (·.burst) :=
@@ -462,15 +476,15 @@ theorem hasBatchConvoyEffect_iff_runWait (select : List AperiodicProcess → Opt
     rw [h_order]
     calc totalWait ((dispatchOrder selectSJF l).map (·.burst))
         ≤ totalWait (q.burst :: (mid ++ p.burst :: post)) :=
-          totalWait_sorted_le (h_sjf_sorted l h_batch)
+          totalWait_sorted_le (h_sjf_sorted l h_atZero)
             ((h_perm l).trans (h_order ▸ perm_swap_far p.burst q.burst mid post))
       _ < totalWait (p.burst :: (mid ++ q.burst :: post)) := totalWait_swap_far_lt mid post h_lt
-  · rintro ⟨l, h_batch, h_lt⟩
+  · rintro ⟨l, h_atZero, h_lt⟩
     by_contra h_no
-    have h_short : RunsShortestProcessBatch select := Classical.not_not.mp h_no
-    rw [runWait_sjf_batch l h_batch _ le_rfl, h_sel l h_batch,
-      List.Perm.eq_of_pairwise (fun _ _ _ _ => Nat.le_antisymm) (h_sjf_sorted l h_batch)
-        (dispatchOrder_sorted h_mem h_none h_short l h_batch) (h_perm l)] at h_lt
+    have h_short : RunsShortestAllArrivalsAtZero select := Classical.not_not.mp h_no
+    rw [runWait_sjf_allArrivalsAtZero l h_atZero _ le_rfl, h_sel l h_atZero,
+      List.Perm.eq_of_pairwise (fun _ _ _ _ => Nat.le_antisymm) (h_sjf_sorted l h_atZero)
+        (dispatchOrder_sorted h_mem h_none h_short l h_atZero) (h_perm l)] at h_lt
     exact lt_irrefl _ h_lt
 
 /-! ## Sanity check
@@ -481,13 +495,19 @@ waits 10.  SRTF also waits 10 on this batch: with nothing arriving later it neve
 preempts, so it runs the jobs in SJF order. -/
 
 /-- The sample batch: bursts 5, 1, 3, 2, ids 0..3, all at time 0. -/
-def sampleBatch : List AperiodicProcess :=
+def sampleAllArrivalsAtZero : List AperiodicProcess :=
   [⟨0, 0, 5, 5, by omega⟩, ⟨1, 0, 1, 1, by omega⟩, ⟨2, 0, 3, 3, by omega⟩, ⟨3, 0, 2, 2, by omega⟩]
 
-example : runWait (runSteps · stepFCFS) (batchStream sampleBatch) 11 = 20 := by decide
+example :
+    runWait (runSteps · stepFCFS) (allArrivalsAtZeroStream sampleAllArrivalsAtZero) 11 = 20 := by
+  decide
 example : totalWait [5, 1, 3, 2] = 20 := rfl
-example : runWait (runSteps · stepSJF) (batchStream sampleBatch) 11 = 10 := by decide
-example : runWait (runSteps · stepSRTF) (batchStream sampleBatch) 11 = 10 := by decide
+example :
+    runWait (runSteps · stepSJF) (allArrivalsAtZeroStream sampleAllArrivalsAtZero) 11 = 10 := by
+  decide
+example :
+    runWait (runSteps · stepSRTF) (allArrivalsAtZeroStream sampleAllArrivalsAtZero) 11 = 10 := by
+  decide
 example : totalWait [1, 2, 3, 5] = 10 := rfl
 
 end ConvoyEffect

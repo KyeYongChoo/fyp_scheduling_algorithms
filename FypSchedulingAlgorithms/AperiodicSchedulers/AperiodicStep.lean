@@ -136,7 +136,7 @@ def stepFCFS : SchedState → SchedState :=
 /-- **SJF** selection: a job of least `burst` in the queue; among equal bursts the one
 nearest the front wins (a later job replaces the best so far only if it is strictly
 shorter).  It compares `burst`, not `remaining`; in a non-preemptive run the two agree
-for every waiting job (`nonPreemptiveOnline_ready_fresh`). -/
+for every waiting job (`nonPreemptiveStateSelect_ready_fresh`). -/
 def selectSJF : List AperiodicProcess → Option AperiodicProcess :=
   fun ps =>
     ps.foldl (fun best p =>

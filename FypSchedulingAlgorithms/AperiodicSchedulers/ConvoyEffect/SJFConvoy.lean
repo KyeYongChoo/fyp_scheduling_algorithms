@@ -11,22 +11,22 @@ import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 
 /-!
-# SJF has no convoy effect -- but still pays for non-preemption
+# SJF has no convoy effect at some dispatch -- but still pays for non-preemption
 
 SJF always dispatches a job of least burst in the ready queue (`selectSJF_min`),
 and in a non-preemptive run the waiting jobs are untouched, so their burst is
 their remaining work.  So at every dispatch, on every well-formed stream, SJF
-runs a shortest job: it has no convoy effect (`sjf_not_hasConvoyEffect`), and in
-particular no batch convoy effect (`sjf_not_hasBatchConvoyEffect`).  The
-argument works for any non-preemptive policy that always picks a shortest job,
+runs a shortest job: it has no convoy effect (`sjf_not_hasConvoyEffectAtSomeDispatch`), and in
+particular no convoy effect on all arrivals at zero (`sjf_not_hasConvoyEffectAllArrivalsAtZero`).
+The argument works for any non-preemptive policy that always picks a shortest job,
 even one that sees the whole state
-(`nonPreemptiveOnline_runsShortestAtDispatch`).
+(`nonPreemptiveStateSelect_shortestAtEveryDispatch`).
 
 It is still non-preemptive, though: on the late-arrival convoy a short job that
 arrives after the long one has been dispatched waits until step `L`
 (`sjf_late_convoy_waiting`).  That is not a convoy -- the short job was not in
-`ready` when the choice was made (`sjf_late_convoy_runsShortestAtDispatch`) --
-but it is the online convoy effect (`sjf_hasOnlineConvoyEffect`), and
+`ready` when the choice was made (`sjf_late_convoy_shortestAtEveryDispatch`) --
+but it is the convoy effect at some step (`sjf_hasConvoyEffectAtSomeStep`), and
 `SRTFConvoy` shows preemption removes it.
 -/
 
@@ -133,31 +133,31 @@ theorem selectSJF_min (l : List AperiodicProcess) (p : AperiodicProcess)
 
 /-- **SJF never inverts on a batch**: the job it dispatches is no longer than
 any job in the ready queue. -/
-theorem sjf_noInversion : RunsShortestProcessBatch selectSJF := fun ready _ p _ h =>
+theorem sjf_noInversion : RunsShortestAllArrivalsAtZero selectSJF := fun ready _ p _ h =>
   selectSJF_min ready p h
 
-/-- SJF does not have the batch convoy effect. -/
-theorem sjf_not_hasBatchConvoyEffect : ¬ HasBatchConvoyEffect selectSJF :=
+/-- SJF does not have the convoy effect on all arrivals at zero. -/
+theorem sjf_not_hasConvoyEffectAllArrivalsAtZero : ¬ HasConvoyEffectAllArrivalsAtZero selectSJF :=
   not_not_intro sjf_noInversion
 
 /-- **Shortest-first non-preemptive policies run the shortest job at every
-dispatch.** If an online non-preemptive policy only picks waiting jobs, and
+dispatch.** If a non-preemptive state-select policy only picks waiting jobs, and
 always one of least burst, then on every well-formed stream (arrivals at any
 time) no waiting job has less work left than the job it dispatches.  Reason: a
 dispatched job was the policy's choice from the queue (a job that keeps the CPU
 keeps its id), and in a non-preemptive run waiting jobs are untouched. -/
-theorem nonPreemptiveOnline_runsShortestAtDispatch
+theorem nonPreemptiveStateSelect_shortestAtEveryDispatch
     (select : SchedState → Option AperiodicProcess)
     (h_mem : ∀ s p, select s = some p → p ∈ s.ready)
     (h_short : ∀ s p, select s = some p → ∀ q ∈ s.ready, p.burst ≤ q.burst) :
-    RunsShortestAtDispatchRun
-      (fun arrival_stream => runSteps arrival_stream (stepNonPreemptiveOnline select)) := by
+    ShortestAtEveryDispatchRun
+      (fun arrival_stream => runSteps arrival_stream (stepNonPreemptiveStateSelect select)) := by
   intro arrival_stream h_wf t p h_disp q hq
   obtain ⟨h_run, h_new⟩ := h_disp
   -- the state step `t` starts from: the previous state with this step's arrivals
   obtain ⟨s, h_eq, h_s_new, h_s_fresh⟩ : ∃ s : SchedState,
-      runSteps arrival_stream (stepNonPreemptiveOnline select) t =
-        stepNonPreemptiveOnline select s ∧
+      runSteps arrival_stream (stepNonPreemptiveStateSelect select) t =
+        stepNonPreemptiveStateSelect select s ∧
       s.running.map (·.id) ≠ some p.id ∧ ∀ r ∈ s.ready, r.remaining = r.burst := by
     cases t with
     | zero =>
@@ -165,17 +165,17 @@ theorem nonPreemptiveOnline_runsShortestAtDispatch
       intro r hr
       exact h_wf.fresh r 0 (by simpa using hr)
     | succ t =>
-      refine ⟨{ runSteps arrival_stream (stepNonPreemptiveOnline select) t with
-        ready := (runSteps arrival_stream (stepNonPreemptiveOnline select) t).ready ++
+      refine ⟨{ runSteps arrival_stream (stepNonPreemptiveStateSelect select) t with
+        ready := (runSteps arrival_stream (stepNonPreemptiveStateSelect select) t).ready ++
           arrival_stream (t + 1) }, rfl,
         h_new t rfl, ?_⟩
       intro r hr
       rcases List.mem_append.mp hr with hr | hr
-      · exact nonPreemptiveOnline_ready_fresh select arrival_stream h_wf t r hr
+      · exact nonPreemptiveStateSelect_ready_fresh select arrival_stream h_wf t r hr
       · exact h_wf.fresh r _ hr
   simp only at h_run hq
   rw [h_eq] at h_run hq
-  obtain ⟨h_sel, h_ready⟩ := stepNonPreemptiveOnline_dispatch_cases select s h_run h_s_new
+  obtain ⟨h_sel, h_ready⟩ := stepNonPreemptiveStateSelect_dispatch_cases select s h_run h_s_new
   rw [h_ready] at hq
   have hp := h_mem s p h_sel
   have hq' := List.mem_of_mem_erase hq
@@ -184,14 +184,14 @@ theorem nonPreemptiveOnline_runsShortestAtDispatch
 
 /-- **SJF runs the shortest job at every dispatch**, on every well-formed
 stream. -/
-theorem sjf_runsShortestAtDispatch :
-    RunsShortestAtDispatchRun (fun arrival_stream => runSteps arrival_stream stepSJF) :=
-  nonPreemptiveOnline_runsShortestAtDispatch (fun s => selectSJF s.ready)
+theorem sjf_shortestAtEveryDispatch :
+    ShortestAtEveryDispatchRun (fun arrival_stream => runSteps arrival_stream stepSJF) :=
+  nonPreemptiveStateSelect_shortestAtEveryDispatch (fun s => selectSJF s.ready)
     (fun _ p h => selectSJF_mem _ p h) (fun _ p h => selectSJF_min _ p h)
 
-/-- **SJF does not have the convoy effect.** -/
-theorem sjf_not_hasConvoyEffect : ¬ HasConvoyEffect stepSJF :=
-  not_not_intro sjf_runsShortestAtDispatch
+/-- **SJF does not have the convoy effect at some dispatch.** -/
+theorem sjf_not_hasConvoyEffectAtSomeDispatch : ¬ HasConvoyEffectAtSomeDispatch stepSJF :=
+  not_not_intro sjf_shortestAtEveryDispatch
 
 /-- While `t < L`, non-preemptive SJF is still running the long job, and from
 time 1 the short job is waiting behind it. -/
@@ -226,33 +226,34 @@ theorem sjf_late_convoy_waiting (L : ℕ) (hL : 0 < L) (t : ℕ) (h1 : 1 ≤ t) 
 /-- **The late-arrival convoy is not a convoy for SJF**: at every step at which
 SJF dispatches a job on `lateConvoyArrivalStream`, no shorter job is waiting.
 (The short job arrives only after the long one has been dispatched.) -/
-theorem sjf_late_convoy_runsShortestAtDispatch (L : ℕ) (hL : 0 < L) (t : ℕ)
+theorem sjf_late_convoy_shortestAtEveryDispatch (L : ℕ) (hL : 0 < L) (t : ℕ)
     (p : AperiodicProcess)
     (h : DispatchesAt (fun arrival_stream => runSteps arrival_stream stepSJF)
       (lateConvoyArrivalStream L hL) t p) :
     ∀ q ∈ (runSteps (lateConvoyArrivalStream L hL) stepSJF t).ready,
       p.remaining ≤ q.remaining :=
-  sjf_runsShortestAtDispatch _ (lateConvoyArrivalStream_wf L hL) t p h
+  sjf_shortestAtEveryDispatch _ (lateConvoyArrivalStream_wf L hL) t p h
 
-/-- **Non-preemptive SJF has the online convoy effect**, although it has no
-convoy effect: on the late-arrival convoy with `L = 3`, at step 1 the short job
+/-- **Non-preemptive SJF has the convoy effect at some step**, although it has no
+convoy effect at some dispatch: on the late-arrival convoy with `L = 3`, at step 1 the short job
 (1 tick) waits behind the long job (2 ticks left). -/
-theorem sjf_hasOnlineConvoyEffect : HasOnlineConvoyEffect stepSJF := by
-  rw [HasOnlineConvoyEffect, hasOnlineConvoyEffectRun_iff]
+theorem sjf_hasConvoyEffectAtSomeStep : HasConvoyEffectAtSomeStep stepSJF := by
+  rw [HasConvoyEffectAtSomeStep, hasConvoyEffectAtSomeStepRun_iff]
   obtain ⟨h_running, h_ready⟩ := sjf_late_convoy_invariant 3 (by omega) 1 (by omega)
   exact ⟨_, lateConvoyArrivalStream_wf 3 (by omega), 1, _, h_running, lateShortJob,
     by simp [h_ready], by simp [lateShortJob]⟩
 
-/-- **The online convoy effect does not imply the convoy effect.** SJF is the
+/-- **The convoy effect at some step does not imply the convoy effect.** SJF is the
 counterexample: it never dispatches a job while a shorter one is waiting, yet a
 short job that arrives after SJF has committed to a long one still waits. -/
-theorem online_convoy_not_imp_convoy :
-    ¬ ∀ step, HasOnlineConvoyEffect step → HasConvoyEffect step :=
-  fun h => sjf_not_hasConvoyEffect (h stepSJF sjf_hasOnlineConvoyEffect)
+theorem atSomeStep_not_imp_atSomeDispatch :
+    ¬ ∀ step, HasConvoyEffectAtSomeStep step → HasConvoyEffectAtSomeDispatch step :=
+  fun h => sjf_not_hasConvoyEffectAtSomeDispatch (h stepSJF sjf_hasConvoyEffectAtSomeStep)
 
-/-- Nor does it imply the batch convoy effect (same counterexample). -/
-theorem online_convoy_not_imp_batch_convoy :
-    ¬ ∀ select, HasOnlineConvoyEffect (stepNonPreemptive select) → HasBatchConvoyEffect select :=
-  fun h => sjf_not_hasBatchConvoyEffect (h selectSJF sjf_hasOnlineConvoyEffect)
+/-- Nor does it imply the convoy effect on all arrivals at zero (same counterexample). -/
+theorem atSomeStep_not_imp_allArrivalsAtZero :
+    ¬ ∀ select, HasConvoyEffectAtSomeStep (stepNonPreemptive select) →
+      HasConvoyEffectAllArrivalsAtZero select :=
+  fun h => sjf_not_hasConvoyEffectAllArrivalsAtZero (h selectSJF sjf_hasConvoyEffectAtSomeStep)
 
 end ConvoyEffect

@@ -10,23 +10,23 @@ import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 
 /-!
-# FCFS has the convoy effect
+# FCFS has the convoy effect at some dispatch
 
 FCFS dispatches the head of the queue regardless of burst, so it passes over a
-waiting shorter job: it has the convoy effect (`fcfs_hasConvoyEffect`), already
-on a batch (`fcfs_hasBatchConvoyEffect`).  On the concrete convoy the short
+waiting shorter job: it has the convoy effect (`fcfs_hasConvoyEffectAtSomeDispatch`), already
+on a batch (`fcfs_hasConvoyEffectAllArrivalsAtZero`).  On the concrete convoy the short
 job waits the long job's full burst: it is dispatched only at step `L`
 (`fcfs_convoy_dispatch`), which `RRConvoy` compares against Round Robin.
 -/
 
 namespace ConvoyEffect
 
-/-- **FCFS has the batch convoy effect**: with `leader` ahead of `shortJob` in
+/-- **FCFS has the convoy effect on all arrivals at zero**: with `leader` ahead of `shortJob` in
 the ready queue, FCFS dispatches the leader even though the short job is
 waiting. -/
-theorem fcfs_hasBatchConvoyEffect : HasBatchConvoyEffect selectFCFS :=
-  (hasBatchConvoyEffect_iff _).mpr
-    ⟨[leader, shortJob], by simp [IsBatch, leader, shortJob], leader, by simp, rfl,
+theorem fcfs_hasConvoyEffectAllArrivalsAtZero : HasConvoyEffectAllArrivalsAtZero selectFCFS :=
+  (hasConvoyEffectAllArrivalsAtZero_iff _).mpr
+    ⟨[leader, shortJob], by simp [AllArrivalsAtZero, leader, shortJob], leader, by simp, rfl,
       shortJob, by simp, by decide⟩
 
 /-- While `t < L`, FCFS is still running the long job, with `L - t` ticks left
@@ -58,16 +58,16 @@ theorem fcfs_convoy_dispatch (L : ℕ) (hL : 0 < L) :
   simp only [runSteps, convoyArrivalStream, h_ready, h_running, List.append_nil]
   simp [stepFCFS, stepNonPreemptive, longJob, selectFCFS]
 
-/-- **FCFS has the convoy effect**: on the convoy with `L = 2`, at step 0 FCFS
+/-- **FCFS has the convoy effect at some dispatch**: on the convoy with `L = 2`, at step 0 FCFS
 dispatches the long job (2 ticks) while the short job (1 tick) waits. -/
-theorem fcfs_hasConvoyEffect : HasConvoyEffect stepFCFS := by
-  rw [HasConvoyEffect, hasConvoyEffectRun_iff]
+theorem fcfs_hasConvoyEffectAtSomeDispatch : HasConvoyEffectAtSomeDispatch stepFCFS := by
+  rw [HasConvoyEffectAtSomeDispatch, hasConvoyEffectAtSomeDispatchRun_iff]
   obtain ⟨h_running, h_ready⟩ := fcfs_convoy_invariant 2 (by omega) 0 (by omega)
   exact ⟨_, convoyArrivalStream_wf 2 (by omega), 0, _, dispatchesAt_zero h_running, shortJob,
     by simp [h_ready], by simp [shortJob]⟩
 
-/-- **FCFS has the online convoy effect** (a consequence of the convoy effect). -/
-theorem fcfs_hasOnlineConvoyEffect : HasOnlineConvoyEffect stepFCFS :=
-  hasConvoyEffectRun_imp_online fcfs_hasConvoyEffect
+/-- **FCFS has the convoy effect at some step** (a consequence of the convoy effect). -/
+theorem fcfs_hasConvoyEffectAtSomeStep : HasConvoyEffectAtSomeStep stepFCFS :=
+  hasConvoyEffectAtSomeDispatchRun_imp_atSomeStep fcfs_hasConvoyEffectAtSomeDispatch
 
 end ConvoyEffect

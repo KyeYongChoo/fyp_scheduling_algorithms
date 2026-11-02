@@ -3,13 +3,13 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineImpossibility
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.NoOptimalNonPreemptiveOnEveryStream
 import FypSchedulingAlgorithms.ListLemmas
 
 /-!
-# SJF is optimal given only the past
+# SJF is optimal given the same past
 
-`OnlineImpossibility` shows that no online non-preemptive policy waits least
+`NoOptimalNonPreemptiveOnEveryStream` shows that no non-preemptive state-select policy waits least
 on every stream: at time 0 nobody can know whether a short job is about to
 arrive.  This file shows that the future is the *only* thing SJF lacks: judged
 on what has arrived so far, its decisions are the best possible.
@@ -23,8 +23,8 @@ and the wait of the decision at `t` and its continuation (`runWait_knownAt`,
 with `stateBefore arrival_stream step t` the state step `t` starts from).  These
 general facts live in `RunStepsLemmas` and `RunWait`.
 
-**What is proved.**  Competitors are the online non-preemptive policies of
-`OnlineImpossibility` (`DrawsFromReadyQueue`): they may idle on purpose and read the
+**What is proved.**  Competitors are the non-preemptive state-select policies of
+`NoOptimalNonPreemptiveOnEveryStream` (`DrawsFromReadyQueue`): they may idle on purpose and read the
 whole state.  The cost is `runWait`, at *every* horizon, not just once the work
 is done.
 
@@ -39,9 +39,9 @@ is done.
   (`switchToSJF t select`) waits no longer on the known instance than any
   competitor that shares `select`'s past.  The headline is the case
   `select = SJF`.
-* `runWait_sjf_le_online_batch` (`t = 0`): on a batch SJF waits least among
-  all online non-preemptive policies, idling ones included, at every horizon.
-  `RunWait`'s `runWait_sjf_le` follows (`runWait_sjf_le_batch`), without its
+* `runWait_sjf_le_stateSelect_allArrivalsAtZero` (`t = 0`): on a batch SJF waits least among
+  all non-preemptive state-select policies, idling ones included, at every horizon.
+  `RunWait`'s `runWait_sjf_le` follows (`runWait_sjf_le_allArrivalsAtZero`), without its
   never-idle and horizon assumptions.
 
 **What is not claimed.**  The competitors share the past of the run they are
@@ -49,26 +49,26 @@ compared with: they took the same decisions before `t` and decide for
 themselves at `t` and after.  Against a competitor with a different past SJF
 can lose even on the known instance: stream B is its own instance known at time
 1 (`knownAt_streamB_one`), and "idle at time 0, then SJF" beats SJF there
-(`sjf_not_optimal_online`) -- by deciding differently at time 0, which is
+(`sjf_beaten_by_idleThenSJF_on_streamB`) -- by deciding differently at time 0, which is
 exactly the decision SJF had to make without knowing about time 1.  Nor is
 anything claimed on the real stream after `t`: a later arrival can make SJF's
-choice at `t` a poor one (`OnlineImpossibility`).
+choice at `t` a poor one (`NoOptimalNonPreemptiveOnEveryStream`).
 
 A weaker reading, a competitor that starts from SJF's state *after* SJF's
 decision at `t`, is also covered: `waitFrom_sjf_le` compares SJF with any
 competitor from any state whose waiting jobs are untouched (as in every
-non-preemptive run, `nonPreemptiveOnline_ready_fresh`), so in particular from
+non-preemptive run, `nonPreemptiveStateSelect_ready_fresh`), so in particular from
 `runSteps arrival_stream stepSJF t`.  The theorems above are the stronger claim, which
 includes SJF's decision at `t` itself (`waitFrom_sjf_step_le`).
 
-**The cost of the convoy effect, off batches.**  `HasConvoyEffect` is judged at
+**The cost of the convoy effect, off batches.**  `HasConvoyEffectAtSomeDispatch` is judged at
 dispatch moments of real runs, with no cost in its definition.  On batches the
-cost shows through `hasBatchConvoyEffect_iff_runWait`.  On general streams this
-file supplies it: if any online policy's run dispatches a job while a strictly
+cost shows through `hasConvoyEffectAllArrivalsAtZero_iff_runWait`.  On general streams this
+file supplies it: if any state-select policy's run dispatches a job while a strictly
 shorter one waits, switching to SJF at that moment waits strictly less on the
 known instance, as soon as the horizon outlasts the shorter job's work
-(`runWait_switchToSJF_lt_of_convoy`); so every online policy with the convoy
-effect has such a moment (`hasConvoyEffect_switchToSJF_lt`).
+(`runWait_switchToSJF_lt_of_convoy`); so every state-select policy with the convoy
+effect has such a moment (`hasConvoyEffectAtSomeDispatch_switchToSJF_lt`).
 
 **How.**  With no arrivals, a non-idling non-preemptive policy waits
 `truncWait r` of its dispatch order, at every horizon (`waitFrom_eq_truncWait`;
@@ -232,7 +232,7 @@ theorem waitFrom_eq_truncWait {select : List AperiodicProcess → Option Aperiod
         have := List.length_pos_of_mem hq
         omega
 
-/-! ## SJF against any online non-preemptive policy, from a common state -/
+/-! ## SJF against any non-preemptive state-select policy, from a common state -/
 
 /-- SJF's dispatch order of a queue lists its bursts in non-decreasing order. -/
 theorem sjf_dispatchOrder_sorted (l : List AperiodicProcess) :
@@ -272,7 +272,7 @@ theorem waitFrom_sjf_step_of_decide (s : SchedState)
     waitFrom stepSJF (stepSJF s) T =
       truncWait 0 ((dispatchOrder selectSJF s.ready).map (·.burst)) T := by
   have hm := selectSJF_mem _ _ h_m
-  obtain ⟨hm_run, hm_ready⟩ := (stepNonPreemptiveOnline_decide (fun s => selectSJF s.ready) s
+  obtain ⟨hm_run, hm_ready⟩ := (stepNonPreemptiveStateSelect_decide (fun s => selectSJF s.ready) s
     h_dec).1 m h_m
   change (stepSJF s).running = some m at hm_run
   change (stepSJF s).ready = s.ready.erase m at hm_ready
@@ -281,7 +281,7 @@ theorem waitFrom_sjf_step_of_decide (s : SchedState)
     dispatchOrder_of_select selectSJF_mem h_m, List.map_cons]
 
 /-- **One decision against SJF's.** From any state whose waiting jobs are
-untouched, let SJF take one step, or let any online non-preemptive policy take
+untouched, let SJF take one step, or let any non-preemptive state-select policy take
 one step; if SJF then runs on from either state with no further arrivals, it
 waits no longer after its own step, at every horizon.  Either nothing is
 decided (both take the same step), or SJF dispatches a shortest job `m` while
@@ -289,26 +289,27 @@ the other policy dispatches some `q` (then SJF's order of the queue is sorted
 and `q` first is a permutation of it, `truncWait_sorted_le`) or idles (which
 delays everything by a step, `truncWait_succ_le`). -/
 theorem waitFrom_sjf_step_le_sjf_after (select : SchedState → Option AperiodicProcess)
-    (h_online : DrawsFromReadyQueue select) (s : SchedState)
+    (h_draws : DrawsFromReadyQueue select) (s : SchedState)
     (h_fresh : ∀ q ∈ s.ready, q.remaining = q.burst) (T : ℕ) :
-    waitFrom stepSJF (stepSJF s) T ≤ waitFrom stepSJF (stepNonPreemptiveOnline select s) T := by
-  -- `stepSJF` is the online policy that reads only the ready queue
-  have h_sjf : stepSJF = stepNonPreemptiveOnline (fun s => selectSJF s.ready) := rfl
+    waitFrom stepSJF (stepSJF s) T ≤
+      waitFrom stepSJF (stepNonPreemptiveStateSelect select s) T := by
+  -- `stepSJF` is the state-select policy that reads only the ready queue
+  have h_sjf : stepSJF = stepNonPreemptiveStateSelect (fun s => selectSJF s.ready) := rfl
   -- nothing to decide: both take the same step
   by_cases h_tick : ∃ p, s.running = some p ∧ 1 < p.remaining
   · obtain ⟨p, h_run, h_left⟩ := h_tick
-    rw [h_sjf, stepNonPreemptiveOnline_eq_of_tick _ select s h_run h_left]
+    rw [h_sjf, stepNonPreemptiveStateSelect_eq_of_tick _ select s h_run h_left]
   push Not at h_tick
   have h_dec : ∀ p, s.running = some p → p.remaining ≤ 1 := h_tick
-  obtain ⟨-, h_sjf_none⟩ := h_sjf ▸ stepNonPreemptiveOnline_decide _ s h_dec
-  obtain ⟨h_sel_some, h_sel_none⟩ := stepNonPreemptiveOnline_decide select s h_dec
+  obtain ⟨-, h_sjf_none⟩ := h_sjf ▸ stepNonPreemptiveStateSelect_decide _ s h_dec
+  obtain ⟨h_sel_some, h_sel_none⟩ := stepNonPreemptiveStateSelect_decide select s h_dec
   cases h_m : selectSJF s.ready with
   | none =>
     -- nothing waits, so SJF's continuation waits nothing
     have h_nil := selectSJF_none_imp_empty _ h_m
     have h0 : (stepSJF s).ready = [] := by rw [(h_sjf_none h_m).2, h_nil]
     rw [show waitFrom stepSJF (stepSJF s) T = 0 from
-      waitFrom_online_nil (fun s => selectSJF s.ready) _ h0 T]
+      waitFrom_stateSelect_nil (fun s => selectSJF s.ready) _ h0 T]
     exact Nat.zero_le _
   | some m =>
     have hm := selectSJF_mem _ _ h_m
@@ -316,7 +317,7 @@ theorem waitFrom_sjf_step_le_sjf_after (select : SchedState → Option Aperiodic
     cases h_q : select s with
     | some q =>
       -- the policy dispatches `q`: a permutation of SJF's sorted order
-      have hq := h_online s q h_q
+      have hq := h_draws s q h_q
       obtain ⟨hq_run, hq_ready⟩ := h_sel_some q h_q
       rw [waitFrom_sjf_of_running _ q hq_run (h_fresh q hq)
         (by rw [hq_ready]; exact fun r hr => h_fresh r (List.mem_of_mem_erase hr)) T, hq_ready]
@@ -340,37 +341,37 @@ theorem waitFrom_sjf_step_le_sjf_after (select : SchedState → Option Aperiodic
         exact this
 
 /-- **SJF's continuation waits least.** From any state whose waiting jobs are
-untouched, with no further arrivals, SJF waits no longer than any online
-non-preemptive policy -- including ones that idle on purpose or read the whole
+untouched, with no further arrivals, SJF waits no longer than any non-preemptive
+state-select policy -- including ones that idle on purpose or read the whole
 state -- over every horizon `T`. -/
 theorem waitFrom_sjf_le (select : SchedState → Option AperiodicProcess)
-    (h_online : DrawsFromReadyQueue select) (s : SchedState)
+    (h_draws : DrawsFromReadyQueue select) (s : SchedState)
     (h_fresh : ∀ q ∈ s.ready, q.remaining = q.burst) (T : ℕ) :
-    waitFrom stepSJF s T ≤ waitFrom (stepNonPreemptiveOnline select) s T := by
+    waitFrom stepSJF s T ≤ waitFrom (stepNonPreemptiveStateSelect select) s T := by
   induction T generalizing s with
   | zero => exact le_rfl
   | succ T ih =>
     rw [waitFrom_succ, waitFrom_succ]
-    have h1 := waitFrom_sjf_step_le_sjf_after select h_online s h_fresh T
-    have h2 := ih (stepNonPreemptiveOnline select s)
-      fun q hq => h_fresh q (stepNonPreemptiveOnline_ready_subset select s q hq)
+    have h1 := waitFrom_sjf_step_le_sjf_after select h_draws s h_fresh T
+    have h2 := ih (stepNonPreemptiveStateSelect select s)
+      fun q hq => h_fresh q (stepNonPreemptiveStateSelect_ready_subset select s q hq)
     omega
 
 /-- **SJF's decision and continuation wait least.** From any state whose waiting
 jobs are untouched, with no further arrivals, the states after SJF's step wait
-no longer than the states after any online non-preemptive policy's step, over
+no longer than the states after any non-preemptive state-select policy's step, over
 every horizon `T`.  This includes the decision taken at `s` itself. -/
 theorem waitFrom_sjf_step_le (select : SchedState → Option AperiodicProcess)
-    (h_online : DrawsFromReadyQueue select) (s : SchedState)
+    (h_draws : DrawsFromReadyQueue select) (s : SchedState)
     (h_fresh : ∀ q ∈ s.ready, q.remaining = q.burst) (T : ℕ) :
     waitFrom stepSJF (stepSJF s) T ≤
-      waitFrom (stepNonPreemptiveOnline select) (stepNonPreemptiveOnline select s) T :=
-  (waitFrom_sjf_step_le_sjf_after select h_online s h_fresh T).trans
-    (waitFrom_sjf_le select h_online _
-      (fun q hq => h_fresh q (stepNonPreemptiveOnline_ready_subset select s q hq)) T)
+      waitFrom (stepNonPreemptiveStateSelect select) (stepNonPreemptiveStateSelect select s) T :=
+  (waitFrom_sjf_step_le_sjf_after select h_draws s h_fresh T).trans
+    (waitFrom_sjf_le select h_draws _
+      (fun q hq => h_fresh q (stepNonPreemptiveStateSelect_ready_subset select s q hq)) T)
 
 /-- **A convoy dispatch strictly costs.** From a state whose waiting jobs are
-untouched, suppose an online non-preemptive policy puts `p` on the CPU while a
+untouched, suppose a non-preemptive state-select policy puts `p` on the CPU while a
 strictly shorter job `q` is left waiting.  With no further arrivals, as soon as
 the horizon outlasts `q` (`q.burst < T`), SJF's step and continuation wait
 strictly less than the policy's step and continuation, whatever the policy does
@@ -378,20 +379,20 @@ afterwards.  (SJF's first job is no longer than `q`, hence shorter than `p`, so
 SJF dispatches its second job strictly earlier: `truncWait_sorted_lt` at
 position 1.) -/
 theorem waitFrom_sjf_step_lt_of_convoy (select : SchedState → Option AperiodicProcess)
-    (h_online : DrawsFromReadyQueue select) (s : SchedState)
+    (h_draws : DrawsFromReadyQueue select) (s : SchedState)
     (h_fresh : ∀ q ∈ s.ready, q.remaining = q.burst) {p q : AperiodicProcess}
-    (h_run : (stepNonPreemptiveOnline select s).running = some p)
-    (h_ready : (stepNonPreemptiveOnline select s).ready = s.ready.erase p)
+    (h_run : (stepNonPreemptiveStateSelect select s).running = some p)
+    (h_ready : (stepNonPreemptiveStateSelect select s).ready = s.ready.erase p)
     (hp : p ∈ s.ready) (hq : q ∈ s.ready.erase p) (h_lt : q.burst < p.burst)
     (T : ℕ) (hT : q.burst < T) :
     waitFrom stepSJF (stepSJF s) T <
-      waitFrom (stepNonPreemptiveOnline select) (stepNonPreemptiveOnline select s) T := by
+      waitFrom (stepNonPreemptiveStateSelect select) (stepNonPreemptiveStateSelect select s) T := by
   -- the step was a decision: a job that only ticks leaves the queue alone
   have h_dec : ∀ r, s.running = some r → r.remaining ≤ 1 := by
     intro r hr
     by_contra h_left
     have h := congrArg List.length
-      (h_ready.symm.trans (stepNonPreemptiveOnline_tick select s hr (by omega)).2)
+      (h_ready.symm.trans (stepNonPreemptiveStateSelect_tick select s hr (by omega)).2)
     have h1 := List.length_erase_of_mem hp
     have h2 := List.length_pos_of_mem hp
     omega
@@ -399,10 +400,10 @@ theorem waitFrom_sjf_step_lt_of_convoy (select : SchedState → Option Aperiodic
     cases h : selectSJF s.ready with
     | none => rw [selectSJF_none_imp_empty _ h] at hp; simp at hp
     | some m => exact ⟨m, rfl⟩
-  have h_fresh' : ∀ r ∈ (stepNonPreemptiveOnline select s).ready, r.remaining = r.burst := by
+  have h_fresh' : ∀ r ∈ (stepNonPreemptiveStateSelect select s).ready, r.remaining = r.burst := by
     rw [h_ready]; exact fun r hr => h_fresh r (List.mem_of_mem_erase hr)
   -- whatever the policy does next, it waits at least as long as SJF would from there
-  have h_after := waitFrom_sjf_le select h_online _ h_fresh' T
+  have h_after := waitFrom_sjf_le select h_draws _ h_fresh' T
   rw [waitFrom_sjf_of_running _ p h_run (h_fresh p hp) h_fresh' T, h_ready] at h_after
   rw [waitFrom_sjf_step_of_decide s h_dec h_fresh h_m]
   refine lt_of_lt_of_le ?_ h_after
@@ -438,19 +439,19 @@ non-preemptive step, the clock and the untouched queue). -/
 
 /-- Two policies that choose alike whenever the clock reads less than `t` have
 the same run before time `t`. -/
-theorem onlineRun_agree_of_time_lt (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ)
+theorem runStateSelect_agree_of_time_lt (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ)
     {select select' : SchedState → Option AperiodicProcess}
     (h : ∀ s : SchedState, s.time < t → select s = select' s) :
-    ∀ k < t, onlineRun select arrival_stream k = onlineRun select' arrival_stream k := by
+    ∀ k < t, runStateSelect select arrival_stream k = runStateSelect select' arrival_stream k := by
   intro k
   induction k using Nat.strong_induction_on with
   | _ k ih =>
     intro hk
-    change runSteps arrival_stream (stepNonPreemptiveOnline select) k =
-      runSteps arrival_stream (stepNonPreemptiveOnline select') k
+    change runSteps arrival_stream (stepNonPreemptiveStateSelect select) k =
+      runSteps arrival_stream (stepNonPreemptiveStateSelect select') k
     rw [runSteps_eq_step_stateBefore, runSteps_eq_step_stateBefore,
       ← stateBefore_congr arrival_stream fun j hj => ih j hj (by omega)]
-    exact stepNonPreemptiveOnline_congr (h _ (by rw [stateBefore_online_time]; exact hk))
+    exact stepNonPreemptiveStateSelect_congr (h _ (by rw [stateBefore_stateSelect_time]; exact hk))
 
 /-- The policy that follows `select` before time `t` and SJF from then on. -/
 def switchToSJF (t : ℕ) (select : SchedState → Option AperiodicProcess) :
@@ -459,102 +460,104 @@ def switchToSJF (t : ℕ) (select : SchedState → Option AperiodicProcess) :
 
 /-- Switching to SJF still draws only from the ready queue. -/
 theorem switchToSJF_drawsFromReadyQueue (t : ℕ) {select : SchedState → Option AperiodicProcess}
-    (h_online : DrawsFromReadyQueue select) : DrawsFromReadyQueue (switchToSJF t select) := by
+    (h_draws : DrawsFromReadyQueue select) : DrawsFromReadyQueue (switchToSJF t select) := by
   intro s p h
   unfold switchToSJF at h
   split at h
-  · exact h_online s p h
+  · exact h_draws s p h
   · exact selectSJF_mem _ p h
 
 /-- From time `t` on, the switched policy steps like SJF. -/
 theorem waitFrom_switchToSJF (t : ℕ) (select : SchedState → Option AperiodicProcess)
     (x : SchedState) (hx : t ≤ x.time) (T : ℕ) :
-    waitFrom (stepNonPreemptiveOnline (switchToSJF t select)) x T = waitFrom stepSJF x T := by
+    waitFrom (stepNonPreemptiveStateSelect (switchToSJF t select)) x T = waitFrom stepSJF x T := by
   induction T generalizing x with
   | zero => rfl
   | succ T ih =>
-    have h_step : stepNonPreemptiveOnline (switchToSJF t select) x = stepSJF x :=
-      stepNonPreemptiveOnline_congr (select' := fun s => selectSJF s.ready)
+    have h_step : stepNonPreemptiveStateSelect (switchToSJF t select) x = stepSJF x :=
+      stepNonPreemptiveStateSelect_congr (select' := fun s => selectSJF s.ready)
         (by simp [switchToSJF, show ¬ x.time < t by omega])
     rw [waitFrom_succ, waitFrom_succ, h_step,
-      ih _ (by rw [show stepSJF x = stepNonPreemptiveOnline (fun s => selectSJF s.ready) x from rfl,
-        stepNonPreemptiveOnline_time]; omega)]
+      ih _ (by rw [show stepSJF x =
+          stepNonPreemptiveStateSelect (fun s => selectSJF s.ready) x from rfl,
+        stepNonPreemptiveStateSelect_time]; omega)]
 
 /-- **The switched run on the known instance**: the wait of `select`'s run up to
 `t`, then SJF's decision at time `t`, from the state `select`'s run reached, and
 SJF's continuation. -/
 theorem runWait_switchToSJF_knownAt (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ)
     (select : SchedState → Option AperiodicProcess) (T : ℕ) :
-    runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) =
-      runWait (onlineRun select) arrival_stream t +
+    runWait (runStateSelect (switchToSJF t select)) (knownAt arrival_stream t) (t + T) =
+      runWait (runStateSelect select) arrival_stream t +
         waitFrom stepSJF
-          (stepSJF (stateBefore arrival_stream (stepNonPreemptiveOnline select) t)) T := by
-  have h_agree := onlineRun_agree_of_time_lt arrival_stream t (select := switchToSJF t select)
+          (stepSJF (stateBefore arrival_stream (stepNonPreemptiveStateSelect select) t)) T := by
+  have h_agree := runStateSelect_agree_of_time_lt arrival_stream t (select := switchToSJF t select)
     (select' := select) fun s hs => by simp [switchToSJF, hs]
   have h_before := stateBefore_congr arrival_stream h_agree
-  have h_time := stateBefore_online_time arrival_stream select t
-  change runWait (runSteps · (stepNonPreemptiveOnline (switchToSJF t select))) _ _ =
-    runWait (runSteps · (stepNonPreemptiveOnline select)) _ _ + _
+  have h_time := stateBefore_stateSelect_time arrival_stream select t
+  change runWait (runSteps · (stepNonPreemptiveStateSelect (switchToSJF t select))) _ _ =
+    runWait (runSteps · (stepNonPreemptiveStateSelect select)) _ _ + _
   rw [runWait_knownAt, runWait_eq_of_agree arrival_stream h_agree, h_before,
-    stepNonPreemptiveOnline_congr (select' := fun s => selectSJF s.ready)
+    stepNonPreemptiveStateSelect_congr (select' := fun s => selectSJF s.ready)
       (by simp [switchToSJF, h_time]),
     waitFrom_switchToSJF t select _ (by
-      rw [stepNonPreemptiveOnline_time, h_time]; omega)]
+      rw [stepNonPreemptiveStateSelect_time, h_time]; omega)]
   rfl
 
 /-! ## SJF is the best continuation of any past -/
 
 /-- **SJF is the best continuation of any past.** Take a well-formed stream, a
-time `t`, and an online non-preemptive policy `select` -- any one, with any
+time `t`, and a non-preemptive state-select policy `select` -- any one, with any
 past.  Switching to SJF at time `t` waits no longer, on the instance known at
-`t` and over every horizon `t + T`, than *any* online non-preemptive policy
+`t` and over every horizon `t + T`, than *any* non-preemptive state-select policy
 `select'` that shares `select`'s past (its run agrees with `select`'s before
 time `t`), `select` itself included.  The competitors may idle on purpose and
 read the whole state; they make their own decision at time `t` and after. -/
 theorem runWait_switchToSJF_le_knownAt (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
     (select select' : SchedState → Option AperiodicProcess)
-    (h_online' : DrawsFromReadyQueue select')
-    (h_agree : ∀ k < t, onlineRun select' arrival_stream k = onlineRun select arrival_stream k)
+    (h_draws' : DrawsFromReadyQueue select')
+    (h_agree : ∀ k < t,
+      runStateSelect select' arrival_stream k = runStateSelect select arrival_stream k)
     (T : ℕ) :
-    runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) ≤
-      runWait (onlineRun select') (knownAt arrival_stream t) (t + T) := by
+    runWait (runStateSelect (switchToSJF t select)) (knownAt arrival_stream t) (t + T) ≤
+      runWait (runStateSelect select') (knownAt arrival_stream t) (t + T) := by
   rw [runWait_switchToSJF_knownAt]
-  change _ ≤ runWait (runSteps · (stepNonPreemptiveOnline select')) _ _
+  change _ ≤ runWait (runSteps · (stepNonPreemptiveStateSelect select')) _ _
   rw [runWait_knownAt, runWait_eq_of_agree arrival_stream h_agree,
     stateBefore_congr arrival_stream h_agree]
-  exact Nat.add_le_add_left (waitFrom_sjf_step_le select' h_online' _
+  exact Nat.add_le_add_left (waitFrom_sjf_step_le select' h_draws' _
     (stateBefore_ready_fresh select arrival_stream h_wf t) T) _
 
 /-- **Switching to SJF never hurts**, on the instance known at the switch. -/
 theorem runWait_switchToSJF_le (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
-    (select : SchedState → Option AperiodicProcess) (h_online : DrawsFromReadyQueue select)
+    (select : SchedState → Option AperiodicProcess) (h_draws : DrawsFromReadyQueue select)
     (T : ℕ) :
-    runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) ≤
-      runWait (onlineRun select) (knownAt arrival_stream t) (t + T) :=
-  runWait_switchToSJF_le_knownAt arrival_stream h_wf t select select h_online (fun _ _ => rfl) T
+    runWait (runStateSelect (switchToSJF t select)) (knownAt arrival_stream t) (t + T) ≤
+      runWait (runStateSelect select) (knownAt arrival_stream t) (t + T) :=
+  runWait_switchToSJF_le_knownAt arrival_stream h_wf t select select h_draws (fun _ _ => rfl) T
 
-/-- **SJF is optimal given only the past.** Take any well-formed stream, any
-time `t`, and any online non-preemptive policy (it may idle on purpose and read
+/-- **SJF is optimal given the same past.** Take any well-formed stream, any
+time `t`, and any non-preemptive state-select policy (it may idle on purpose and read
 the whole state) whose run agrees with SJF's before time `t`.  On the instance
 known at `t` -- the same arrivals up to `t`, none after -- SJF's run waits no
 longer than the policy's, over every horizon `t + T`.
 
 This is `runWait_switchToSJF_le_knownAt` for SJF's own past.  The competitors
 share SJF's past; against a competitor with a *different* past, SJF can lose
-even on the known instance (`sjf_not_optimal_online`: stream B is its own
+even on the known instance (`sjf_beaten_by_idleThenSJF_on_streamB`: stream B is its own
 instance known at time 1, `knownAt_streamB_one`, and idling at time 0 beats SJF
 there). -/
 theorem runWait_sjf_le_knownAt (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
-    (select : SchedState → Option AperiodicProcess) (h_online : DrawsFromReadyQueue select)
-    (h_agree : ∀ k < t, onlineRun select arrival_stream k = runSteps arrival_stream stepSJF k)
+    (select : SchedState → Option AperiodicProcess) (h_draws : DrawsFromReadyQueue select)
+    (h_agree : ∀ k < t, runStateSelect select arrival_stream k = runSteps arrival_stream stepSJF k)
     (T : ℕ) :
     runWait (runSteps · stepSJF) (knownAt arrival_stream t) (t + T) ≤
-      runWait (onlineRun select) (knownAt arrival_stream t) (t + T) := by
+      runWait (runStateSelect select) (knownAt arrival_stream t) (t + T) := by
   have h := runWait_switchToSJF_le_knownAt arrival_stream h_wf t (fun s => selectSJF s.ready)
-    select h_online h_agree T
+    select h_draws h_agree T
   have h_sw : switchToSJF t (fun s => selectSJF s.ready) = fun s => selectSJF s.ready := by
     funext s
     simp [switchToSJF]
@@ -567,32 +570,32 @@ def sjfUntil (t : ℕ) (select : SchedState → Option AperiodicProcess) :
 
 /-- Following SJF for a while still draws only from the ready queue. -/
 theorem sjfUntil_drawsFromReadyQueue (t : ℕ) {select : SchedState → Option AperiodicProcess}
-    (h_online : DrawsFromReadyQueue select) : DrawsFromReadyQueue (sjfUntil t select) := by
+    (h_draws : DrawsFromReadyQueue select) : DrawsFromReadyQueue (sjfUntil t select) := by
   intro s p h
   unfold sjfUntil at h
   split at h
   · exact selectSJF_mem _ p h
-  · exact h_online s p h
+  · exact h_draws s p h
 
-/-- **SJF against any policy that takes over from it.** Let any online
-non-preemptive policy take over from SJF at time `t`.  On the instance known at
+/-- **SJF against any policy that takes over from it.** Let any non-preemptive
+state-select policy take over from SJF at time `t`.  On the instance known at
 `t`, SJF's own run waits no longer, over every horizon `t + T`. -/
 theorem runWait_sjf_le_sjfUntil (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
-    (select : SchedState → Option AperiodicProcess) (h_online : DrawsFromReadyQueue select)
+    (select : SchedState → Option AperiodicProcess) (h_draws : DrawsFromReadyQueue select)
     (T : ℕ) :
     runWait (runSteps · stepSJF) (knownAt arrival_stream t) (t + T) ≤
-      runWait (onlineRun (sjfUntil t select)) (knownAt arrival_stream t) (t + T) :=
-  runWait_sjf_le_knownAt arrival_stream h_wf t _ (sjfUntil_drawsFromReadyQueue t h_online)
-    (onlineRun_agree_of_time_lt arrival_stream t (select' := fun s => selectSJF s.ready)
+      runWait (runStateSelect (sjfUntil t select)) (knownAt arrival_stream t) (t + T) :=
+  runWait_sjf_le_knownAt arrival_stream h_wf t _ (sjfUntil_drawsFromReadyQueue t h_draws)
+    (runStateSelect_agree_of_time_lt arrival_stream t (select' := fun s => selectSJF s.ready)
       fun s hs => by simp [sjfUntil, hs]) T
 
 /-! ## The cost of a convoy, on any stream -/
 
 /-- **A convoy dispatch strictly costs, on any stream.** Take a well-formed
-stream and any online non-preemptive policy.  If at step `t` its run dispatches
+stream and any non-preemptive state-select policy.  If at step `t` its run dispatches
 `p` while a job `q` with strictly less work left waits -- a convoy at a dispatch
-moment, as in `HasConvoyEffect` -- then switching to SJF at time `t` waits
+moment, as in `HasConvoyEffectAtSomeDispatch` -- then switching to SJF at time `t` waits
 strictly less on the instance known at `t`, over every horizon `t + T` with
 `q.remaining < T`.  In general the wait is strictly less once `T` exceeds the
 work of the shortest waiting job (apply this with `q` that job), and the stated
@@ -600,17 +603,17 @@ bound is tight when `q` is the shortest waiting job: until it could have
 finished, both runs keep every waiting job waiting at every step. -/
 theorem runWait_switchToSJF_lt_of_convoy (arrival_stream : ℕ → List AperiodicProcess)
     (h_wf : WellFormedStream arrival_stream) (t : ℕ)
-    (select : SchedState → Option AperiodicProcess) (h_online : DrawsFromReadyQueue select)
-    {p q : AperiodicProcess} (h_disp : DispatchesAt (onlineRun select) arrival_stream t p)
-    (hq : q ∈ (onlineRun select arrival_stream t).ready) (h_lt : q.remaining < p.remaining)
+    (select : SchedState → Option AperiodicProcess) (h_draws : DrawsFromReadyQueue select)
+    {p q : AperiodicProcess} (h_disp : DispatchesAt (runStateSelect select) arrival_stream t p)
+    (hq : q ∈ (runStateSelect select arrival_stream t).ready) (h_lt : q.remaining < p.remaining)
     (T : ℕ) (hT : q.remaining < T) :
-    runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) <
-      runWait (onlineRun select) (knownAt arrival_stream t) (t + T) := by
-  set s := stateBefore arrival_stream (stepNonPreemptiveOnline select) t with hs
+    runWait (runStateSelect (switchToSJF t select)) (knownAt arrival_stream t) (t + T) <
+      runWait (runStateSelect select) (knownAt arrival_stream t) (t + T) := by
+  set s := stateBefore arrival_stream (stepNonPreemptiveStateSelect select) t with hs
   have h_fresh : ∀ r ∈ s.ready, r.remaining = r.burst :=
     stateBefore_ready_fresh select arrival_stream h_wf t
   -- the policy's step `t`, from `s`, is a dispatch of `p`
-  have h_step : onlineRun select arrival_stream t = stepNonPreemptiveOnline select s :=
+  have h_step : runStateSelect select arrival_stream t = stepNonPreemptiveStateSelect select s :=
     runSteps_eq_step_stateBefore _ _ t
   obtain ⟨h_p_run, h_new⟩ := h_disp
   rw [h_step] at h_p_run hq
@@ -618,61 +621,65 @@ theorem runWait_switchToSJF_lt_of_convoy (arrival_stream : ℕ → List Aperiodi
     cases t with
     | zero => simp [hs, stateBefore]
     | succ k => exact h_new k rfl
-  obtain ⟨h_sel, h_ready⟩ := stepNonPreemptiveOnline_dispatch_cases select s h_p_run h_s_new
-  have hp := h_online s p h_sel
+  obtain ⟨h_sel, h_ready⟩ := stepNonPreemptiveStateSelect_dispatch_cases select s h_p_run h_s_new
+  have hp := h_draws s p h_sel
   rw [h_ready] at hq
   rw [h_fresh p hp, h_fresh q (List.mem_of_mem_erase hq)] at h_lt
   rw [h_fresh q (List.mem_of_mem_erase hq)] at hT
   rw [runWait_switchToSJF_knownAt]
-  change _ < runWait (runSteps · (stepNonPreemptiveOnline select)) _ _
+  change _ < runWait (runSteps · (stepNonPreemptiveStateSelect select)) _ _
   rw [runWait_knownAt]
-  exact Nat.add_lt_add_left (waitFrom_sjf_step_lt_of_convoy select h_online s h_fresh h_p_run
+  exact Nat.add_lt_add_left (waitFrom_sjf_step_lt_of_convoy select h_draws s h_fresh h_p_run
     h_ready hp hq h_lt T hT) _
 
-/-- **The convoy effect costs, on general streams.** An online non-preemptive
-policy with the convoy effect waits strictly longer, on some well-formed stream
-known up to some time `t`, than the same policy switched to SJF at `t`, at
+/-- **The convoy effect at some dispatch costs, on general streams.** A non-preemptive
+state-select policy with the convoy effect at some dispatch waits strictly longer, on some
+well-formed stream known up to some time `t`, than the same policy switched to SJF at `t`, at
 every horizon `t + T` once `T` passes the work of the shorter waiting job.  (On
-batches, `hasBatchConvoyEffect_iff_runWait` says this against SJF itself.) -/
-theorem hasConvoyEffect_switchToSJF_lt (select : SchedState → Option AperiodicProcess)
-    (h_online : DrawsFromReadyQueue select) (h : HasConvoyEffect (stepNonPreemptiveOnline select)) :
+batches, `hasConvoyEffectAllArrivalsAtZero_iff_runWait` says this against SJF itself.) -/
+theorem hasConvoyEffectAtSomeDispatch_switchToSJF_lt (select : SchedState → Option AperiodicProcess)
+    (h_draws : DrawsFromReadyQueue select)
+    (h : HasConvoyEffectAtSomeDispatch (stepNonPreemptiveStateSelect select)) :
     ∃ arrival_stream, WellFormedStream arrival_stream ∧ ∃ t T₀, ∀ T, T₀ ≤ T →
-      runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) <
-        runWait (onlineRun select) (knownAt arrival_stream t) (t + T) := by
+      runWait (runStateSelect (switchToSJF t select)) (knownAt arrival_stream t) (t + T) <
+        runWait (runStateSelect select) (knownAt arrival_stream t) (t + T) := by
   obtain ⟨arrival_stream, h_wf, t, p, h_disp, q, hq, h_lt⟩ :=
-    (hasConvoyEffectRun_iff (onlineRun select)).mp h
+    (hasConvoyEffectAtSomeDispatchRun_iff (runStateSelect select)).mp h
   exact ⟨arrival_stream, h_wf, t, q.remaining + 1, fun T hT =>
-    runWait_switchToSJF_lt_of_convoy arrival_stream h_wf t select h_online h_disp hq h_lt T hT⟩
+    runWait_switchToSJF_lt_of_convoy arrival_stream h_wf t select h_draws h_disp hq h_lt T hT⟩
 
 /-! ## The batch case: `t = 0` -/
 
 /-- **The batch case** (`t = 0`).  On a batch released at time 0, SJF waits no
-longer than any online non-preemptive policy, idling or not, over every
+longer than any non-preemptive state-select policy, idling or not, over every
 horizon.  This strengthens `runWait_sjf_le`, which compares only with
 ready-queue policies that never idle, and only once the horizon covers the
 total work. -/
-theorem runWait_sjf_le_online_batch (l : List AperiodicProcess) (h_batch : IsBatch l)
-    (select : SchedState → Option AperiodicProcess) (h_online : DrawsFromReadyQueue select)
+theorem runWait_sjf_le_stateSelect_allArrivalsAtZero (l : List AperiodicProcess)
+    (h_atZero : AllArrivalsAtZero l)
+    (select : SchedState → Option AperiodicProcess) (h_draws : DrawsFromReadyQueue select)
     (T : ℕ) :
-    runWait (runSteps · stepSJF) (batchStream l) T ≤
-      runWait (onlineRun select) (batchStream l) T := by
-  have h_known : knownAt (batchStream l) 0 = batchStream l := by
+    runWait (runSteps · stepSJF) (allArrivalsAtZeroStream l) T ≤
+      runWait (runStateSelect select) (allArrivalsAtZeroStream l) T := by
+  have h_known : knownAt (allArrivalsAtZeroStream l) 0 = allArrivalsAtZeroStream l := by
     funext j
     cases j <;> rfl
-  have := runWait_sjf_le_knownAt (batchStream l) (batchStream_wf h_batch) 0 select h_online
+  have := runWait_sjf_le_knownAt (allArrivalsAtZeroStream l)
+    (allArrivalsAtZeroStream_wf h_atZero) 0 select h_draws
     (fun k hk => absurd hk (Nat.not_lt_zero k)) T
   rwa [h_known, Nat.zero_add] at this
 
 /-- `runWait_sjf_le` again, as a corollary of the batch case: no `h_none` and
 no horizon assumption are needed. -/
-theorem runWait_sjf_le_batch {select : List AperiodicProcess → Option AperiodicProcess}
-    (h_mem : ∀ l p, select l = some p → p ∈ l) (l : List AperiodicProcess) (h_batch : IsBatch l)
+theorem runWait_sjf_le_allArrivalsAtZero {select : List AperiodicProcess → Option AperiodicProcess}
+    (h_mem : ∀ l p, select l = some p → p ∈ l) (l : List AperiodicProcess)
+    (h_atZero : AllArrivalsAtZero l)
     (T : ℕ) :
-    runWait (runSteps · stepSJF) (batchStream l) T ≤
-      runWait (runSteps · (stepNonPreemptive select)) (batchStream l) T := by
-  have := runWait_sjf_le_online_batch l h_batch (fun s => select s.ready)
+    runWait (runSteps · stepSJF) (allArrivalsAtZeroStream l) T ≤
+      runWait (runSteps · (stepNonPreemptive select)) (allArrivalsAtZeroStream l) T := by
+  have := runWait_sjf_le_stateSelect_allArrivalsAtZero l h_atZero (fun s => select s.ready)
     (fun s p h => h_mem s.ready p h) T
-  rwa [onlineRun_ready] at this
+  rwa [runStateSelect_ready] at this
 
 /-! ## Sanity check: a different past -/
 
@@ -684,10 +691,11 @@ theorem knownAt_streamB_one : knownAt streamB 1 = streamB := by
   · rfl
   · rw [knownAt_of_lt streamB (by omega), streamB_nil _ (by omega)]
 
-/-- `idleThenSJF`, which beats SJF on stream B (`sjf_not_optimal_online`), does
+/-- `idleThenSJF`, which beats SJF on stream B (`sjf_beaten_by_idleThenSJF_on_streamB`), does
 not share SJF's past: at step 0 it idles while SJF dispatches.  So it is not a
 competitor in `runWait_sjf_le_knownAt`. -/
-example : (onlineRun idleThenSJF streamB 0).running ≠ (runSteps streamB stepSJF 0).running := by
+example :
+    (runStateSelect idleThenSJF streamB 0).running ≠ (runSteps streamB stepSJF 0).running := by
   decide
 
 end ConvoyEffect

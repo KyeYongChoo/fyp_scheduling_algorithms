@@ -3,7 +3,7 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineImpossibility
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.NoOptimalNonPreemptiveOnEveryStream
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
 import FypSchedulingAlgorithms.PreemptiveRuns
 import FypSchedulingAlgorithms.ListLemmas
@@ -12,7 +12,7 @@ import FypSchedulingAlgorithms.ListLemmas
 # Admissible schedules
 
 To compare a scheduler with *every* possible way of running the jobs --
-preemptive or not, online or clairvoyant -- this file describes runs without a
+preemptive or not, clairvoyant or not -- this file describes runs without a
 step function: a **schedule** `σ : ℕ → Option ℕ` names, for each step `t`, the
 job (by id) that holds the CPU in the state after step `t`.  As in `runSteps`
 (see the tick convention in `Step`), that job receives the tick of step `t + 1`;
@@ -40,8 +40,8 @@ costs, as in the step functions.
 **The cost** (`schedWait`): at each step every unfinished job that is not on the
 CPU waits one tick.  It is `runWait` for schedules: for any step function that
 neither invents nor loses jobs (`ConservesJobs`) -- every preemptive priority
-scheduler (`stepPreemptive_conservesJobs`, SRTF included) and every online
-non-preemptive policy (`stepNonPreemptiveOnline_conservesJobs`: FCFS, SJF,
+scheduler (`stepPreemptive_conservesJobs`, SRTF included) and every non-preemptive
+state-select policy (`stepNonPreemptiveStateSelect_conservesJobs`: FCFS, SJF,
 policies that idle) -- the run's schedule (`runSchedule`) is admissible
 (`runSchedule_isAdmissible`) and the run waits exactly what its schedule waits,
 at every horizon (`runWait_eq_schedWait`).  The bridge rests on the run
@@ -139,12 +139,12 @@ theorem stepPreemptive_conservesJobs (f : AperiodicProcess → ℤ) :
     ConservesJobs (stepPreemptive AperiodicProcess f) :=
   PreemptiveRuns.stepPreemptive_conservesJobs f
 
-/-- **Every online non-preemptive policy conserves jobs** (it only ever
+/-- **Every non-preemptive state-select policy conserves jobs** (it only ever
 dispatches a waiting job). -/
-theorem stepNonPreemptiveOnline_conservesJobs {select : SchedState → Option AperiodicProcess}
-    (h_mem : DrawsFromReadyQueue select) : ConservesJobs (stepNonPreemptiveOnline select) := by
+theorem stepNonPreemptiveStateSelect_conservesJobs {select : SchedState → Option AperiodicProcess}
+    (h_mem : DrawsFromReadyQueue select) : ConservesJobs (stepNonPreemptiveStateSelect select) := by
   intro s
-  unfold stepNonPreemptiveOnline
+  unfold stepNonPreemptiveStateSelect
   rcases hr : s.running with _ | b
   · simp only [Option.toList_none, List.map_nil, List.filter_nil, List.append_nil]
     split
@@ -440,7 +440,7 @@ theorem ready_length_eq_waiting (t : ℕ) :
     omega
 
 /-- **The bridge: a run waits what its schedule waits.** For every
-job-conserving step (every preemptive scheduler, every online non-preemptive
+job-conserving step (every preemptive scheduler, every non-preemptive state-select
 policy), on every well-formed stream without repeats, `runWait` of the run is
 `schedWait` of the schedule it follows, at every horizon. -/
 theorem runWait_eq_schedWait (T : ℕ) :

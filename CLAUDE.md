@@ -4,32 +4,41 @@ Lean 4 + Mathlib formalisation of CPU scheduling (FCFS, SJF, SRTF, RR, RMS, DM, 
 `GLOSSARY.md` explains the terms and points to their definitions; read it before working on
 the proofs. Build with `lake build`.
 
+## Naming conventions
+
+- Names say literally what a definition checks; long names are fine (lines wrap at 100).
+- No "online": a policy that reads the whole state is a *state-select* policy
+  (`stepNonPreemptiveStateSelect`, `runStateSelect`); jobs all present at time 0 are
+  `AllArrivalsAtZero` ("batch" only in prose and the glossary).
+- Put the quantifier in the name: good properties say `…AtEvery…`
+  (`ShortestAtEveryDispatchRun`), bad ones `…AtSome…` (`HasConvoyEffectAtSomeDispatch`).
+- Give each negation its own name and an iff with `¬` (`IsOptimalOverSteps` /
+  `IsBeatenOverSteps`, `not_isOptimalOverSteps_iff`).
+
 ## Open follow-up: SJF is optimal at horizons `T ≤ 3`
 
-`no_optimal_online_nonPreemptive` (`ConvoyEffect/OnlineImpossibility.lean`) says that at every
-horizon `T ≥ 4`, no online non-preemptive policy (`DrawsFromReadyQueue`) is optimal on every
-well-formed stream. The `4` is sharp: at every `T ≤ 3`, SJF *is* optimal. The goal is to prove
-that and close the chapter with an iff:
+`no_optimal_nonPreemptive_on_every_stream`
+(`ConvoyEffect/NoOptimalNonPreemptiveOnEveryStream.lean`) says that for every `T ≥ 4`, no
+non-preemptive state-select policy (`DrawsFromReadyQueue`) is optimal over the first `T` steps
+(`IsOptimalOverSteps`). The `4` is sharp: at every `T ≤ 3`, SJF *is* optimal. The goal is to
+prove that and close the chapter with an iff:
 
 ```lean
-theorem sjf_optimal_of_le_three {T : ℕ} (hT : T ≤ 3)
-    (select : SchedState → Option AperiodicProcess) (h : DrawsFromReadyQueue select)
-    (arrival_stream : ℕ → List AperiodicProcess) (h_wf : WellFormedStream arrival_stream) :
-    runWait (runSteps · stepSJF) arrival_stream T ≤ runWait (onlineRun select) arrival_stream T
+theorem sjf_isOptimalOverSteps_of_le_three {T : ℕ} (hT : T ≤ 3) :
+    IsOptimalOverSteps T (fun s => selectSJF s.ready)
 
-theorem exists_optimal_online_iff (T : ℕ) :
-    (∃ select, DrawsFromReadyQueue select ∧ ∀ select', DrawsFromReadyQueue select' →
-      ∀ arrival_stream, WellFormedStream arrival_stream →
-        runWait (onlineRun select) arrival_stream T ≤ runWait (onlineRun select') arrival_stream T) ↔ T ≤ 3
+theorem exists_optimal_iff (T : ℕ) :
+    (∃ select, DrawsFromReadyQueue select ∧ IsOptimalOverSteps T select) ↔ T ≤ 3
 ```
 
-`←` is `sjf_optimal_of_le_three` (SJF is online via `onlineRun_ready`); `→` is the existing
-`no_optimal_online_nonPreemptive`.
+`←` is `sjf_isOptimalOverSteps_of_le_three` (SJF's run is `runStateSelect` of its
+ready-queue `select`, `runStateSelect_ready`); `→` is the existing
+`no_optimal_nonPreemptive_on_every_stream`.
 
-**Evidence (not a proof).** A Python brute force mirroring `stepNonPreemptiveOnline` /
+**Evidence (not a proof).** A Python brute force mirroring `stepNonPreemptiveStateSelect` /
 `runSteps` / `runWait`. Each step appends that time's arrivals, then ticks the running job,
 and asks the policy on idle or completion; the policy may idle or pick any ready job; cost is
-the sum over `t < T` of `len(ready after step t)`. On one stream an online policy can make
+the sum over `t < T` of `len(ready after step t)`. On one stream a state-select policy can make
 any decision sequence, so SJF is optimal at `T` iff it matches the minimum over all decision
 sequences on every stream. Result: SJF is optimal on every stream for `T = 0..3` (42,875
 streams at `T = 3`: arrivals at times 0–2, ≤ 3 jobs per time, bursts 1–4). From `T = 4` it
@@ -62,11 +71,11 @@ fails, and the smallest counterexample is `{0: [4], 1: [1]}`, which is exactly `
    It is probably cheapest via `runWait_eq_schedWait`, `inSystem_perm` and `length_waiting`
    (`ConvoyEffect/Schedules.lean`), rather than from scratch.
 3. Case analysis with the one-step lemmas in `NonPreemptiveLemmas.lean`
-   (`stepNonPreemptiveOnline_tick`, `_dispatch`, `_complete_dispatch`, `_complete_idle`,
+   (`stepNonPreemptiveStateSelect_tick`, `_dispatch`, `_complete_dispatch`, `_complete_idle`,
    `_idle`) and `selectSJF_min`. This is the long part: finite but mechanical.
 4. `T < 3` the same way, or directly (they are small).
 
 Estimated a few hundred lines, mostly step 3. Put it in a new file (e.g.
-`ConvoyEffect/ShortHorizon.lean`) importing `OnlineImpossibility`. Then update the README
-and the `OnlineImpossibility` module doc, which already says 4 is the least horizon for these
+`ConvoyEffect/ShortHorizon.lean`) importing `NoOptimalNonPreemptiveOnEveryStream`. Then update the README
+and the `NoOptimalNonPreemptiveOnEveryStream` module doc, which already says 4 is the least horizon for these
 two streams.
