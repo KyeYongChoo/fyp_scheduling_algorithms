@@ -29,7 +29,8 @@ its task (`FixedPriorityBacklog`).  `stepEDF` is optimal (`EDFOptimality`).  RMS
 are also exercised by the simulator in `FypSchedulingAlgorithms.SampleSchedules`.
 -/
 
--- Rate Monotonic (RM) scheduler - Preemptively runs the process with the shortest period
+/-- Rate Monotonic (RM) scheduler: preemptively runs the job whose task has the shortest
+period (priority `-period`).  Its priorities are fixed (`fixedPriority_rms`). -/
 def stepRMS : PeriodicSchedState → PeriodicSchedState :=
   stepPreemptive PeriodicProcess (fun p => -(p.period : ℤ))
 
@@ -38,6 +39,9 @@ shortest relative deadline.  With `deadline = period` it orders jobs as `stepRMS
 def stepDM : PeriodicSchedState → PeriodicSchedState :=
   stepPreemptive PeriodicProcess (fun p => -(p.deadline : ℤ))
 
--- Earliest Deadline First (EDF) Scheduler - Preemptively picks the earliest deadline to run
+/-- Earliest Deadline First (EDF) scheduler: preemptively runs the job with the nearest
+absolute deadline, `arrival + deadline` (priority `-(arrival + deadline)`).  Its
+priorities are not fixed, since they depend on the release time
+(`not_fixedPriority_edf`). -/
 def stepEDF : PeriodicSchedState -> PeriodicSchedState :=
   stepPreemptive PeriodicProcess (fun p => -((p.arrival + p.deadline : ℕ) : ℤ))

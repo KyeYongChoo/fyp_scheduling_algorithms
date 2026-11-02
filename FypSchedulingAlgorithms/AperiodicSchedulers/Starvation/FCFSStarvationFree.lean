@@ -53,8 +53,9 @@ the scheduler-agnostic lemmas of the same name in
 `non_preemptive_processes_are_ready_running_completed_or_unarrived` is a
 scheduler-agnostic version of the same "nothing vanishes" invariant, stated
 for an arbitrary `select` rather than FCFS specifically, for reuse when
-proving facts about other non-preemptive schedulers (SJF, SRTF, Round Robin
-- see the TODOs at the bottom of the file).
+proving facts about other non-preemptive schedulers such as SJF.  (SRTF and
+Round Robin are preemptive and have their own invariants: `PreemptiveRuns`,
+`RRStarvationFree`.)
 
 -/
 

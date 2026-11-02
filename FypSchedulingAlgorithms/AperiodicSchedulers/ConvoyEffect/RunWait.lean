@@ -49,9 +49,19 @@ open NonPreemptive
 
 /-! ## Waiting time of a run -/
 
-/-- Total waiting time of a run over its first `T` steps: at each step every job
-in `ready` waits one tick.  Summed over jobs this is each job's time in the ready
-queue (the textbook definition), for any scheduler, preemptive or not. -/
+/-- Total waiting time of a run over the **horizon** `T`, its first `T` steps
+`0, …, T - 1`.  The state after step `t` counts one tick for every job in its `ready`
+queue: every job that waits through the tick of step `t + 1` instead of running.
+Summed over jobs this is each job's time in the ready queue (the textbook
+definition), for any scheduler, preemptive or not.
+
+The count is cut off at the horizon: waiting after step `T - 1` is not counted, so a
+job still queued then has only part of its wait counted.  `runWait` never decreases
+as `T` grows (`runWait_mono`), and stops growing once the run has drained, with
+nothing waiting and nothing more to arrive (`runWait_online_eq_of_drained`).  So
+every comparison of schedulers says at which horizons it holds: at every `T`, once
+`T` covers the total work (`runWait_batch_eq_totalWait`), or from some threshold on
+(`T ≥ 4` in `OnlineImpossibility`). -/
 def runWait (run : (ℕ → List AperiodicProcess) → ℕ → SchedState)
     (arrival_stream : ℕ → List AperiodicProcess) (T : ℕ) : ℕ :=
   ((List.range T).map fun t => (run arrival_stream t).ready.length).sum
