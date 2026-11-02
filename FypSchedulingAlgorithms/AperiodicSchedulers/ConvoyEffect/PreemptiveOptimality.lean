@@ -229,14 +229,14 @@ theorem srtf_le_schedWait_streamB {σ : Schedule} (h_adm : IsAdmissible streamB 
 
 /-- An online non-preemptive run is an admissible schedule. -/
 theorem onlineRun_isAdmissible {select : SchedState → Option AperiodicProcess}
-    (h_mem : IsOnlinePolicy select) {arrival_stream : ℕ → List AperiodicProcess}
+    (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) :
     IsAdmissible arrival_stream (runSchedule (stepNonPreemptiveOnline select) arrival_stream) :=
   runSchedule_isAdmissible (stepNonPreemptiveOnline_conservesJobs h_mem) h_wf h_rep
 
 /-- An online non-preemptive run waits what its schedule waits. -/
 theorem runWait_onlineRun_eq_schedWait {select : SchedState → Option AperiodicProcess}
-    (h_mem : IsOnlinePolicy select) {arrival_stream : ℕ → List AperiodicProcess}
+    (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
     runWait (onlineRun select) arrival_stream T =
       schedWait arrival_stream (runSchedule (stepNonPreemptiveOnline select) arrival_stream) T :=
@@ -249,7 +249,7 @@ least 3 on stream B, where SRTF waits 1.  (Compare `online_nonPreemptive_beaten`
 there the winner had to be chosen per policy and per stream; here one
 scheduler, SRTF, wins against all of them.) -/
 theorem srtf_beats_online_nonPreemptive (select : SchedState → Option AperiodicProcess)
-    (h_mem : IsOnlinePolicy select) {T : ℕ} (hT : 4 ≤ T) :
+    (h_mem : DrawsFromReadyQueue select) {T : ℕ} (hT : 4 ≤ T) :
     runWait (runSteps · stepSRTF) streamA T < runWait (onlineRun select) streamA T ∨
       runWait (runSteps · stepSRTF) streamB T < runWait (onlineRun select) streamB T := by
   cases h : select witnessStart with
@@ -303,7 +303,7 @@ horizon: so among online schedulers there is an optimal one once preemption is
 allowed, in contrast with `no_optimal_online_nonPreemptive`. -/
 theorem srtf_le_onlineRun_of (h : SRTFMinimisesWait)
     {select : SchedState → Option AperiodicProcess}
-    (h_mem : IsOnlinePolicy select) {arrival_stream : ℕ → List AperiodicProcess}
+    (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤
       runWait (onlineRun select) arrival_stream T := by
