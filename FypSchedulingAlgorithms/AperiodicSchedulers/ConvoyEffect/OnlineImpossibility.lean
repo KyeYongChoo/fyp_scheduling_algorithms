@@ -26,8 +26,7 @@ history; that loses nothing here, since the state carries the strictly
 increasing `time`, and the argument only uses each policy's decision at time 0,
 where state and history coincide.  Every `stepNonPreemptive sel` (FCFS, SJF,
 ...) is such a policy (`stepNonPreemptive_eq_online`).  The cost is `runWait`,
-the total time jobs spend in `ready` over the first `T` steps, for any horizon
-`T ≥ 4`.
+the total time jobs spend in `ready` over the first `T` steps.
 
 **The witnesses.**  `streamA` releases a single 4-tick job at time 0;
 `streamB` releases the same job and, at time 1, a unit job
@@ -70,12 +69,15 @@ open NonPreemptive
 
 /-! ## The class of online non-preemptive policies -/
 
-/-- An **online non-preemptive policy** only ever dispatches a job that is
-waiting.  (It may return `none` while jobs wait: deliberate idling.)  It sees
-the current state only: the jobs that have arrived, with their bursts, but no
-future arrivals.  Since the state includes the strictly increasing `time`, this
-is no restriction on any one stream compared with seeing the whole history so
-far (across streams, two histories can reach the same state). -/
+/-- `select` **draws from the ready queue**: every job it picks is waiting in `ready`.
+That stops it from picking a job that is running or completed, or one it made up.  It
+may still return `none` while jobs wait, i.e. idle on purpose.
+
+A `select` with this property, run by `stepNonPreemptiveOnline`, is an **online
+non-preemptive policy**, the class this file is about.  It sees the whole current
+state (time, ready queue, running and completed jobs), not just the ready queue.
+"Online" comes from the type, not from this condition: `select` is given only the
+current state, which holds no future arrivals. -/
 def DrawsFromReadyQueue (select : SchedState → Option AperiodicProcess) : Prop :=
   ∀ s p, select s = some p → p ∈ s.ready
 
@@ -303,7 +305,7 @@ theorem online_nonPreemptive_beaten (select : SchedState → Option AperiodicPro
     omega
 
 /-- **No online non-preemptive policy is optimal**: at every horizon `T ≥ 4`,
-none waits no longer than every other online non-preemptive policy on every
+no non-preemptive policy waits no longer than every other online non-preemptive policy on every
 well-formed stream. -/
 theorem no_optimal_online_nonPreemptive :
     ∀ T, 4 ≤ T → ¬ ∃ select, DrawsFromReadyQueue select ∧ ∀ select', DrawsFromReadyQueue select' →

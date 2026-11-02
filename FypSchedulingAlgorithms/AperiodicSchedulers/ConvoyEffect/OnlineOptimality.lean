@@ -29,9 +29,10 @@ is done.
 
 * `runWait_sjf_le_knownAt` (headline): on every well-formed stream `arrival_stream`, at
   every time `t`, for every competitor whose run agrees with SJF's before `t`,
-  `runWait SJF (knownAt arrival_stream t) (t + T) ≤ runWait competitor (knownAt arrival_stream t) (t + T)`
-  for all `T`.  `runWait_sjf_le_sjfUntil` is the same with the agreement built
-  in: any policy taking over from SJF at `t` (`sjfUntil t select`).
+  `runWait SJF (knownAt arrival_stream t) (t + T)` is at most
+  `runWait competitor (knownAt arrival_stream t) (t + T)`, for all `T`.
+  `runWait_sjf_le_sjfUntil` is the same with the agreement built in: any policy
+  taking over from SJF at `t` (`sjfUntil t select`).
 * `runWait_switchToSJF_le_knownAt` (the general form): the same holds from
   *any* past.  For any policy `select`, "follow `select` before `t`, then SJF"
   (`switchToSJF t select`) waits no longer on the known instance than any
@@ -455,7 +456,7 @@ def switchToSJF (t : ℕ) (select : SchedState → Option AperiodicProcess) :
     SchedState → Option AperiodicProcess :=
   fun s => if s.time < t then select s else selectSJF s.ready
 
-/-- Switching to SJF keeps a policy online. -/
+/-- Switching to SJF still draws only from the ready queue. -/
 theorem switchToSJF_drawsFromReadyQueue (t : ℕ) {select : SchedState → Option AperiodicProcess}
     (h_online : DrawsFromReadyQueue select) : DrawsFromReadyQueue (switchToSJF t select) := by
   intro s p h
@@ -561,7 +562,7 @@ def sjfUntil (t : ℕ) (select : SchedState → Option AperiodicProcess) :
     SchedState → Option AperiodicProcess :=
   fun s => if s.time < t then selectSJF s.ready else select s
 
-/-- Following SJF for a while keeps a policy online. -/
+/-- Following SJF for a while still draws only from the ready queue. -/
 theorem sjfUntil_drawsFromReadyQueue (t : ℕ) {select : SchedState → Option AperiodicProcess}
     (h_online : DrawsFromReadyQueue select) : DrawsFromReadyQueue (sjfUntil t select) := by
   intro s p h

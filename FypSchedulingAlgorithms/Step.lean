@@ -38,11 +38,22 @@ A job newly put on the CPU in a step -- dispatched from idle, after a completion
 or by preemption -- is **not** ticked in that step; its first tick is in the next
 step.  So the state after a step shows who holds the CPU *going into* the next tick.
 
-This file also defines the runSteps function which simulates a time step and
-Arrival stream to simulate arrivals, since i'm modelling infinite processes arriving
-in total, though at any time step only a finite amount of processes arrive
+## Runs
+
+`runSteps arrival_stream step` runs a step function on an *arrival stream*
+`ℕ → List α`, the jobs arriving at each time: infinitely many in total, finitely
+many at a time.  `runSteps arrival_stream step t` is the state **after** step `t`,
+so step 0 is already a step and the state after step `t` reads `time = t + 1`; see
+the docstring of `runSteps`.
 -/
 
+/-- An arrival stream is **well formed** when it is a plausible input: every job
+arriving at time `t` carries `arrival = t` (`consistent`), arrives untouched, with
+`remaining = burst` (`fresh`), and an id is never announced twice except as the same
+job at the same time (`unique`).  `unique` still allows a job to be listed twice in a
+single release; `NoRepeats` (`Schedules`) rules that out where a result names jobs
+by id.  Most results assume a well-formed stream: an ill-formed one can re-announce a
+job forever, or hand it a `remaining` that disagrees with its `burst`. -/
 structure WellFormedStream (arrival_stream : ℕ → List AperiodicProcess) : Prop where
   consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t
   fresh : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.remaining = p.burst
@@ -187,6 +198,18 @@ def stepPreemptive (process_type : Type) [Process process_type]
           else
             { s with time := s.time + 1, running := some b }
 
+/-- The **run** of `scheduler` on `arrivalStream`: `runSteps arrivalStream scheduler t`
+is the state **after step `t`**.  Step `t` appends the jobs arriving at time `t` to the
+back of `ready`, then applies `scheduler` once; step 0 starts from the initial state
+(time 0, nothing on the CPU, nothing completed).
+
+So step 0 is already a step.  For every step function in this library the clock
+advances by one per step, so the state after step `t` reads `time = t + 1` and has seen
+the arrivals of times `0, …, t`.  By the tick convention above, the job on the CPU in
+that state receives the tick of step `t + 1`, and the jobs in its `ready` queue wait
+through it.  Every statement about "step `t`" or "the state after step `t`" uses this
+numbering; the state that step `t` is applied to is `stateBefore` (`RunStepsLemmas`).
+The sample-schedule CSVs print the state after step `k` on the row `time = k + 1`. -/
 def runSteps {process_type} [SchedStateMethods process_type] (arrivalStream : ℕ → List process_type)
     (scheduler : SchedStateG process_type → SchedStateG process_type) : ℕ → SchedStateG process_type
   -- fold over the time stream

@@ -1,5 +1,9 @@
 # fyp\_scheduling\_algorithms
 
+New to the proofs? [GLOSSARY.md](GLOSSARY.md) explains the terms they use (steps and the
+"state after step `t`" numbering, horizons, admissible schedules, the five waiting measures,
+the periodic miss rule, …) and points to the Lean definition of each.
+
 ## Generating the sample schedules
 
 `SampleSchedules/` holds CSV traces of each scheduler on the sample process sets in
