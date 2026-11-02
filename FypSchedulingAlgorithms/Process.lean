@@ -45,7 +45,8 @@ class Process (α : Type) extends BEq α where
   deadline_info : α → String
   -- How a job is printed in the sample-schedule CSVs
   label         : α → String
-  -- Let arrival stream be a function that takes time as argument and returns list of arriving processes
+  -- Let arrival stream be a function that takes time as argument and returns list of
+  -- arriving processes
   convert_to_arrival_stream : List α → Nat → List α
   tick_decrements : ∀ p, remaining (tick p) = remaining p - 1
   id_invariant_wrt_tick : ∀ p, id (tick p) = id (p)

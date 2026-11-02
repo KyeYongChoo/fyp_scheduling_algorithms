@@ -16,13 +16,14 @@ unfold `runSteps`, so most are stated for any `SchedStateG process_type`.
   run step `t + 1` is one `step` (`runSteps_succ_of_nil`); when nothing arrives
   in `(t, t + k]`, the run from `t` on is `step` iterated
   (`runSteps_add_eq_iterate`).
-* **The instance known at time `t`.** `knownAt arrival_stream t` keeps the arrivals of `arrival_stream`
-  up to time `t` and drops the later ones.  A run cannot see the future, so up
-  to step `t` it is the same on `arrival_stream` and on `knownAt arrival_stream t` (`runSteps_knownAt`).
-  The known instance of a well-formed stream is well formed (`knownAt_wf`).
-* **The state a step starts from.** `stateBefore arrival_stream step t` is the state step `t`
-  of the run is applied to: the previous state with the arrivals of time `t`
-  added.  Each run step is one `step` from it (`runSteps_eq_step_stateBefore`),
+* **The instance known at time `t`.** `knownAt arrival_stream t` keeps the
+  arrivals of `arrival_stream` up to time `t` and drops the later ones.  A run
+  cannot see the future, so up to step `t` it is the same on `arrival_stream`
+  and on `knownAt arrival_stream t` (`runSteps_knownAt`).  The known instance of
+  a well-formed stream is well formed (`knownAt_wf`).
+* **The state a step starts from.** `stateBefore arrival_stream step t` is the
+  state step `t` of the run is applied to: the previous state with the arrivals
+  of time `t` added.  Each run step is one `step` from it (`runSteps_eq_step_stateBefore`),
   and two runs that agree before `t` start step `t` from the same state
   (`stateBefore_congr`).
 -/

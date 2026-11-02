@@ -113,12 +113,14 @@ def runStepsRR [SchedStateMethods AperiodicProcess] (quantum : Nat)
         , ticksUsed := 0 }
   | n + 1 =>
     let prev := runStepsRR quantum arrivalStream n
-    stepRR quantum {prev with sched := {prev.sched with ready := prev.sched.ready ++ arrivalStream (n + 1)} }
+    stepRR quantum
+      {prev with sched := {prev.sched with ready := prev.sched.ready ++ arrivalStream (n + 1)} }
 
 def runStepsRRAccumulateResults [SchedStateMethods AperiodicProcess] (quantum : Nat)
   (num_steps := default_num_steps)
   (arrivalStream : ℕ → List AperiodicProcess): List (SchedState) :=
-  ((List.range (num_steps + 1)).map (runStepsRR quantum arrivalStream)).map fun rr_state: RRState => rr_state.sched
+  ((List.range (num_steps + 1)).map (runStepsRR quantum arrivalStream)).map
+    fun rr_state : RRState => rr_state.sched
 
 /-- **FCFS** selection: the head of the ready queue.  The queue holds jobs in arrival
 order, since a run appends each time's arrivals at the back (`runSteps`). -/

@@ -501,7 +501,8 @@ theorem runSchedule_stepPreemptive_max (f : PeriodicProcess → ℤ) {tasks : Li
     exact le_rfl
   · have hp_sys : jobAt σ t p ∈ inSystem _ := h_sys.symm.subset (List.mem_map_of_mem hp)
     have hp_ready : jobAt σ t p ∈
-        (runSteps (PeriodicProcess.releasesAt tasks) (stepPreemptive PeriodicProcess f) t).ready := by
+        (runSteps (PeriodicProcess.releasesAt tasks)
+          (stepPreemptive PeriodicProcess f) t).ready := by
       simp only [inSystem, hb, Option.toList_some, List.mem_append, List.mem_singleton] at hp_sys
       refine hp_sys.resolve_right fun h' => h_eq ?_
       exact key_injective h_ids (mem_unfinished.mp hp).1 (mem_unfinished.mp hp0).1

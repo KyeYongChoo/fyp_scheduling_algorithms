@@ -60,7 +60,8 @@ theorem rr_convoy_invariant (quantum L : ℕ) (hL : 0 < L) (t : ℕ)
 job is dispatched at step `min quantum L`: after a full quantum if the long job
 is preempted, or as soon as the long job finishes if it fits in one quantum. -/
 theorem rr_convoy_dispatch (quantum L : ℕ) (hq : 0 < quantum) (hL : 0 < L) :
-    (runStepsRR quantum (convoyArrivalStream L hL) (min quantum L)).sched.running = some shortJob := by
+    (runStepsRR quantum (convoyArrivalStream L hL) (min quantum L)).sched.running =
+      some shortJob := by
   obtain ⟨m, hm⟩ : ∃ m, min quantum L = m + 1 := ⟨min quantum L - 1, by omega⟩
   obtain ⟨h_running, h_ready, h_ticks⟩ :=
     rr_convoy_invariant quantum L hL m (by omega)
@@ -101,7 +102,8 @@ theorem rr_hasConvoyEffect (quantum : ℕ) :
 /-- **RR has the online convoy effect, for every quantum** (a consequence of the
 convoy effect). -/
 theorem rr_hasOnlineConvoyEffect (quantum : ℕ) :
-    HasOnlineConvoyEffectRun (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) :=
+    HasOnlineConvoyEffectRun
+      (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) :=
   hasConvoyEffectRun_imp_online (rr_hasConvoyEffect quantum)
 
 /-! ### A smaller quantum is not better in general -/

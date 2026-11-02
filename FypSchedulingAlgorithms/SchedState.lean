@@ -27,11 +27,13 @@ class SchedStateMethods(process_type : Type) where
   -- `time > r + D`
   get_missed_processes  : SchedStateG process_type → List process_type
   extra_csv_field_names : String -- of form ",field_name1,field_name2" for new fields
-  extra_csv_content     : SchedStateG process_type → String -- of form ",content1,content2" for new fields
+  -- of form ",content1,content2" for new fields
+  extra_csv_content     : SchedStateG process_type → String
 
 instance : SchedStateMethods AperiodicProcess where
   init := {time := 0, ready := [], running := none, completed := []}
-  add_arrival s processes := {s with ready := s.ready ++ (processes.filter fun p => p.arrival = s.time)}
+  add_arrival s processes :=
+    {s with ready := s.ready ++ (processes.filter fun p => p.arrival = s.time)}
   get_missed_processes _ := []
   extra_csv_field_names := ""
   extra_csv_content _ := ""
@@ -54,7 +56,8 @@ def PeriodicProcess.missedDeadlines (s : SchedStateG PeriodicProcess) : List Per
 instance : SchedStateMethods PeriodicProcess where
   init := {time := 0, ready := [], running := none, completed := []}
   -- the same releases as `Process.convert_to_arrival_stream`
-  add_arrival s processes := {s with ready := s.ready ++ PeriodicProcess.releasesAt processes s.time}
+  add_arrival s processes :=
+    {s with ready := s.ready ++ PeriodicProcess.releasesAt processes s.time}
   get_missed_processes := PeriodicProcess.missedDeadlines
   extra_csv_field_names := " with deadline,missed_deadlines"
   extra_csv_content s :=
@@ -62,7 +65,8 @@ instance : SchedStateMethods PeriodicProcess where
     let missed_processes := PeriodicProcess.missedDeadlines s
     let tickInfo :=
       missed_processes.map fun p =>
-      "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
+      "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++
+        toString (Process.burst p) ++ toString (Process.deadline_info p)
     let tickField := "|".intercalate tickInfo
     s!",\"{tickField}\""
 
@@ -74,6 +78,7 @@ structure RRState where
   deriving Repr
 
 -- Add arrivals to the SchedState inside RRState
-def addArrivalsRR [SchedStateMethods AperiodicProcess] (rs : RRState) (processes : List AperiodicProcess): RRState :=
+def addArrivalsRR [SchedStateMethods AperiodicProcess] (rs : RRState)
+    (processes : List AperiodicProcess) : RRState :=
   let newSched := SchedStateMethods.add_arrival rs.sched processes
   { rs with sched := newSched }

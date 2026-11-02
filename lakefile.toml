@@ -10,7 +10,7 @@ weak.linter.mathlibStandardSet = true
 maxSynthPendingDepth = 3
 weak.linter.style.whitespace = false
 weak.linter.style.emptyLine = false
-weak.linter.style.longLine = false
+weak.linter.style.longLine = true # lines of at most 100 characters
 
 [[require]]
 name = "mathlib"

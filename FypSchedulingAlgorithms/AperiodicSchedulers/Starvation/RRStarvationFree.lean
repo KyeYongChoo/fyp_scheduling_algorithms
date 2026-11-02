@@ -118,7 +118,8 @@ theorem ready_nonempty_implies_running_nonempty
   (arrival_stream : ℕ → List AperiodicProcess)
   (t quantum: ℕ)
   (h_ready_nonempty : (runStepsRR quantum arrival_stream t).sched.ready ≠ []):
-  ∃ p_running : AperiodicProcess, (runStepsRR quantum arrival_stream t).sched.running = some p_running :=
+  ∃ p_running : AperiodicProcess,
+    (runStepsRR quantum arrival_stream t).sched.running = some p_running :=
   by
   cases h : (runStepsRR quantum arrival_stream t).sched.running with
   | none =>
@@ -136,8 +137,10 @@ lemma remaining_pos_of_ready_or_running
   (h_wf : WellFormedStream arrival_stream)
   (t quantum : ℕ) :
   (∀ p ∈ (runStepsRR quantum arrival_stream t).sched.ready, Process.remaining p > 0) ∧
-  (∀ p, (runStepsRR quantum arrival_stream t).sched.running = some p → Process.remaining p > 0) := by
-  have fresh_pos : ∀ (p : AperiodicProcess) (t_arrival : ℕ), p ∈ arrival_stream t_arrival → Process.remaining p > 0 := by
+  (∀ p, (runStepsRR quantum arrival_stream t).sched.running = some p →
+    Process.remaining p > 0) := by
+  have fresh_pos : ∀ (p : AperiodicProcess) (t_arrival : ℕ),
+      p ∈ arrival_stream t_arrival → Process.remaining p > 0 := by
     intro p t_arrival hp
     simp only [AperiodicProcess.process_remaining, gt_iff_lt]
     rw [h_wf.fresh p t_arrival hp]
@@ -157,8 +160,9 @@ lemma remaining_pos_of_ready_or_running
   | succ t ih =>
     obtain ⟨ih_ready, ih_running⟩ := ih
     simp only [runStepsRR, stepRR]
-    have ready_src : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
-        Process.remaining q > 0 := by
+    have ready_src :
+        ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
+          Process.remaining q > 0 := by
       intro q hq
       rcases List.mem_append.mp hq with h | h
       · exact ih_ready q h
@@ -170,8 +174,10 @@ lemma remaining_pos_of_ready_or_running
         exact ⟨ready_src, by intro q hq; simp at hq; tauto⟩
       · -- ready = p :: ps: p gets dispatched to `running`, ps becomes the new ready queue
         rename_i p ps h_match   -- h_match : combined = p :: ps
-        obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
-        exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+        obtain ⟨h_ready, h_running⟩ :=
+          dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+        exact ⟨h_ready,
+          fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
     · -- running = some p: p was already running; case on whether it finishes this tick
       rename_i p h_prev_running
       split  -- stepRR case: does p.remaining ≤ 1, i.e. does p complete this tick?
@@ -181,8 +187,10 @@ lemma remaining_pos_of_ready_or_running
           exact ⟨ready_src, by intro q hq; simp at hq⟩
         · -- ready = p :: ps: p completes, next process p is dispatched, ps is the new ready queue
           rename_i p ps h_match   -- h_match : combined = p :: ps
-          obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
-          exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+          obtain ⟨h_ready, h_running⟩ :=
+            dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+          exact ⟨h_ready,
+            fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
       · -- p.remaining > 1: p keeps running this tick (not preempted); only quantum bookkeeping
         -- below differs, depending on whether p's quantum has expired.
         rename_i h_not_done
@@ -193,7 +201,8 @@ lemma remaining_pos_of_ready_or_running
         · -- ready-queue goal
           intro q hq
           split at hq  -- stepRR case: has p's quantum expired (ticksUsed ≥ quantum - 1)?
-          · -- quantum expired: p goes back to the ready queue (with remaining - 1) if there's a next process
+          · -- quantum expired: p goes back to the ready queue (with remaining - 1) if there's a
+            -- next process
             split at hq  -- match on the combined ready queue
             · -- ready = []: no one to swap in, p just keeps running with remaining - 1
               simp at hq
@@ -248,8 +257,9 @@ theorem system_arrival_bound
     simp only [runStepsRR, stepRR]
     -- everything that could be in next tick's ready queue is either already queued (bound by
     -- `t`, so certainly by `t + 1`) or has just arrived at `t + 1`
-    have ready_src : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
-        Process.arrival q ≤ t + 1 := by
+    have ready_src :
+        ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
+          Process.arrival q ≤ t + 1 := by
       intro q hq
       rcases List.mem_append.mp hq with h | h
       · exact le_trans (ih_ready q h) (by omega)
@@ -261,8 +271,10 @@ theorem system_arrival_bound
         exact ⟨ready_src, by intro q hq; simp at hq; tauto⟩
       · -- ready = p :: ps: p gets dispatched to `running`, ps becomes the new ready queue
         rename_i p ps h_match   -- h_match : combined = p :: ps
-        obtain ⟨h_ready, h_running⟩ := dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
-        exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+        obtain ⟨h_ready, h_running⟩ :=
+          dispatch_preserves p ps (by rw [← h_match]; exact ready_src)
+        exact ⟨h_ready,
+          fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
     · -- running = some p: p was already running; case on whether it finishes this tick
       rename_i p h_prev_running
       split  -- stepRR case: does p.remaining ≤ 1, i.e. does p complete this tick?
@@ -272,8 +284,10 @@ theorem system_arrival_bound
           exact ⟨ready_src, by intro q hq; simp at hq⟩
         · -- ready = nx :: ps: p completes, nx is dispatched, ps is the new ready queue
           rename_i nx ps h_match   -- h_match : combined = nx :: ps
-          obtain ⟨h_ready, h_running⟩ := dispatch_preserves nx ps (by rw [← h_match]; exact ready_src)
-          exact ⟨h_ready, fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
+          obtain ⟨h_ready, h_running⟩ :=
+            dispatch_preserves nx ps (by rw [← h_match]; exact ready_src)
+          exact ⟨h_ready,
+            fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running⟩
       · -- p.remaining > 1: p keeps running this tick; only quantum bookkeeping differs below.
         -- Ticking never touches `arrival`, so p's own bound just weakens from `≤ t` to `≤ t + 1`.
         have h_tick_arrival : Process.arrival { p with remaining := p.remaining - 1 } ≤ t + 1 := by
@@ -331,13 +345,15 @@ theorem system_provenance
     obtain ⟨ih_ready, ih_running, ih_completed⟩ := ih
     simp only [runStepsRR, stepRR]
     -- a witness `s ≤ t` from the IH is still a witness once the clock moves to `t + 1`
-    have weaken : ∀ (q: AperiodicProcess), (∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) →
+    have weaken : ∀ (q: AperiodicProcess),
+        (∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) →
         ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
       rintro q ⟨s, hs, q₀, hq₀, hid⟩
       exact ⟨s, by omega, q₀, hq₀, hid⟩
     -- anything that can end up queued next tick was either queued already or just arrived
-    have ready_src : ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
-        ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
+    have ready_src :
+        ∀ q ∈ (runStepsRR quantum arrival_stream t).sched.ready ++ arrival_stream (t + 1),
+          ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
       intro q hq
       rcases List.mem_append.mp hq with h | h
       · exact weaken q (ih_ready q h)
@@ -382,7 +398,8 @@ theorem system_provenance
           exact ⟨ready_src, by intro q hq; simp at hq, completed_done⟩
         · -- ready = nx :: ps: p completes, nx is dispatched, ps is the new ready queue
           rename_i nx ps h_match   -- h_match : combined = nx :: ps
-          obtain ⟨h_ready, h_running⟩ := dispatch_preserves nx ps (by rw [← h_match]; exact ready_src)
+          obtain ⟨h_ready, h_running⟩ :=
+            dispatch_preserves nx ps (by rw [← h_match]; exact ready_src)
           exact ⟨h_ready,
                  fun q hq => by simp only [Option.some.injEq] at hq; subst hq; exact h_running,
                  completed_done⟩
@@ -429,7 +446,8 @@ theorem target_index_decreases_one_step
                  ∧ target ∉ pre'
                  ∧ pre'.length = pre.length
                  ∧ ∀ p, (runStepsRR quantum arrival_stream t).sched.running = some p →
-                     (runStepsRR quantum arrival_stream (t + 1)).sched.running = some (Process.tick p))
+                     (runStepsRR quantum arrival_stream (t + 1)).sched.running =
+                       some (Process.tick p))
   := by
   -- `target` sits in the ready queue, so the queue is nonempty and something is running
   obtain ⟨p, h_prev_running⟩ :=
@@ -496,7 +514,8 @@ theorem target_progresses
       Process.remaining q ≤ n →
       target ∉ pre₀ →
       ∃ k > 0, (runStepsRR quantum arrival_stream (t₀ + k)).sched.running = some target
-      ∨ (∃ pre' suf', (runStepsRR quantum arrival_stream (t₀ + k)).sched.ready = pre' ++ target :: suf'
+      ∨ (∃ pre' suf',
+          (runStepsRR quantum arrival_stream (t₀ + k)).sched.ready = pre' ++ target :: suf'
         ∧ target ∉ pre'
         ∧ pre'.length < pre₀.length)
       from by
@@ -513,7 +532,8 @@ theorem target_progresses
 
     | succ n ih =>
       intro t' pre' suf' q h_running h_ready h_remaining h_notin
-      rcases target_index_decreases_one_step arrival_stream target t' quantum pre' suf' h_ready h_notin with
+      rcases target_index_decreases_one_step arrival_stream target t' quantum pre' suf' h_ready
+          h_notin with
         h_run | h_shrink | h_same
       · exact ⟨1, by omega, Or.inl h_run⟩
       · exact ⟨1, by omega, Or.inr h_shrink⟩
@@ -703,8 +723,10 @@ theorem StarvationFree
   (quantum : ℕ)
   (h_wf : WellFormedStream arrival_stream) :
   ∀ arrival_time process, process ∈ arrival_stream arrival_time →
-  ∃ completion_time, ∃ finished_process ∈ (runStepsRR quantum arrival_stream completion_time).sched.completed,
-    Process.id finished_process = Process.id process -- cannot directly compare a process via == since the `remaining` field changes
+  ∃ completion_time,
+    ∃ finished_process ∈ (runStepsRR quantum arrival_stream completion_time).sched.completed,
+    -- cannot directly compare a process via == since the `remaining` field changes
+    Process.id finished_process = Process.id process
   := by
   intro arrival_time process h_arrived
   -- It suffices to show that a process which is queued or running at some time, with
@@ -732,7 +754,8 @@ theorem StarvationFree
   | succ n ih =>
     intro t q h_rem h_where
     -- whether q is queued or already running, it gets a turn at some point
-    obtain ⟨t_run, h_run⟩ : ∃ t_run, (runStepsRR quantum arrival_stream t_run).sched.running = some q := by
+    obtain ⟨t_run, h_run⟩ :
+        ∃ t_run, (runStepsRR quantum arrival_stream t_run).sched.running = some q := by
       rcases h_where with ⟨pre, suf, h_split, h_notin⟩ | h_run
       · obtain ⟨k, h_k⟩ :=
           ready_eventually_runs arrival_stream q h_wf t quantum pre suf h_split h_notin

@@ -54,7 +54,8 @@ def bothFail [Process PeriodicProcess]: Nat → List PeriodicProcess :=
 
 -- # CSV output
 
-def stateToCSV {process_type: Type} [Process process_type] [SchedStateMethods process_type] (s : SchedStateG process_type) : String :=
+def stateToCSV {process_type: Type} [Process process_type] [SchedStateMethods process_type]
+    (s : SchedStateG process_type) : String :=
   let running := s.running.map Process.label |>.getD "0"
   let readyIds := ",".intercalate (s.ready.map Process.label)
   let completedIds := ",".intercalate (s.completed.map Process.label)
@@ -65,7 +66,8 @@ def stateToCSV {process_type: Type} [Process process_type] [SchedStateMethods pr
     Process.id p1 < Process.id p2 ||
       (Process.id p1 = Process.id p2 && Process.arrival p1 ≤ Process.arrival p2))
   let tickInfo := sortedProcesses.map fun p =>
-    "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++ toString (Process.burst p) ++ toString (Process.deadline_info p)
+    "P" ++ Process.label p ++ ":" ++ toString (Process.ticksUsed p) ++ "/" ++
+      toString (Process.burst p) ++ toString (Process.deadline_info p)
   let tickField := "|".intercalate tickInfo
 
   -- Wrap lists in quotes
@@ -77,13 +79,15 @@ def stateToCSV {process_type: Type} [Process process_type] [SchedStateMethods pr
   ++ "," ++ ticksField ++ (SchedStateMethods.extra_csv_content s)
 
 def outputCSV {α} [Process α] [SchedStateMethods α] (states : List (SchedStateG α)) : String :=
-  let header := "time,running,ready_queue,completed,process_ticks" ++ toString (SchedStateMethods.extra_csv_field_names (process_type := α))
+  let header := "time,running,ready_queue,completed,process_ticks" ++
+    toString (SchedStateMethods.extra_csv_field_names (process_type := α))
   let rows := states.map stateToCSV
   (header :: rows) |> "\n".intercalate
 
 /-- Write `content` to `dir ++ subdir ++ "/" ++ filename`, creating the directory if needed.
 A relative `dir` is relative to the working directory; `SampleSchedulesGen` passes one built
 from its own location. -/
-def writeCSV (filename : String) (content : String) (dir: String := "SampleSchedules/") (subdir: String := ""): IO Unit := do
+def writeCSV (filename : String) (content : String) (dir: String := "SampleSchedules/")
+    (subdir: String := ""): IO Unit := do
   IO.FS.createDirAll (dir ++ subdir)
   IO.FS.writeFile (dir ++ subdir ++ "/" ++ filename) content
