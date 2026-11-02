@@ -150,25 +150,25 @@ theorem nonPreemptiveOnline_runsShortestAtDispatch
     (select : SchedState → Option AperiodicProcess)
     (h_mem : ∀ s p, select s = some p → p ∈ s.ready)
     (h_short : ∀ s p, select s = some p → ∀ q ∈ s.ready, p.burst ≤ q.burst) :
-    RunsShortestAtDispatchRun (fun as => runSteps as (stepNonPreemptiveOnline select)) := by
-  intro as h_wf t p h_disp q hq
+    RunsShortestAtDispatchRun (fun arrival_stream => runSteps arrival_stream (stepNonPreemptiveOnline select)) := by
+  intro arrival_stream h_wf t p h_disp q hq
   obtain ⟨h_run, h_new⟩ := h_disp
   -- the state step `t` starts from: the previous state with this step's arrivals
   obtain ⟨s, h_eq, h_s_new, h_s_fresh⟩ : ∃ s : SchedState,
-      runSteps as (stepNonPreemptiveOnline select) t = stepNonPreemptiveOnline select s ∧
+      runSteps arrival_stream (stepNonPreemptiveOnline select) t = stepNonPreemptiveOnline select s ∧
       s.running.map (·.id) ≠ some p.id ∧ ∀ r ∈ s.ready, r.remaining = r.burst := by
     cases t with
     | zero =>
-      refine ⟨{ SchedStateMethods.init with ready := as 0 }, rfl, by simp, ?_⟩
+      refine ⟨{ SchedStateMethods.init with ready := arrival_stream 0 }, rfl, by simp, ?_⟩
       intro r hr
       exact h_wf.fresh r 0 (by simpa using hr)
     | succ t =>
-      refine ⟨{ runSteps as (stepNonPreemptiveOnline select) t with
-        ready := (runSteps as (stepNonPreemptiveOnline select) t).ready ++ as (t + 1) }, rfl,
+      refine ⟨{ runSteps arrival_stream (stepNonPreemptiveOnline select) t with
+        ready := (runSteps arrival_stream (stepNonPreemptiveOnline select) t).ready ++ arrival_stream (t + 1) }, rfl,
         h_new t rfl, ?_⟩
       intro r hr
       rcases List.mem_append.mp hr with hr | hr
-      · exact nonPreemptiveOnline_ready_fresh select as h_wf t r hr
+      · exact nonPreemptiveOnline_ready_fresh select arrival_stream h_wf t r hr
       · exact h_wf.fresh r _ hr
   simp only at h_run hq
   rw [h_eq] at h_run hq
@@ -182,7 +182,7 @@ theorem nonPreemptiveOnline_runsShortestAtDispatch
 /-- **SJF runs the shortest job at every dispatch**, on every well-formed
 stream. -/
 theorem sjf_runsShortestAtDispatch :
-    RunsShortestAtDispatchRun (fun as => runSteps as stepSJF) :=
+    RunsShortestAtDispatchRun (fun arrival_stream => runSteps arrival_stream stepSJF) :=
   nonPreemptiveOnline_runsShortestAtDispatch (fun s => selectSJF s.ready)
     (fun _ p h => selectSJF_mem _ p h) (fun _ p h => selectSJF_min _ p h)
 
@@ -225,7 +225,7 @@ SJF dispatches a job on `lateConvoyArrivalStream`, no shorter job is waiting.
 (The short job arrives only after the long one has been dispatched.) -/
 theorem sjf_late_convoy_runsShortestAtDispatch (L : ℕ) (hL : 0 < L) (t : ℕ)
     (p : AperiodicProcess)
-    (h : DispatchesAt (fun as => runSteps as stepSJF) (lateConvoyArrivalStream L hL) t p) :
+    (h : DispatchesAt (fun arrival_stream => runSteps arrival_stream stepSJF) (lateConvoyArrivalStream L hL) t p) :
     ∀ q ∈ (runSteps (lateConvoyArrivalStream L hL) stepSJF t).ready,
       p.remaining ≤ q.remaining :=
   sjf_runsShortestAtDispatch _ (lateConvoyArrivalStream_wf L hL) t p h

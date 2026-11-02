@@ -142,7 +142,7 @@ theorem stepPreemptive_conservesJobs (f : AperiodicProcess → ℤ) :
 /-- **Every online non-preemptive policy conserves jobs** (it only ever
 dispatches a waiting job). -/
 theorem stepNonPreemptiveOnline_conservesJobs {select : SchedState → Option AperiodicProcess}
-    (h_mem : IsOnlinePolicy select) : ConservesJobs (stepNonPreemptiveOnline select) := by
+    (h_mem : DrawsFromReadyQueue select) : ConservesJobs (stepNonPreemptiveOnline select) := by
   intro s
   unfold stepNonPreemptiveOnline
   rcases hr : s.running with _ | b

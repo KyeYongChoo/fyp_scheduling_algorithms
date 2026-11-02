@@ -267,7 +267,7 @@ theorem srtfMinimisesWait : SRTFMinimisesWait := by
 /-- **SRTF waits no longer than any online non-preemptive policy**, on every
 well-formed stream without repeats, at every horizon. -/
 theorem srtf_le_onlineRun {select : SchedState → Option AperiodicProcess}
-    (h_mem : IsOnlinePolicy select) {arrival_stream : ℕ → List AperiodicProcess}
+    (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤ runWait (onlineRun select) arrival_stream T :=
   srtf_le_onlineRun_of srtfMinimisesWait h_mem h_wf h_rep T

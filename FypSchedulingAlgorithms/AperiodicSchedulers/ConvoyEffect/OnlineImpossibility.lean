@@ -16,7 +16,7 @@ knows what is coming, and no policy can commit correctly on every stream.
 
 **The class.**  An *online non-preemptive policy* is any
 `select : SchedState → Option AperiodicProcess` that only ever picks a waiting
-job (`IsOnlinePolicy`), run with `stepNonPreemptiveOnline`.  "Online" means it
+job (`DrawsFromReadyQueue`), run with `stepNonPreemptiveOnline`.  "Online" means it
 cannot see future arrivals; it does see everything about the jobs that have
 already arrived, bursts included (the usual assumption behind SJF).  Its choice
 may depend on everything known so far -- the time, the ready queue, the running
@@ -76,7 +76,7 @@ the current state only: the jobs that have arrived, with their bursts, but no
 future arrivals.  Since the state includes the strictly increasing `time`, this
 is no restriction on any one stream compared with seeing the whole history so
 far (across streams, two histories can reach the same state). -/
-def IsOnlinePolicy (select : SchedState → Option AperiodicProcess) : Prop :=
+def DrawsFromReadyQueue (select : SchedState → Option AperiodicProcess) : Prop :=
   ∀ s p, select s = some p → p ∈ s.ready
 
 /-- The run of an online non-preemptive policy. -/
@@ -87,7 +87,7 @@ def onlineRun (select : SchedState → Option AperiodicProcess) :
 /-- Every ready-queue policy `sel` is an online policy, with the same run as
 `stepNonPreemptive sel`. -/
 theorem onlineRun_ready (sel : List AperiodicProcess → Option AperiodicProcess) :
-    onlineRun (fun s => sel s.ready) = fun as => runSteps as (stepNonPreemptive sel) := by
+    onlineRun (fun s => sel s.ready) = fun arrival_stream => runSteps arrival_stream (stepNonPreemptive sel) := by
   rw [stepNonPreemptive_eq_online]
   rfl
 
@@ -99,7 +99,7 @@ def idleThenSJF : SchedState → Option AperiodicProcess :=
   fun s => if s.time = 0 then none else selectSJF s.ready
 
 /-- FCFS only dispatches the head of the ready queue. -/
-theorem fcfsOnline_isOnlinePolicy : IsOnlinePolicy fcfsOnline := by
+theorem fcfsOnline_drawsFromReadyQueue : DrawsFromReadyQueue fcfsOnline := by
   intro s p h
   unfold fcfsOnline selectFCFS at h
   split at h
@@ -111,7 +111,7 @@ theorem fcfsOnline_isOnlinePolicy : IsOnlinePolicy fcfsOnline := by
     exact List.mem_cons_self ..
 
 /-- `idleThenSJF` dispatches nothing at time 0 and a waiting job after that. -/
-theorem idleThenSJF_isOnlinePolicy : IsOnlinePolicy idleThenSJF := by
+theorem idleThenSJF_drawsFromReadyQueue : DrawsFromReadyQueue idleThenSJF := by
   intro s p h
   unfold idleThenSJF at h
   split at h
@@ -138,12 +138,12 @@ theorem waitFrom_online_nil (select : SchedState → Option AperiodicProcess) (s
 ready queue is empty after step `t`, the wait over any horizon `T ≥ t` is the
 wait over the first `t` steps. -/
 theorem runWait_online_eq_of_drained (select : SchedState → Option AperiodicProcess)
-    (as : ℕ → List AperiodicProcess) (t : ℕ) (h_arr : ∀ j, t < j → as j = [])
-    (h_ready : (onlineRun select as t).ready = []) {T : ℕ} (hT : t ≤ T) :
-    runWait (onlineRun select) as T = runWait (onlineRun select) as t := by
+    (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (h_arr : ∀ j, t < j → arrival_stream j = [])
+    (h_ready : (onlineRun select arrival_stream t).ready = []) {T : ℕ} (hT : t ≤ T) :
+    runWait (onlineRun select) arrival_stream T = runWait (onlineRun select) arrival_stream t := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hT
-  have h_ready' : (runSteps as (stepNonPreemptiveOnline select) t).ready = [] := h_ready
-  have h := runWait_add (stepNonPreemptiveOnline select) as t k (fun j h1 _ => h_arr j h1)
+  have h_ready' : (runSteps arrival_stream (stepNonPreemptiveOnline select) t).ready = [] := h_ready
+  have h := runWait_add (stepNonPreemptiveOnline select) arrival_stream t k (fun j h1 _ => h_arr j h1)
   rw [waitFrom_online_nil select _ h_ready', Nat.add_zero] at h
   exact h
 
@@ -218,9 +218,9 @@ theorem runWait_idleThenSJF_streamB (T : ℕ) (hT : 4 ≤ T) :
 
 /-- The wait over 4 steps counts the ready queue at each of the steps `0, …, 3`. -/
 theorem runWait_four (run : (ℕ → List AperiodicProcess) → ℕ → SchedState)
-    (as : ℕ → List AperiodicProcess) :
-    runWait run as 4 = (run as 0).ready.length + (run as 1).ready.length +
-      (run as 2).ready.length + (run as 3).ready.length := by
+    (arrival_stream : ℕ → List AperiodicProcess) :
+    runWait run arrival_stream 4 = (run arrival_stream 0).ready.length + (run arrival_stream 1).ready.length +
+      (run arrival_stream 2).ready.length + (run arrival_stream 3).ready.length := by
   simp [runWait, List.range_succ]
   omega
 
@@ -239,7 +239,7 @@ theorem idle_costs_on_streamA (select : SchedState → Option AperiodicProcess)
 `T ≥ 4`: the long job holds the CPU for steps 1, 2 and 3, and the unit job,
 arriving at time 1, waits through all three. -/
 theorem dispatch_costs_on_streamB (select : SchedState → Option AperiodicProcess)
-    (h_mem : IsOnlinePolicy select) (p : AperiodicProcess)
+    (h_mem : DrawsFromReadyQueue select) (p : AperiodicProcess)
     (h_disp : select witnessStart = some p) {T : ℕ} (hT : 4 ≤ T) :
     3 ≤ runWait (onlineRun select) streamB T := by
   refine le_trans ?_ (runWait_mono _ _ hT)
@@ -284,20 +284,20 @@ policy dispatches the long job there, "idle at time 0, then SJF" waits less on
 stream B (2 against at least 3); if it idles, FCFS waits less on stream A (0
 against at least 1). -/
 theorem online_nonPreemptive_beaten (select : SchedState → Option AperiodicProcess)
-    (h_mem : IsOnlinePolicy select) :
-    ∃ select', IsOnlinePolicy select' ∧
+    (h_mem : DrawsFromReadyQueue select) :
+    ∃ select', DrawsFromReadyQueue select' ∧
       ((∀ T, 4 ≤ T →
           runWait (onlineRun select') streamA T < runWait (onlineRun select) streamA T) ∨
         (∀ T, 4 ≤ T →
           runWait (onlineRun select') streamB T < runWait (onlineRun select) streamB T)) := by
   cases h : select witnessStart with
   | none =>
-    refine ⟨fcfsOnline, fcfsOnline_isOnlinePolicy, Or.inl fun T hT => ?_⟩
+    refine ⟨fcfsOnline, fcfsOnline_drawsFromReadyQueue, Or.inl fun T hT => ?_⟩
     have := idle_costs_on_streamA select h (T := T) (by omega)
     rw [runWait_fcfsOnline_streamA T hT]
     omega
   | some p =>
-    refine ⟨idleThenSJF, idleThenSJF_isOnlinePolicy, Or.inr fun T hT => ?_⟩
+    refine ⟨idleThenSJF, idleThenSJF_drawsFromReadyQueue, Or.inr fun T hT => ?_⟩
     have := dispatch_costs_on_streamB select h_mem p h hT
     rw [runWait_idleThenSJF_streamB T hT]
     omega
@@ -306,9 +306,9 @@ theorem online_nonPreemptive_beaten (select : SchedState → Option AperiodicPro
 none waits no longer than every other online non-preemptive policy on every
 well-formed stream. -/
 theorem no_optimal_online_nonPreemptive :
-    ∀ T, 4 ≤ T → ¬ ∃ select, IsOnlinePolicy select ∧ ∀ select', IsOnlinePolicy select' →
-      ∀ as, WellFormedStream as →
-        runWait (onlineRun select) as T ≤ runWait (onlineRun select') as T := by
+    ∀ T, 4 ≤ T → ¬ ∃ select, DrawsFromReadyQueue select ∧ ∀ select', DrawsFromReadyQueue select' →
+      ∀ arrival_stream, WellFormedStream arrival_stream →
+        runWait (onlineRun select) arrival_stream T ≤ runWait (onlineRun select') arrival_stream T := by
   rintro T hT ⟨select, h_mem, h_opt⟩
   obtain ⟨select', h_mem', h_lt | h_lt⟩ := online_nonPreemptive_beaten select h_mem
   · exact absurd (h_opt select' h_mem' streamA streamA_wf) (not_le.mpr (h_lt T hT))
@@ -319,10 +319,10 @@ every horizon `T ≥ 4`, idling once and then running SJF waits 2 ticks, while
 SJF itself waits at least 3.  (SJF is optimal on batches, `runWait_sjf_le`: it
 is the late arrival that it cannot anticipate.) -/
 theorem sjf_not_optimal_online :
-    IsOnlinePolicy idleThenSJF ∧ WellFormedStream streamB ∧
+    DrawsFromReadyQueue idleThenSJF ∧ WellFormedStream streamB ∧
       ∀ T, 4 ≤ T → runWait (onlineRun idleThenSJF) streamB T <
         runWait (runSteps · stepSJF) streamB T := by
-  refine ⟨idleThenSJF_isOnlinePolicy, streamB_wf, fun T hT => ?_⟩
+  refine ⟨idleThenSJF_drawsFromReadyQueue, streamB_wf, fun T hT => ?_⟩
   have := runWait_mono (runSteps · stepSJF) streamB hT
   rw [runWait_sjf_streamB_four] at this
   rw [runWait_idleThenSJF_streamB T hT]

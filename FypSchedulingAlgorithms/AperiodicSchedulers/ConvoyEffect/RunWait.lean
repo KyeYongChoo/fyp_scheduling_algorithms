@@ -17,12 +17,12 @@ import FypSchedulingAlgorithms.SchedStateSimpLemmas
 `totalWait` (in `TotalWait`) is a formula on a list of bursts.  This file ties it
 to actual executions.
 
-* `runWait run as T` is the waiting time of a *run*: at each of the first `T`
+* `runWait run arrival_stream T` is the waiting time of a *run*: at each of the first `T`
   steps, every job sitting in `ready` waits one tick.  Summed over jobs this is
   each job's time in the ready queue -- the textbook definition -- and it makes
   sense for any scheduler presented as a run function: non-preemptive,
   preemptive (`runSteps · stepSRTF`) or Round Robin
-  (`fun as t => (runStepsRR q as t).sched`).
+  (`fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
 * `dispatchOrder select l` is the order in which a non-preemptive policy
   dispatches a batch `l`: ask `select`, remove its choice, repeat.  It is a
   permutation of `l` (`dispatchOrder_perm`).
@@ -125,7 +125,7 @@ theorem runSteps_batch_eq_iterate (step : SchedState → SchedState) (l : List A
 /-- On a batch, the run's waiting time is the wait from the state after step 0. -/
 theorem runWait_batch_eq_waitFrom (step : SchedState → SchedState) (l : List AperiodicProcess)
     (T : ℕ) :
-    runWait (fun as => runSteps as step) (batchStream l) T =
+    runWait (fun arrival_stream => runSteps arrival_stream step) (batchStream l) T =
       waitFrom step (runSteps (batchStream l) step 0) T := by
   have := runWait_add step (batchStream l) 0 T (fun j h1 _ => batchStream_succ l j h1)
   rw [Nat.zero_add] at this
@@ -350,7 +350,7 @@ theorem runWait_batch_eq_totalWait {select : List AperiodicProcess → Option Ap
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
     (l : List AperiodicProcess) (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (T : ℕ)
     (hT : (l.map (·.burst)).sum ≤ T) :
-    runWait (fun as => runSteps as (stepNonPreemptive select)) (batchStream l) T =
+    runWait (fun arrival_stream => runSteps arrival_stream (stepNonPreemptive select)) (batchStream l) T =
       totalWait ((dispatchOrder select l).map (·.burst)) := by
   rw [runWait_batch_eq_waitFrom]
   -- step 0 starts from an idle CPU with the whole batch waiting
