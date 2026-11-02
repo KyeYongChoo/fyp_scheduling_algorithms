@@ -4,21 +4,21 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Schedules
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.OnlineOptimality
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SJFOptimalityGivenSamePast
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SRTFConvoy
 
 /-!
 # Preemption removes the impossibility
 
-`OnlineImpossibility` shows that no online non-preemptive policy waits least on
-every stream: at time 0 a policy facing the 4-tick job of `streamA`/`streamB`
+`NoOptimalNonPreemptiveOnEveryStream` shows that no non-preemptive state-select policy waits least
+on every stream: at time 0 a policy facing the 4-tick job of `streamA`/`streamB`
 must either idle (and lose on `streamA`, where nothing else comes) or dispatch it
 (and lose on `streamB`, where a unit job arrives at time 1 and waits behind it).
 A preemptive scheduler need not choose: SRTF dispatches the long job and, when
 the unit job arrives, preempts it.
 
 **What is proved** (against the admissible schedules of `Schedules`, which
-include every preemptive or non-preemptive, online or clairvoyant way of running
+include every preemptive or non-preemptive, clairvoyant or not way of running
 the jobs, with the cost `schedWait`, equal to `runWait` on runs):
 
 * SRTF waits 0 on `streamA` at every horizon (`srtf_runWait_streamA`) and 1 on
@@ -27,10 +27,10 @@ the jobs, with the cost `schedWait`, equal to `runWait` on runs):
   (`srtf_le_schedWait_streamA`, `srtf_le_schedWait_streamB`): on `streamB` both
   jobs are unfinished after step 1, whatever the schedule, so one of them waits
   (`one_le_schedWait_streamB`);
-* so SRTF strictly beats *every* online non-preemptive policy on `streamA` or on
-  `streamB`, at every horizon `T ≥ 4` (`srtf_beats_online_nonPreemptive`), and
+* so SRTF strictly beats *every* non-preemptive state-select policy on `streamA` or on
+  `streamB`, at every horizon `T ≥ 4` (`srtf_beats_every_nonPreemptive`), and
   those policies' runs are themselves admissible schedules
-  (`onlineRun_isAdmissible`, `runWait_onlineRun_eq_schedWait`).
+  (`runStateSelect_isAdmissible`, `runWait_runStateSelect_eq_schedWait`).
 
 The concrete values come from the bridge rather than from unfolding the run:
 SRTF never idles while a job waits (`srtf_ready_nil_of_idle`), so it leaves all
@@ -40,9 +40,9 @@ unfinished jobs of the schedule is enough.
 **The general theorem** (`SRTFMinimisesWait`, Schrage 1968): on every
 well-formed stream without repeats, at every horizon, SRTF waits no longer than
 any admissible schedule.  It is stated here as a proposition and proved in
-`SRTFOptimality` (`srtfMinimisesWait`); `srtf_le_onlineRun_of` derives from it
-that SRTF waits no longer than any online non-preemptive policy on every such
-stream, the contrast with `no_optimal_online_nonPreemptive`.
+`SRTFOptimality` (`srtfMinimisesWait`); `srtf_le_runStateSelect_of` derives from it
+that SRTF waits no longer than any non-preemptive state-select policy on every such
+stream, the contrast with `no_optimal_nonPreemptive_on_every_stream`.
 -/
 
 namespace ConvoyEffect
@@ -86,7 +86,7 @@ theorem srtf_ready_length {arrival_stream : ℕ → List AperiodicProcess}
 /-- Stream A lists no job twice. -/
 theorem streamA_noRepeats : NoRepeats streamA := by
   intro t
-  cases t <;> simp [streamA, batchStream]
+  cases t <;> simp [streamA, allArrivalsAtZeroStream]
 
 /-- Stream B lists no job twice. -/
 theorem streamB_noRepeats : NoRepeats streamB := by
@@ -227,31 +227,33 @@ theorem srtf_le_schedWait_streamB {σ : Schedule} (h_adm : IsAdmissible streamB 
   · rw [srtf_runWait_streamB hT]
     exact one_le_schedWait_streamB h_adm hT
 
-/-- An online non-preemptive run is an admissible schedule. -/
-theorem onlineRun_isAdmissible {select : SchedState → Option AperiodicProcess}
+/-- A non-preemptive state-select run is an admissible schedule. -/
+theorem runStateSelect_isAdmissible {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) :
-    IsAdmissible arrival_stream (runSchedule (stepNonPreemptiveOnline select) arrival_stream) :=
-  runSchedule_isAdmissible (stepNonPreemptiveOnline_conservesJobs h_mem) h_wf h_rep
+    IsAdmissible arrival_stream
+      (runSchedule (stepNonPreemptiveStateSelect select) arrival_stream) :=
+  runSchedule_isAdmissible (stepNonPreemptiveStateSelect_conservesJobs h_mem) h_wf h_rep
 
-/-- An online non-preemptive run waits what its schedule waits. -/
-theorem runWait_onlineRun_eq_schedWait {select : SchedState → Option AperiodicProcess}
+/-- A non-preemptive state-select run waits what its schedule waits. -/
+theorem runWait_runStateSelect_eq_schedWait {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
-    runWait (onlineRun select) arrival_stream T =
-      schedWait arrival_stream (runSchedule (stepNonPreemptiveOnline select) arrival_stream) T :=
-  runWait_eq_schedWait (stepNonPreemptiveOnline_conservesJobs h_mem) h_wf h_rep T
+    runWait (runStateSelect select) arrival_stream T =
+      schedWait arrival_stream
+        (runSchedule (stepNonPreemptiveStateSelect select) arrival_stream) T :=
+  runWait_eq_schedWait (stepNonPreemptiveStateSelect_conservesJobs h_mem) h_wf h_rep T
 
-/-- **SRTF beats every online non-preemptive policy on stream A or on stream B**,
+/-- **SRTF beats every non-preemptive state-select policy on stream A or on stream B**,
 at every horizon `T ≥ 4`.  A policy that idles at time 0 waits at least 1 on
 stream A, where SRTF waits 0; a policy that dispatches the long job waits at
-least 3 on stream B, where SRTF waits 1.  (Compare `online_nonPreemptive_beaten`:
+least 3 on stream B, where SRTF waits 1.  (Compare `nonPreemptive_beaten_on_streamA_or_streamB`:
 there the winner had to be chosen per policy and per stream; here one
 scheduler, SRTF, wins against all of them.) -/
-theorem srtf_beats_online_nonPreemptive (select : SchedState → Option AperiodicProcess)
+theorem srtf_beats_every_nonPreemptive (select : SchedState → Option AperiodicProcess)
     (h_mem : DrawsFromReadyQueue select) {T : ℕ} (hT : 4 ≤ T) :
-    runWait (runSteps · stepSRTF) streamA T < runWait (onlineRun select) streamA T ∨
-      runWait (runSteps · stepSRTF) streamB T < runWait (onlineRun select) streamB T := by
+    runWait (runSteps · stepSRTF) streamA T < runWait (runStateSelect select) streamA T ∨
+      runWait (runSteps · stepSRTF) streamB T < runWait (runStateSelect select) streamB T := by
   cases h : select witnessStart with
   | none =>
     have := idle_costs_on_streamA select h (T := T) (by omega)
@@ -266,8 +268,8 @@ theorem srtf_beats_online_nonPreemptive (select : SchedState → Option Aperiodi
 
 /-- **SRTF waits least among all admissible schedules** (Schrage 1968): on every
 well-formed stream without repeats, at every horizon `T`, SRTF's run waits no
-longer than any admissible schedule, preemptive or not, online or clairvoyant.
-SRTF itself is online: its step sees only the current state.
+longer than any admissible schedule, preemptive or not, clairvoyant or not.
+SRTF itself is not clairvoyant: its step sees only the current state.
 
 Proved in `SRTFOptimality` (`srtfMinimisesWait`), along these lines, in the
 model of `Schedules`:
@@ -297,17 +299,17 @@ def SRTFMinimisesWait : Prop :=
     NoRepeats arrival_stream → ∀ σ : Schedule, IsAdmissible arrival_stream σ → ∀ T : ℕ,
       runWait (runSteps · stepSRTF) arrival_stream T ≤ schedWait arrival_stream σ T
 
-/-- **Given the general theorem, SRTF waits no longer than any online
-non-preemptive policy** on every well-formed stream without repeats, at every
-horizon: so among online schedulers there is an optimal one once preemption is
-allowed, in contrast with `no_optimal_online_nonPreemptive`. -/
-theorem srtf_le_onlineRun_of (h : SRTFMinimisesWait)
+/-- **Given the general theorem, SRTF waits no longer than any non-preemptive
+state-select policy** on every well-formed stream without repeats, at every
+horizon: so among schedulers that see only the current state there is an optimal one
+once preemption is allowed, in contrast with `no_optimal_nonPreemptive_on_every_stream`. -/
+theorem srtf_le_runStateSelect_of (h : SRTFMinimisesWait)
     {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤
-      runWait (onlineRun select) arrival_stream T := by
-  rw [runWait_onlineRun_eq_schedWait h_mem h_wf h_rep]
-  exact h arrival_stream h_wf h_rep _ (onlineRun_isAdmissible h_mem h_wf h_rep) T
+      runWait (runStateSelect select) arrival_stream T := by
+  rw [runWait_runStateSelect_eq_schedWait h_mem h_wf h_rep]
+  exact h arrival_stream h_wf h_rep _ (runStateSelect_isAdmissible h_mem h_wf h_rep) T
 
 end ConvoyEffect

@@ -106,14 +106,15 @@ def stepNonPreemptive [Process AperiodicProcess]
         { s with time    := s.time + 1,
                  running := some p }
 
-/-- **Online non-preemptive scheduler.** Like `stepNonPreemptive`, but the policy
+/-- **Non-preemptive scheduler with a state-select policy.** Like `stepNonPreemptive`,
+but the policy
 `select` sees the whole state at the start of the step -- time, ready queue, the
 running job (which may be finishing this step) and the completed jobs, i.e.
 everything known so far -- rather than just the ready queue.  It may also leave
 the CPU idle on purpose, by returning `none` while jobs are waiting.  Jobs are
 still never preempted, and the tick convention is the same.  Every
-`stepNonPreemptive sel` is an instance (`stepNonPreemptive_eq_online`). -/
-def stepNonPreemptiveOnline (select : SchedState → Option AperiodicProcess) :
+`stepNonPreemptive sel` is an instance (`stepNonPreemptive_eq_stateSelect`). -/
+def stepNonPreemptiveStateSelect (select : SchedState → Option AperiodicProcess) :
   SchedState → SchedState :=
   fun s =>
     match s.running with
@@ -142,9 +143,11 @@ def stepNonPreemptiveOnline (select : SchedState → Option AperiodicProcess) :
         { s with time    := s.time + 1,
                  running := some p }
 
-/-- A policy that looks only at the ready queue is an online policy. -/
-theorem stepNonPreemptive_eq_online (select : List AperiodicProcess → Option AperiodicProcess) :
-    stepNonPreemptive select = stepNonPreemptiveOnline (fun s => select s.ready) := rfl
+/-- A policy that looks only at the ready queue is a state-select policy that ignores
+the rest of the state. -/
+theorem stepNonPreemptive_eq_stateSelect
+    (select : List AperiodicProcess → Option AperiodicProcess) :
+    stepNonPreemptive select = stepNonPreemptiveStateSelect (fun s => select s.ready) := rfl
 
 /-- **Preemptive scheduler** driven by a priority function: the candidate with the
 *highest* `priority_func` value gets the CPU.  It follows the tick convention in the

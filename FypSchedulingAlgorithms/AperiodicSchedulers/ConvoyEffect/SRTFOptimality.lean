@@ -13,10 +13,10 @@ import FypSchedulingAlgorithms.ListLemmas
 `SRTFMinimisesWait`; this file proves it (`srtfMinimisesWait`).  On every
 well-formed stream without repeats, at every horizon `T`, SRTF's run waits no
 longer than any admissible schedule (`Schedules`): preemptive or not, idling or
-not, online or clairvoyant.  So, unlike the non-preemptive case
-(`no_optimal_online_nonPreemptive`), there is an online scheduler that is
-optimal on every stream, and it is SRTF; in particular it waits no longer than
-any online non-preemptive policy (`srtf_le_onlineRun`) or any other
+not, clairvoyant or not.  So, unlike the non-preemptive case
+(`no_optimal_nonPreemptive_on_every_stream`), there is a scheduler that sees only the
+current state and is optimal on every stream, and it is SRTF; in particular it waits no longer than
+any non-preemptive state-select policy (`srtf_le_runStateSelect`) or any other
 job-conserving step function (`srtf_le_runWait_of_conservesJobs`).
 
 **Scope.**  The result holds inside the discrete model of `Schedules`: the
@@ -24,7 +24,7 @@ shared tick convention of `Step`, no context-switch cost, and streams without
 repeats (`NoRepeats`).  "Optimal" means against every admissible schedule.  The
 corollaries do not cover Round Robin, which has no bridge for its `RRState`.
 Optimality is weak (`≤`): strictly less waiting is only claimed on the witness
-streams of `PreemptiveOptimality` (`srtf_beats_online_nonPreemptive`).
+streams of `PreemptiveOptimality` (`srtf_beats_every_nonPreemptive`).
 
 **Stronger, pointwise.**  After every step SRTF has no more unfinished jobs
 than any admissible schedule (`srtf_unfinished_le`), and so no more waiting
@@ -264,16 +264,17 @@ theorem srtfMinimisesWait : SRTFMinimisesWait := by
   unfold runWait schedWait
   exact sum_map_le_sum_map _ fun t _ => srtf_ready_le_waiting h_wf h_rep h_adm t
 
-/-- **SRTF waits no longer than any online non-preemptive policy**, on every
+/-- **SRTF waits no longer than any non-preemptive state-select policy**, on every
 well-formed stream without repeats, at every horizon. -/
-theorem srtf_le_onlineRun {select : SchedState → Option AperiodicProcess}
+theorem srtf_le_runStateSelect {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
-    runWait (runSteps · stepSRTF) arrival_stream T ≤ runWait (onlineRun select) arrival_stream T :=
-  srtf_le_onlineRun_of srtfMinimisesWait h_mem h_wf h_rep T
+    runWait (runSteps · stepSRTF) arrival_stream T ≤
+      runWait (runStateSelect select) arrival_stream T :=
+  srtf_le_runStateSelect_of srtfMinimisesWait h_mem h_wf h_rep T
 
 /-- **SRTF waits no longer than any job-conserving scheduler** (every preemptive
-priority scheduler, every online non-preemptive policy), on every well-formed
+priority scheduler, every non-preemptive state-select policy), on every well-formed
 stream without repeats, at every horizon. -/
 theorem srtf_le_runWait_of_conservesJobs {step : SchedState → SchedState}
     (h_step : ConservesJobs step) {arrival_stream : ℕ → List AperiodicProcess}

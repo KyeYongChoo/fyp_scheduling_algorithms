@@ -21,8 +21,8 @@ job `i` is first dispatched at step
 
   `rrResponse quantum l i = Σ_{j < i} min quantum (burst j)`
 
-(`rr_batch_dispatch`), and is waiting untouched in `ready` until then
-(`rr_batch_waiting`).  This is the general form of `rr_convoy_dispatch`.
+(`rr_allArrivalsAtZero_dispatch`), and is waiting untouched in `ready` until then
+(`rr_allArrivalsAtZero_waiting`).  This is the general form of `rr_convoy_dispatch`.
 
 Two consequences:
 
@@ -115,10 +115,10 @@ theorem stepRR_preempt (quantum : ℕ) (rs : RRState) (p nx : AperiodicProcess)
   simp [stepRR, h_run, h_left, h_quantum, h_ready]
 
 /-- On a batch nothing arrives after time 0, so each run step is one `stepRR`. -/
-theorem runStepsRR_batch_succ (quantum : ℕ) (l : List AperiodicProcess) (t : ℕ) :
-    runStepsRR quantum (batchStream l) (t + 1) =
-      stepRR quantum (runStepsRR quantum (batchStream l) t) := by
-  simp [runStepsRR, batchStream]
+theorem runStepsRR_allArrivalsAtZero_succ (quantum : ℕ) (l : List AperiodicProcess) (t : ℕ) :
+    runStepsRR quantum (allArrivalsAtZeroStream l) (t + 1) =
+      stepRR quantum (runStepsRR quantum (allArrivalsAtZeroStream l) t) := by
+  simp [runStepsRR, allArrivalsAtZeroStream]
 
 /-! ## The first round, slice by slice -/
 
@@ -146,11 +146,11 @@ theorem with_remaining_burst {p : AperiodicProcess} (h : p.remaining = p.burst) 
 /-- Step 0: RR dispatches the first job of the batch. -/
 theorem rr_first_round_start (quantum : ℕ) (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (hl : 0 < l.length) :
-    RRFirstRoundAt quantum l 0 hl 0 (runStepsRR quantum (batchStream l) 0) := by
+    RRFirstRoundAt quantum l 0 hl 0 (runStepsRR quantum (allArrivalsAtZeroStream l) 0) := by
   cases l with
   | nil => simp at hl
   | cons p rest =>
-    rw [show runStepsRR quantum (batchStream (p :: rest)) 0 =
+    rw [show runStepsRR quantum (allArrivalsAtZeroStream (p :: rest)) 0 =
         stepRR quantum ⟨{ SchedStateMethods.init with ready := p :: rest }, 0⟩ from rfl]
     obtain ⟨h_run, h_ready, h_ticks⟩ := stepRR_dispatch quantum
       ⟨{ SchedStateMethods.init with ready := p :: rest }, 0⟩ p rest rfl rfl
@@ -208,7 +208,7 @@ theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicPro
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) :
     ∀ (i : ℕ) (hi : i < l.length) (k : ℕ), k < firstSlice quantum l[i] →
       RRFirstRoundAt quantum l i hi k
-        (runStepsRR quantum (batchStream l) (rrResponse quantum l i + k)) := by
+        (runStepsRR quantum (allArrivalsAtZeroStream l) (rrResponse quantum l i + k)) := by
   intro i
   induction i with
   | zero =>
@@ -220,7 +220,7 @@ theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicPro
       exact rr_first_round_start quantum l h_fresh hi
     | succ k ih =>
       intro hk
-      rw [← Nat.add_assoc, runStepsRR_batch_succ]
+      rw [← Nat.add_assoc, runStepsRR_allArrivalsAtZero_succ]
       exact rr_first_round_tick quantum l 0 hi k _ (ih (by omega)) hk
   | succ i ih =>
     intro hi k
@@ -233,21 +233,21 @@ theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicPro
           rrResponse quantum l i + (firstSlice quantum l[i] - 1) + 1 := by
         rw [rrResponse_succ quantum l hi']
         omega
-      rw [h_step, runStepsRR_batch_succ]
+      rw [h_step, runStepsRR_allArrivalsAtZero_succ]
       exact rr_first_round_next quantum hq l h_fresh i hi' hi _
         (ih hi' _ (by omega))
     | succ k ihk =>
       intro hk
-      rw [← Nat.add_assoc, runStepsRR_batch_succ]
+      rw [← Nat.add_assoc, runStepsRR_allArrivalsAtZero_succ]
       exact rr_first_round_tick quantum l (i + 1) hi k _ (ihk (by omega)) hk
 
 /-! ## Response time -/
 
 /-- **RR's response time on a batch.** Job `i` is dispatched at step
 `rrResponse quantum l i`, untouched. -/
-theorem rr_batch_dispatch (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
+theorem rr_allArrivalsAtZero_dispatch (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (i : ℕ) (hi : i < l.length) :
-    (runStepsRR quantum (batchStream l) (rrResponse quantum l i)).sched.running =
+    (runStepsRR quantum (allArrivalsAtZeroStream l) (rrResponse quantum l i)).sched.running =
       some l[i] := by
   have h := (rr_first_round quantum hq l h_fresh i hi 0 (firstSlice_pos hq _)).1
   rw [Nat.add_zero] at h
@@ -272,10 +272,10 @@ theorem rrResponse_decompose (quantum : ℕ) (l : List AperiodicProcess) :
 
 /-- **Until its response time, a job is waiting untouched.** Before step
 `rrResponse quantum l i`, job `i` sits in the ready queue exactly as it arrived. -/
-theorem rr_batch_waiting (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
+theorem rr_allArrivalsAtZero_waiting (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (i : ℕ) (hi : i < l.length) (t : ℕ)
     (ht : t < rrResponse quantum l i) :
-    l[i] ∈ (runStepsRR quantum (batchStream l) t).sched.ready := by
+    l[i] ∈ (runStepsRR quantum (allArrivalsAtZeroStream l) t).sched.ready := by
   obtain ⟨j, hj, k, hk, rfl⟩ := rrResponse_decompose quantum l i hi.le t ht
   rw [(rr_first_round quantum hq l h_fresh j (by omega) k hk).2.1]
   apply List.mem_append_left

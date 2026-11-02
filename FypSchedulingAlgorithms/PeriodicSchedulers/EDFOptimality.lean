@@ -13,7 +13,7 @@ Here: on every periodic task set with distinct task ids, if the run of `stepEDF`
 missed deadline after step `t`, then every admissible schedule (`PeriodicSchedules`) is
 late at `t` (`edf_optimal`).  So if some admissible schedule is never late, EDF never
 misses a deadline (`edf_never_late`, `edf_never_late_of_exists`).  The competing schedule
-may be anything admissible: preemptive or not, idling or not, online or clairvoyant, with
+may be anything admissible: preemptive or not, idling or not, clairvoyant or not, with
 fixed or dynamic priorities.
 
 **Scope.**  The result holds inside the discrete model of `PeriodicSchedules`: the shared

@@ -30,12 +30,12 @@ shape (notably `stepRR`, which carries a quantum counter in `RRState` and so is
 built independently of `stepNonPreemptive`) need their own copies; see
 `RRStarvationFree`.
 
-The one-step lemmas are stated once for `stepNonPreemptiveOnline`, whose
+The one-step lemmas are stated once for `stepNonPreemptiveStateSelect`, whose
 policy may look at the whole state and may idle on purpose, and then
-transferred to `stepNonPreemptive` through `stepNonPreemptive_eq_online`.
+transferred to `stepNonPreemptive` through `stepNonPreemptive_eq_stateSelect`.
 Three more, on how a step depends on the policy
-(`stepNonPreemptiveOnline_decide`, `_eq_of_tick`, `_congr`), are stated for
-the online step only.  The run invariants at the end also cover the state a
+(`stepNonPreemptiveStateSelect_decide`, `_eq_of_tick`, `_congr`), are stated for
+the state-select step only.  The run invariants at the end also cover the state a
 step starts from (`stateBefore`, in `RunStepsLemmas`).
 -/
 
@@ -117,51 +117,52 @@ section Steps
 variable (select : SchedState → Option AperiodicProcess) (s : SchedState)
 
 /-- A running job with more than one tick left is ticked and keeps the CPU. -/
-theorem stepNonPreemptiveOnline_tick {p : AperiodicProcess} (h_run : s.running = some p)
+theorem stepNonPreemptiveStateSelect_tick {p : AperiodicProcess} (h_run : s.running = some p)
     (h_left : 1 < p.remaining) :
-    (stepNonPreemptiveOnline select s).running = some { p with remaining := p.remaining - 1 } ∧
-      (stepNonPreemptiveOnline select s).ready = s.ready := by
-  simp [stepNonPreemptiveOnline, h_run, show ¬ p.remaining - 1 = 0 by omega]
+    (stepNonPreemptiveStateSelect select s).running = some { p with remaining := p.remaining - 1 } ∧
+      (stepNonPreemptiveStateSelect select s).ready = s.ready := by
+  simp [stepNonPreemptiveStateSelect, h_run, show ¬ p.remaining - 1 = 0 by omega]
 
 /-- A running job on its last tick completes, and the choice of `select` is
 dispatched, unticked. -/
-theorem stepNonPreemptiveOnline_complete_dispatch {p q : AperiodicProcess}
+theorem stepNonPreemptiveStateSelect_complete_dispatch {p q : AperiodicProcess}
     (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : select s = some q) :
-    (stepNonPreemptiveOnline select s).running = some q ∧
-      (stepNonPreemptiveOnline select s).ready = s.ready.erase q := by
-  simp [stepNonPreemptiveOnline, h_run, h_sel, show p.remaining - 1 = 0 by omega]
+    (stepNonPreemptiveStateSelect select s).running = some q ∧
+      (stepNonPreemptiveStateSelect select s).ready = s.ready.erase q := by
+  simp [stepNonPreemptiveStateSelect, h_run, h_sel, show p.remaining - 1 = 0 by omega]
 
 /-- A running job on its last tick completes; with nothing chosen the CPU goes
 idle. -/
-theorem stepNonPreemptiveOnline_complete_idle {p : AperiodicProcess}
+theorem stepNonPreemptiveStateSelect_complete_idle {p : AperiodicProcess}
     (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : select s = none) :
-    (stepNonPreemptiveOnline select s).running = none ∧
-      (stepNonPreemptiveOnline select s).ready = s.ready := by
-  simp [stepNonPreemptiveOnline, h_run, h_sel, show p.remaining - 1 = 0 by omega]
+    (stepNonPreemptiveStateSelect select s).running = none ∧
+      (stepNonPreemptiveStateSelect select s).ready = s.ready := by
+  simp [stepNonPreemptiveStateSelect, h_run, h_sel, show p.remaining - 1 = 0 by omega]
 
 /-- An idle CPU takes the choice of `select`, unticked. -/
-theorem stepNonPreemptiveOnline_dispatch {q : AperiodicProcess}
+theorem stepNonPreemptiveStateSelect_dispatch {q : AperiodicProcess}
     (h_run : s.running = none) (h_sel : select s = some q) :
-    (stepNonPreemptiveOnline select s).running = some q ∧
-      (stepNonPreemptiveOnline select s).ready = s.ready.erase q := by
-  simp [stepNonPreemptiveOnline, h_run, h_sel]
+    (stepNonPreemptiveStateSelect select s).running = some q ∧
+      (stepNonPreemptiveStateSelect select s).ready = s.ready.erase q := by
+  simp [stepNonPreemptiveStateSelect, h_run, h_sel]
 
 /-- An idle CPU with nothing chosen stays idle. -/
-theorem stepNonPreemptiveOnline_idle (h_run : s.running = none) (h_sel : select s = none) :
-    (stepNonPreemptiveOnline select s).running = none ∧
-      (stepNonPreemptiveOnline select s).ready = s.ready := by
-  simp [stepNonPreemptiveOnline, h_run, h_sel]
+theorem stepNonPreemptiveStateSelect_idle (h_run : s.running = none) (h_sel : select s = none) :
+    (stepNonPreemptiveStateSelect select s).running = none ∧
+      (stepNonPreemptiveStateSelect select s).ready = s.ready := by
+  simp [stepNonPreemptiveStateSelect, h_run, h_sel]
 
 /-- Every step advances the clock by one. -/
-theorem stepNonPreemptiveOnline_time : (stepNonPreemptiveOnline select s).time = s.time + 1 := by
-  unfold stepNonPreemptiveOnline
+theorem stepNonPreemptiveStateSelect_time :
+    (stepNonPreemptiveStateSelect select s).time = s.time + 1 := by
+  unfold stepNonPreemptiveStateSelect
   cases s.running <;> cases select s <;> dsimp only <;> (try split_ifs) <;> rfl
 
 /-- A step never adds jobs to the ready queue: it only removes the one it
 dispatches. -/
-theorem stepNonPreemptiveOnline_ready_subset :
-    ∀ q ∈ (stepNonPreemptiveOnline select s).ready, q ∈ s.ready := by
-  unfold stepNonPreemptiveOnline
+theorem stepNonPreemptiveStateSelect_ready_subset :
+    ∀ q ∈ (stepNonPreemptiveStateSelect select s).ready, q ∈ s.ready := by
+  unfold stepNonPreemptiveStateSelect
   cases s.running <;> cases select s <;> dsimp only <;> (try split_ifs) <;>
     first
     | exact fun q hq => hq
@@ -170,11 +171,11 @@ theorem stepNonPreemptiveOnline_ready_subset :
 /-- **What a dispatch looks like.** If after a step the CPU holds `p`, and `p`
 was not the job on the CPU before the step, then `p` was the choice of `select`
 and was taken out of the ready queue.  (A job that keeps the CPU keeps its id.) -/
-theorem stepNonPreemptiveOnline_dispatch_cases {p : AperiodicProcess}
-    (h_run : (stepNonPreemptiveOnline select s).running = some p)
+theorem stepNonPreemptiveStateSelect_dispatch_cases {p : AperiodicProcess}
+    (h_run : (stepNonPreemptiveStateSelect select s).running = some p)
     (h_new : s.running.map (·.id) ≠ some p.id) :
-    select s = some p ∧ (stepNonPreemptiveOnline select s).ready = s.ready.erase p := by
-  unfold stepNonPreemptiveOnline at h_run ⊢
+    select s = some p ∧ (stepNonPreemptiveStateSelect select s).ready = s.ready.erase p := by
+  unfold stepNonPreemptiveStateSelect at h_run ⊢
   cases h : s.running with
   | none =>
     rw [h] at h_run
@@ -214,8 +215,8 @@ theorem stepNonPreemptive_tick {p : AperiodicProcess} (h_run : s.running = some 
     (h_left : 1 < p.remaining) :
     (stepNonPreemptive sel s).running = some { p with remaining := p.remaining - 1 } ∧
       (stepNonPreemptive sel s).ready = s.ready := by
-  rw [stepNonPreemptive_eq_online]
-  exact stepNonPreemptiveOnline_tick _ s h_run h_left
+  rw [stepNonPreemptive_eq_stateSelect]
+  exact stepNonPreemptiveStateSelect_tick _ s h_run h_left
 
 /-- A running job on its last tick completes, and the choice of `sel` is
 dispatched, unticked. -/
@@ -223,8 +224,8 @@ theorem stepNonPreemptive_complete_dispatch {p q : AperiodicProcess}
     (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : sel s.ready = some q) :
     (stepNonPreemptive sel s).running = some q ∧
       (stepNonPreemptive sel s).ready = s.ready.erase q := by
-  rw [stepNonPreemptive_eq_online]
-  exact stepNonPreemptiveOnline_complete_dispatch _ s h_run h_done h_sel
+  rw [stepNonPreemptive_eq_stateSelect]
+  exact stepNonPreemptiveStateSelect_complete_dispatch _ s h_run h_done h_sel
 
 /-- A running job on its last tick completes; with nothing chosen the CPU goes
 idle. -/
@@ -232,79 +233,80 @@ theorem stepNonPreemptive_complete_idle {p : AperiodicProcess}
     (h_run : s.running = some p) (h_done : p.remaining ≤ 1) (h_sel : sel s.ready = none) :
     (stepNonPreemptive sel s).running = none ∧
       (stepNonPreemptive sel s).ready = s.ready := by
-  rw [stepNonPreemptive_eq_online]
-  exact stepNonPreemptiveOnline_complete_idle _ s h_run h_done h_sel
+  rw [stepNonPreemptive_eq_stateSelect]
+  exact stepNonPreemptiveStateSelect_complete_idle _ s h_run h_done h_sel
 
 /-- An idle CPU takes the choice of `sel`, unticked. -/
 theorem stepNonPreemptive_dispatch {q : AperiodicProcess}
     (h_run : s.running = none) (h_sel : sel s.ready = some q) :
     (stepNonPreemptive sel s).running = some q ∧
       (stepNonPreemptive sel s).ready = s.ready.erase q := by
-  rw [stepNonPreemptive_eq_online]
-  exact stepNonPreemptiveOnline_dispatch _ s h_run h_sel
+  rw [stepNonPreemptive_eq_stateSelect]
+  exact stepNonPreemptiveStateSelect_dispatch _ s h_run h_sel
 
 /-- An idle CPU with nothing chosen stays idle. -/
 theorem stepNonPreemptive_idle (h_run : s.running = none) (h_sel : sel s.ready = none) :
     (stepNonPreemptive sel s).running = none ∧
       (stepNonPreemptive sel s).ready = s.ready := by
-  rw [stepNonPreemptive_eq_online]
-  exact stepNonPreemptiveOnline_idle _ s h_run h_sel
+  rw [stepNonPreemptive_eq_stateSelect]
+  exact stepNonPreemptiveStateSelect_idle _ s h_run h_sel
 
 end StepsList
 
-/-! How a step depends on the policy.  These are stated for `stepNonPreemptiveOnline`
+/-! How a step depends on the policy.  These are stated for `stepNonPreemptiveStateSelect`
 only; they have no `stepNonPreemptive` copies. -/
 
 /-- When a step makes a decision -- the CPU is idle, or its job is on its last
 tick -- the policy's choice goes on the CPU, unticked, and leaves the queue; with
 no choice the CPU is left idle. -/
-theorem stepNonPreemptiveOnline_decide (select : SchedState → Option AperiodicProcess)
+theorem stepNonPreemptiveStateSelect_decide (select : SchedState → Option AperiodicProcess)
     (s : SchedState) (h_dec : ∀ p, s.running = some p → p.remaining ≤ 1) :
-    (∀ q, select s = some q → (stepNonPreemptiveOnline select s).running = some q ∧
-        (stepNonPreemptiveOnline select s).ready = s.ready.erase q) ∧
-      (select s = none → (stepNonPreemptiveOnline select s).running = none ∧
-        (stepNonPreemptiveOnline select s).ready = s.ready) := by
+    (∀ q, select s = some q → (stepNonPreemptiveStateSelect select s).running = some q ∧
+        (stepNonPreemptiveStateSelect select s).ready = s.ready.erase q) ∧
+      (select s = none → (stepNonPreemptiveStateSelect select s).running = none ∧
+        (stepNonPreemptiveStateSelect select s).ready = s.ready) := by
   cases h_run : s.running with
   | none =>
-    exact ⟨fun q h => stepNonPreemptiveOnline_dispatch select s h_run h,
-      fun h => stepNonPreemptiveOnline_idle select s h_run h⟩
+    exact ⟨fun q h => stepNonPreemptiveStateSelect_dispatch select s h_run h,
+      fun h => stepNonPreemptiveStateSelect_idle select s h_run h⟩
   | some p =>
     have h_done := h_dec p h_run
-    exact ⟨fun q h => stepNonPreemptiveOnline_complete_dispatch select s h_run h_done h,
-      fun h => stepNonPreemptiveOnline_complete_idle select s h_run h_done h⟩
+    exact ⟨fun q h => stepNonPreemptiveStateSelect_complete_dispatch select s h_run h_done h,
+      fun h => stepNonPreemptiveStateSelect_complete_idle select s h_run h_done h⟩
 
 /-- When the running job has more than one tick left, the step does not consult
 the policy: every non-preemptive policy takes the same step. -/
-theorem stepNonPreemptiveOnline_eq_of_tick (select select' : SchedState → Option AperiodicProcess)
+theorem stepNonPreemptiveStateSelect_eq_of_tick
+    (select select' : SchedState → Option AperiodicProcess)
     (s : SchedState) {p : AperiodicProcess} (h_run : s.running = some p)
     (h_left : 1 < p.remaining) :
-    stepNonPreemptiveOnline select s = stepNonPreemptiveOnline select' s := by
-  simp [stepNonPreemptiveOnline, h_run, show ¬ p.remaining - 1 = 0 by omega]
+    stepNonPreemptiveStateSelect select s = stepNonPreemptiveStateSelect select' s := by
+  simp [stepNonPreemptiveStateSelect, h_run, show ¬ p.remaining - 1 = 0 by omega]
 
 /-- A step depends on the policy only through its choice at the current state. -/
-theorem stepNonPreemptiveOnline_congr {select select' : SchedState → Option AperiodicProcess}
+theorem stepNonPreemptiveStateSelect_congr {select select' : SchedState → Option AperiodicProcess}
     {s : SchedState} (h : select s = select' s) :
-    stepNonPreemptiveOnline select s = stepNonPreemptiveOnline select' s := by
-  simp only [stepNonPreemptiveOnline, h]
+    stepNonPreemptiveStateSelect select s = stepNonPreemptiveStateSelect select' s := by
+  simp only [stepNonPreemptiveStateSelect, h]
 
 /-! ## Run invariants -/
 
 /-- **Waiting jobs are untouched.** On a well-formed stream, a non-preemptive run
 never ticks a job in the ready queue, so every waiting job still has its full
 burst -- whatever the policy, even one that idles on purpose. -/
-theorem nonPreemptiveOnline_ready_fresh (select : SchedState → Option AperiodicProcess)
+theorem nonPreemptiveStateSelect_ready_fresh (select : SchedState → Option AperiodicProcess)
     (arrival_stream : ℕ → List AperiodicProcess) (h_wf : WellFormedStream arrival_stream)
     (t : ℕ) :
-    ∀ q ∈ (runSteps arrival_stream (stepNonPreemptiveOnline select) t).ready,
+    ∀ q ∈ (runSteps arrival_stream (stepNonPreemptiveStateSelect select) t).ready,
       q.remaining = q.burst := by
   induction t with
   | zero =>
     intro q hq
-    have h := stepNonPreemptiveOnline_ready_subset select _ q hq
+    have h := stepNonPreemptiveStateSelect_ready_subset select _ q hq
     exact h_wf.fresh q 0 (by simpa using h)
   | succ t ih =>
     intro q hq
-    have h := stepNonPreemptiveOnline_ready_subset select _ q hq
+    have h := stepNonPreemptiveStateSelect_ready_subset select _ q hq
     rcases List.mem_append.mp h with h | h
     · exact ih q h
     · exact h_wf.fresh q _ h
@@ -313,30 +315,30 @@ theorem nonPreemptiveOnline_ready_fresh (select : SchedState → Option Aperiodi
 `t` starts are untouched. -/
 theorem stateBefore_ready_fresh (select : SchedState → Option AperiodicProcess)
     (arrival_stream : ℕ → List AperiodicProcess) (h_wf : WellFormedStream arrival_stream)
-    (t : ℕ) : ∀ q ∈ (stateBefore arrival_stream (stepNonPreemptiveOnline select) t).ready,
+    (t : ℕ) : ∀ q ∈ (stateBefore arrival_stream (stepNonPreemptiveStateSelect select) t).ready,
       q.remaining = q.burst := by
   intro q hq
   cases t with
   | zero => exact h_wf.fresh q 0 (by simpa [stateBefore] using hq)
   | succ t =>
     rcases List.mem_append.mp hq with hq | hq
-    · exact nonPreemptiveOnline_ready_fresh select arrival_stream h_wf t q hq
+    · exact nonPreemptiveStateSelect_ready_fresh select arrival_stream h_wf t q hq
     · exact h_wf.fresh q _ hq
 
 /-- After step `k` of a non-preemptive run the clock reads `k + 1`. -/
-theorem runSteps_online_time (arrival_stream : ℕ → List AperiodicProcess)
+theorem runSteps_stateSelect_time (arrival_stream : ℕ → List AperiodicProcess)
     (select : SchedState → Option AperiodicProcess) (k : ℕ) :
-    (runSteps arrival_stream (stepNonPreemptiveOnline select) k).time = k + 1 := by
+    (runSteps arrival_stream (stepNonPreemptiveStateSelect select) k).time = k + 1 := by
   induction k with
-  | zero => simp [runSteps, stepNonPreemptiveOnline_time]
-  | succ k ih => simp [runSteps, stepNonPreemptiveOnline_time, ih]
+  | zero => simp [runSteps, stepNonPreemptiveStateSelect_time]
+  | succ k ih => simp [runSteps, stepNonPreemptiveStateSelect_time, ih]
 
 /-- Step `t` of a non-preemptive run starts with the clock at `t`. -/
-theorem stateBefore_online_time (arrival_stream : ℕ → List AperiodicProcess)
+theorem stateBefore_stateSelect_time (arrival_stream : ℕ → List AperiodicProcess)
     (select : SchedState → Option AperiodicProcess) (t : ℕ) :
-    (stateBefore arrival_stream (stepNonPreemptiveOnline select) t).time = t := by
+    (stateBefore arrival_stream (stepNonPreemptiveStateSelect select) t).time = t := by
   cases t with
   | zero => rfl
-  | succ k => simp [stateBefore, runSteps_online_time]
+  | succ k => simp [stateBefore, runSteps_stateSelect_time]
 
 end NonPreemptive

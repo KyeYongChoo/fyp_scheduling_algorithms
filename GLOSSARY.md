@@ -33,10 +33,10 @@ too (`fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
 **Horizon.** The `T` in `runWait run arrival_stream T`, `schedWait arrival_stream σ T`, `waitFrom step s T`: the number
 of steps measured (steps `0, …, T - 1`). Waiting after that is not counted. Results say at which
 horizons they hold: *every* `T`, once `T` covers the total work, or from a threshold such as
-`T ≥ 4` (`OnlineImpossibility`).
+`T ≥ 4` (`NoOptimalNonPreemptiveOnEveryStream`).
 
 **Drained.** Nothing waits and nothing more arrives. From then on a run's wait stops growing
-(`runWait_online_eq_of_drained`).
+(`runWait_stateSelect_eq_of_drained`).
 
 ## Jobs and arrival streams
 
@@ -49,7 +49,7 @@ SJF compares `burst`; SRTF and the convoy definitions compare `remaining`, becau
 job re-enters the queue part-done.
 
 **Fresh, untouched.** `remaining = burst`: the job has not been ticked yet. Arrivals are fresh,
-and in a non-preemptive run every waiting job stays fresh (`nonPreemptiveOnline_ready_fresh`).
+and in a non-preemptive run every waiting job stays fresh (`nonPreemptiveStateSelect_ready_fresh`).
 
 **Matched by id.** Ticking changes `remaining`, so "the same job later on" means "a job with
 the same `id`", not `=`.
@@ -65,8 +65,10 @@ same time. Most theorems assume it.
 release*, which `WellFormedStream` still allows. It is needed wherever jobs are named by id
 (admissible schedules).
 
-**Batch.** `IsBatch` (`ConvoyEffect/ConvoySpec.lean`). Fresh jobs with distinct ids, all
-present at time 0. `batchStream l` releases `l` at time 0 and nothing afterwards.
+**All arrivals at zero (a *batch*).** `AllArrivalsAtZero` (`ConvoyEffect/ConvoySpec.lean`).
+Fresh jobs with distinct ids, all present at time 0. `allArrivalsAtZeroStream l` releases `l`
+at time 0 and nothing afterwards. The textbook term, and the word the comments use, is
+*batch*.
 
 **Instance known at time `t`.** `knownAt arrival_stream t` (`RunStepsLemmas.lean`). The stream with every
 arrival after `t` deleted. A run cannot see the future, so up to step `t` it is the same on
@@ -82,12 +84,16 @@ shared ones live in the `*Witnesses.lean` files.
 waiting job to dispatch. It is handed to `stepNonPreemptive`, which is how FCFS and SJF are
 built. `none` means "nothing to dispatch".
 
-**Online non-preemptive policy.** A `select : SchedState → Option AperiodicProcess` run by
-`stepNonPreemptiveOnline` that only ever picks a waiting job (`DrawsFromReadyQueue`,
-`ConvoyEffect/OnlineImpossibility.lean`). The name describes that condition only: *online*
-comes from the type, not from it. *Online* means it sees the current state (including the bursts of
-jobs that have arrived) but not future arrivals. It may **idle on purpose**, returning `none`
-while jobs wait. Every `stepNonPreemptive sel` is one (`stepNonPreemptive_eq_online`).
+**Non-preemptive state-select policy.** A `select : SchedState → Option AperiodicProcess` run by
+`stepNonPreemptiveStateSelect` (`runStateSelect` for its run) that only ever picks a waiting job
+(`DrawsFromReadyQueue`, `ConvoyEffect/NoOptimalNonPreemptiveOnEveryStream.lean`). It sees the
+current state, including the bursts of jobs that have arrived, but not future arrivals; that
+comes from its type, not from `DrawsFromReadyQueue`. It may **idle on purpose**, returning
+`none` while jobs wait. Every `stepNonPreemptive sel` is one (`stepNonPreemptive_eq_stateSelect`).
+
+**Online (textbook term).** The literature calls a scheduler that cannot see future arrivals
+*online*. This repo avoids the word: such policies are called *state-select*, or are said to
+see only the current state. The contrast is *clairvoyant*.
 
 **Clairvoyant.** Knows the whole stream in advance. Admissible schedules may be clairvoyant;
 step functions are not.
@@ -106,13 +112,13 @@ after step `t - 1`. This covers dispatch into an idle CPU, after a completion an
 A job that keeps the CPU is not dispatched again.
 
 **Work-conserving.** The CPU is never idle while a job waits. Preemptive schedulers are
-(`runSteps_ready_nil_of_idle`), and so are FCFS and SJF (`idle_implies_empty_ready`). Online
-policies that idle on purpose are not.
+(`runSteps_ready_nil_of_idle`), and so are FCFS and SJF (`idle_implies_empty_ready`).
+State-select policies that idle on purpose are not.
 
 **Job-conserving.** `ConservesJobs` (`PreemptiveRuns.lean`, `ConvoyEffect/Schedules.lean`). A
 step neither invents nor loses jobs: the jobs in the system afterwards are those before, with
 the running job ticked and dropped exactly when it finished. **Not the same as
-work-conserving:** an online policy that idles on purpose is job-conserving but not
+work-conserving:** a state-select policy that idles on purpose is job-conserving but not
 work-conserving. Job conservation is what makes a run an admissible schedule.
 
 **Priority run invariant.** `runSteps_running_max` (`PreemptiveRuns.lean`). In every state of a
@@ -129,12 +135,12 @@ Five measures, from pure arithmetic to real runs:
 | Name | File | What it counts |
 | --- | --- | --- |
 | `totalWait bs` | `ConvoyEffect/TotalWait.lean` | A batch run back-to-back from time 0 in list order: each job waits for the bursts ahead of it. No horizon. |
-| `truncWait r bs T` | `ConvoyEffect/OnlineOptimality.lean` | The same, after a job with `r` ticks left finishes, cut off at horizon `T`. |
+| `truncWait r bs T` | `ConvoyEffect/SJFOptimalityGivenSamePast.lean` | The same, after a job with `r` ticks left finishes, cut off at horizon `T`. |
 | `waitFrom step s T` | `ConvoyEffect/RunWait.lean` | The `ready` lengths of `s, step s, step (step s), …`: the wait still to come from state `s`, with no arrivals. |
 | `runWait run arrival_stream T` | `ConvoyEffect/RunWait.lean` | The `ready` lengths of the states after steps `0, …, T - 1` of a real run. **The cost in every headline theorem.** |
 | `schedWait arrival_stream σ T` | `ConvoyEffect/Schedules.lean` | For an admissible schedule: each step, every unfinished job not on the CPU waits. Equal to `runWait` on runs (`runWait_eq_schedWait`). |
 
-The bridges between them are `runWait_batch_eq_totalWait` (a batch run waits `totalWait` of its
+The bridges between them are `runWait_allArrivalsAtZero_eq_totalWait` (a batch run waits `totalWait` of its
 dispatch order), `waitFrom_eq_truncWait` and `runWait_eq_schedWait`.
 
 **Dispatch order.** `dispatchOrder select l` (`ConvoyEffect/RunWait.lean`). The order in which a
@@ -158,11 +164,21 @@ step it is admissible, and the run waits what the schedule waits. The invariant 
 `inSystem_perm`.
 
 **Optimal.** Weak: waits *no longer than* (`≤`) every competitor in the stated class. The class
-is always stated (online non-preemptive policies, admissible schedules, fixed priorities…), and
-so is the horizon. **Beaten** and **strict** mean `<`.
+is always stated (non-preemptive state-select policies, admissible schedules, fixed
+priorities…), and so is the horizon. **Beaten** and **strict** mean `<`.
+
+**Optimal / beaten over the first `T` steps.** `IsOptimalOverSteps T select` and
+`IsBeatenOverSteps T select` (`ConvoyEffect/NoOptimalNonPreemptiveOnEveryStream.lean`). The
+first definition of optimality for non-preemptive policies: wait least *on every stream*.
+`not_isOptimalOverSteps_iff` says "not optimal" is exactly "beaten": some competitor waits
+strictly less on some stream. No non-preemptive policy is optimal in this sense once `T ≥ 4`.
+
+**Optimal given the same past.** The second definition, which SJF meets
+(`ConvoyEffect/SJFOptimalityGivenSamePast.lean`): on the instance known at time `t`, wait least
+against every competitor whose run agrees with yours before `t`.
 
 **Shares the past, agrees before `t`.** Two runs whose states are equal at every step `< t`. In
-`OnlineOptimality`, SJF is compared only with competitors that took the same decisions before
+`SJFOptimalityGivenSamePast`, SJF is compared only with competitors that took the same decisions before
 `t`.
 
 **Majorisation.** The proof technique behind SRTF's and EDF's optimality. It compares lists of
@@ -172,17 +188,31 @@ The comparison is shown to hold after every step, for every `k` or `d`.
 
 ## Convoy effect and starvation
 
-**Convoy effect.** `HasConvoyEffect` (`ConvoyEffect/ConvoySpec.lean`). At some dispatch moment,
-a job with strictly less work left is waiting. FCFS and RR have it; SJF and SRTF do not.
+There are two competing definitions of the convoy effect, plus a special case. Each bad
+property says "at **some**" moment; its negation, the good property, says "at **every**":
 
-**Batch convoy effect.** `HasBatchConvoyEffect`. The same, judged on one decision of a
-selection policy on a batch. It is equivalent to waiting strictly longer than SJF on some batch
-(`hasBatchConvoyEffect_iff_runWait`).
+| Bad property | Good property (its negation) | Who has the bad one |
+| --- | --- | --- |
+| `HasConvoyEffectAtSomeDispatch` | `ShortestAtEveryDispatchRun` | FCFS, RR |
+| `HasConvoyEffectAtSomeStep` | `ShortestAtEveryStepRun` | FCFS, RR, SJF |
 
-**Online convoy effect.** `HasOnlineConvoyEffect`. At *any* step, not just a dispatch, a
+Every dispatch is a step, so *at some dispatch* implies *at some step*, and *at every step*
+implies *at every dispatch*.
+
+**Convoy effect at some dispatch.** `HasConvoyEffectAtSomeDispatch`
+(`ConvoyEffect/ConvoySpec.lean`). At some dispatch moment, a job with strictly less work left
+is waiting. FCFS and RR have it; SJF and SRTF do not.
+
+**Convoy effect at some step.** `HasConvoyEffectAtSomeStep`. At some step, dispatch or not, a
 shorter job waits behind the running one. This is weaker: SJF has it on a late arrival without
-having the convoy effect. **Name clash:** "online" here means "at any step". It has nothing to
-do with *online policies*.
+having the convoy effect at some dispatch (`atSomeStep_not_imp_atSomeDispatch`). SRTF never
+has it.
+
+**Convoy effect on all arrivals at zero.** `HasConvoyEffectAllArrivalsAtZero`. The convoy
+effect at step 0 of a run whose jobs all arrive at time 0, judged on one decision of a
+selection policy. It is equivalent to waiting strictly longer than SJF on some such list
+(`hasConvoyEffectAllArrivalsAtZero_iff_runWait`). Its negation is
+`RunsShortestAllArrivalsAtZero`.
 
 **Starvation-free.** `StarvationFree` (`Starvation/StarvationSpec.lean`). On every well-formed
 stream, every job that arrives eventually completes (matched by id). FCFS and RR are; SJF and

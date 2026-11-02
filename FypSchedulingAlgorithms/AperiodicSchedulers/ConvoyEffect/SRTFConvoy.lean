@@ -20,8 +20,8 @@ run the job on the CPU has the least *remaining* time of the jobs in the system
 preemptive scheduler (`PreemptiveRuns.runSteps_running_max`).  For a single selection,
 the job SRTF picks from a list of candidates has the least remaining time among them
 (`srtf_runs_shortest_remaining`, from `Preemptive.selectByPriority_spec`).  So SRTF
-has neither the online convoy effect nor, in particular, the convoy effect
-(`srtf_not_hasConvoyEffect`).
+has neither the convoy effect at some step nor, in particular, the convoy effect
+(`srtf_not_hasConvoyEffectAtSomeDispatch`).
 
 The payoff is the late-arrival convoy (`lateConvoyArrivalStream`): a long job
 starts at time 0 and a unit job arrives at time 1.  Non-preemptive SJF has
@@ -92,22 +92,22 @@ theorem srtf_run_invariant (arrival_stream : ℕ → List AperiodicProcess)
 
 /-- **SRTF always runs the shortest remaining job**, on every well-formed
 stream and at every step. -/
-theorem srtf_runsShortestRemaining :
-    RunsShortestRemainingRun (fun arrival_stream => runSteps arrival_stream stepSRTF) :=
+theorem srtf_shortestAtEveryStep :
+    ShortestAtEveryStepRun (fun arrival_stream => runSteps arrival_stream stepSRTF) :=
   fun arrival_stream h_wf t p hp => ((srtf_run_invariant arrival_stream h_wf t).2 p hp).2
 
-/-- **SRTF has no online convoy effect.** -/
-theorem srtf_not_hasOnlineConvoyEffect : ¬ HasOnlineConvoyEffect stepSRTF :=
-  not_not_intro srtf_runsShortestRemaining
+/-- **SRTF has no convoy effect at some step.** -/
+theorem srtf_not_hasConvoyEffectAtSomeStep : ¬ HasConvoyEffectAtSomeStep stepSRTF :=
+  not_not_intro srtf_shortestAtEveryStep
 
 /-- **SRTF runs the shortest job at every dispatch** (it does so at every step). -/
-theorem srtf_runsShortestAtDispatch :
-    RunsShortestAtDispatchRun (fun arrival_stream => runSteps arrival_stream stepSRTF) :=
-  runsShortestRemainingRun_imp_atDispatch srtf_runsShortestRemaining
+theorem srtf_shortestAtEveryDispatch :
+    ShortestAtEveryDispatchRun (fun arrival_stream => runSteps arrival_stream stepSRTF) :=
+  shortestAtEveryStepRun_imp_atEveryDispatch srtf_shortestAtEveryStep
 
-/-- **SRTF has no convoy effect.** -/
-theorem srtf_not_hasConvoyEffect : ¬ HasConvoyEffect stepSRTF :=
-  not_not_intro srtf_runsShortestAtDispatch
+/-- **SRTF has no convoy effect at some dispatch.** -/
+theorem srtf_not_hasConvoyEffectAtSomeDispatch : ¬ HasConvoyEffectAtSomeDispatch stepSRTF :=
+  not_not_intro srtf_shortestAtEveryDispatch
 
 /-- **SRTF preempts the convoy.** On the late-arrival convoy (with `L ≥ 3`, so
 the long job still has more than one tick left at time 1), the short job is
