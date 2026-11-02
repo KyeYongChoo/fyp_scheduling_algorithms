@@ -14,12 +14,12 @@ on every stream: at time 0 nobody can know whether a short job is about to
 arrive.  This file shows that the future is the *only* thing SJF lacks: judged
 on what has arrived so far, its decisions are the best possible.
 
-**The known instance.**  `knownAt as t` keeps the arrivals of `as` up to time
+**The known instance.**  `knownAt arrival_stream t` keeps the arrivals of `arrival_stream` up to time
 `t` and drops the later ones.  A run cannot see the future, so up to step `t` it
-is the same on `as` and on `knownAt as t` (`runSteps_knownAt`).  On the known
+is the same on `arrival_stream` and on `knownAt arrival_stream t` (`runSteps_knownAt`).  On the known
 instance nothing arrives after `t`, so the wait over `t + T` steps splits into
 the wait up to `t` and the wait of the decision at `t` and its continuation
-(`runWait_knownAt`, with `stateBefore as step t` the state step `t` starts
+(`runWait_knownAt`, with `stateBefore arrival_stream step t` the state step `t` starts
 from).  These general facts live in `RunStepsLemmas` and `RunWait`.
 
 **What is proved.**  Competitors are the online non-preemptive policies of
@@ -27,9 +27,9 @@ from).  These general facts live in `RunStepsLemmas` and `RunWait`.
 whole state.  The cost is `runWait`, at *every* horizon, not just once the work
 is done.
 
-* `runWait_sjf_le_knownAt` (headline): on every well-formed stream `as`, at
+* `runWait_sjf_le_knownAt` (headline): on every well-formed stream `arrival_stream`, at
   every time `t`, for every competitor whose run agrees with SJF's before `t`,
-  `runWait SJF (knownAt as t) (t + T) ≤ runWait competitor (knownAt as t) (t + T)`
+  `runWait SJF (knownAt arrival_stream t) (t + T) ≤ runWait competitor (knownAt arrival_stream t) (t + T)`
   for all `T`.  `runWait_sjf_le_sjfUntil` is the same with the agreement built
   in: any policy taking over from SJF at `t` (`sjfUntil t select`).
 * `runWait_switchToSJF_le_knownAt` (the general form): the same holds from
@@ -56,7 +56,7 @@ A weaker reading, a competitor that starts from SJF's state *after* SJF's
 decision at `t`, is also covered: `waitFrom_sjf_le` compares SJF with any
 competitor from any state whose waiting jobs are untouched (as in every
 non-preemptive run, `nonPreemptiveOnline_ready_fresh`), so in particular from
-`runSteps as stepSJF t`.  The theorems above are the stronger claim, which
+`runSteps arrival_stream stepSJF t`.  The theorems above are the stronger claim, which
 includes SJF's decision at `t` itself (`waitFrom_sjf_step_le`).
 
 **The cost of the convoy effect, off batches.**  `HasConvoyEffect` is judged at
@@ -634,10 +634,10 @@ theorem hasConvoyEffect_switchToSJF_lt (select : SchedState → Option Aperiodic
     ∃ arrival_stream, WellFormedStream arrival_stream ∧ ∃ t T₀, ∀ T, T₀ ≤ T →
       runWait (onlineRun (switchToSJF t select)) (knownAt arrival_stream t) (t + T) <
         runWait (onlineRun select) (knownAt arrival_stream t) (t + T) := by
-  obtain ⟨as, h_wf, t, p, h_disp, q, hq, h_lt⟩ :=
+  obtain ⟨arrival_stream, h_wf, t, p, h_disp, q, hq, h_lt⟩ :=
     (hasConvoyEffectRun_iff (onlineRun select)).mp h
-  exact ⟨as, h_wf, t, q.remaining + 1, fun T hT =>
-    runWait_switchToSJF_lt_of_convoy as h_wf t select h_online h_disp hq h_lt T hT⟩
+  exact ⟨arrival_stream, h_wf, t, q.remaining + 1, fun T hT =>
+    runWait_switchToSJF_lt_of_convoy arrival_stream h_wf t select h_online h_disp hq h_lt T hT⟩
 
 /-! ## The batch case: `t = 0` -/
 
