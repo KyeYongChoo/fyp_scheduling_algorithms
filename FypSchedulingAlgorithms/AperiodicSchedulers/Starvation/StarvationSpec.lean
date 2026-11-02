@@ -25,7 +25,8 @@ every scheduler in this development is a `SchedState → SchedState`:
 * non-preemptive and preemptive schedulers are, and get the convenience
   wrapper `StarvationFree step` (= `StarvationFreeRun (runSteps · step)`);
 * Round Robin carries a quantum counter, so it steps `RRState → RRState` and
-  is described by `StarvationFreeRun (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched)`.
+  is described by
+  `StarvationFreeRun (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched)`.
 
 `WellFormedStream` (see `Step`) is a hypothesis rather than part of the
 conclusion: an ill-formed stream can re-announce the same process forever, or

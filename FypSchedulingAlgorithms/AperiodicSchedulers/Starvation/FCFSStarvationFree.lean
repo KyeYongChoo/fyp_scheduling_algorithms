@@ -115,7 +115,8 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
             simp [h_selected_process_eq_target_process]
           · -- different process selected, process stays in ready
             left
-            exact (List.mem_erase_of_ne h_selected_process_eq_target_process).mpr h_process_arrives_at_t_zero
+            exact (List.mem_erase_of_ne h_selected_process_eq_target_process).mpr
+              h_process_arrives_at_t_zero
 
       · -- process didn't arrive at time 0, it arrives later
         right; right; right
@@ -168,7 +169,9 @@ theorem non_preemptive_processes_are_ready_running_completed_or_unarrived
 
       · -- was running
         obtain ⟨p, h_p_running, h_p_id⟩ := h_running
-        have h_running' : (runSteps arrival_stream (stepNonPreemptive select) current_time_minus_one).running = some p := h_p_running
+        have h_running' :
+            (runSteps arrival_stream (stepNonPreemptive select) current_time_minus_one).running =
+              some p := h_p_running
         have h_tick_p := Process.tick_decrements p
         by_cases h_remaining : p.remaining ≤ 1
         · -- p completes this tick
@@ -317,7 +320,8 @@ theorem remaining_pos_of_ready_or_running
   (t : ℕ) :
   (∀ q ∈ (runSteps arrival_stream stepFCFS t).ready, Process.remaining q > 0) ∧
   (∀ q, (runSteps arrival_stream stepFCFS t).running = some q → Process.remaining q > 0) := by
-  have fresh_pos : ∀ (p : AperiodicProcess) (s : ℕ), p ∈ arrival_stream s → Process.remaining p > 0 := by
+  have fresh_pos :
+      ∀ (p : AperiodicProcess) (s : ℕ), p ∈ arrival_stream s → Process.remaining p > 0 := by
     intro p s hp
     simp only [AperiodicProcess.process_remaining, gt_iff_lt]
     rw [h_wf.fresh p s hp]
@@ -447,7 +451,8 @@ theorem system_provenance
     obtain ⟨ih_ready, ih_running, ih_completed⟩ := ih
     simp only [runSteps, stepFCFS, stepNonPreemptive]
     -- every `s ≤ t` from ih weakens to `s ≤ t + 1`
-    have weaken : ∀ (q: AperiodicProcess), (∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) →
+    have weaken : ∀ (q: AperiodicProcess),
+        (∃ s ≤ t, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q) →
         ∃ s ≤ t + 1, ∃ q₀ ∈ arrival_stream s, Process.id q₀ = Process.id q := by
       rintro q ⟨s, hs, q₀, hq₀, hid⟩
       exact ⟨s, by omega, q₀, hq₀, hid⟩
@@ -461,7 +466,8 @@ theorem system_provenance
     split
     · -- prev.running = none
       split
-      · exact ⟨ready_src, by intro q hq; simp at hq; tauto, fun q hq => weaken q (ih_completed q hq)⟩
+      · exact ⟨ready_src, by intro q hq; simp at hq; tauto,
+          fun q hq => weaken q (ih_completed q hq)⟩
       · rename_i q₀ h_select
         refine ⟨?_, ?_, fun q hq => weaken q (ih_completed q hq)⟩
         · intro q hq; exact ready_src q (List.mem_of_mem_erase hq)
@@ -522,7 +528,8 @@ theorem target_index_decreases_one_step
   split
   · -- running = none
     rename_i h_prev_none
-    have idle_pre : (runSteps arrival_stream stepFCFS t).ready = [] := idle_implies_empty_ready arrival_stream t h_prev_none
+    have idle_pre : (runSteps arrival_stream stepFCFS t).ready = [] :=
+      idle_implies_empty_ready arrival_stream t h_prev_none
     rw [idle_pre] at h_split
     simp at h_split
   · -- running = some q
@@ -550,12 +557,14 @@ theorem target_index_decreases_one_step
           induction pre with
           | nil =>
             left
-            simp only [List.nil_append, List.cons_append, List.cons.injEq] at pre_target_suf_sum_to_something
+            simp only [List.nil_append, List.cons_append,
+              List.cons.injEq] at pre_target_suf_sum_to_something
             obtain ⟨target_is_running, _⟩ := pre_target_suf_sum_to_something
             rw [←target_is_running]
 
           | cons head_pre tail_pre ih =>
-            clear ih -- oh SNAP i didnt know i could do rcases on inductive types will do that next time
+            -- oh SNAP i didnt know i could do rcases on inductive types will do that next time
+            clear ih
             right
             left
             use tail_pre, (suf ++ arrival_stream (t + 1))
@@ -613,7 +622,8 @@ theorem target_progresses
       have h_ready_nonempty : (runSteps arrival_stream stepFCFS t).ready ≠ [] := by
         rw [h_split]
         simp
-      obtain ⟨q, q_running⟩ := ready_nonempty_implies_running_nonempty arrival_stream t (by rw [h_split]; simp)
+      obtain ⟨q, q_running⟩ :=
+        ready_nonempty_implies_running_nonempty arrival_stream t (by rw [h_split]; simp)
       exact H (Process.remaining q) t pre suf q q_running h_split (by omega) h_target_not_in_pre
     intro n
     induction n with
@@ -724,11 +734,13 @@ theorem running_eventually_completes
   (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) (p : AperiodicProcess)
   (h_running : (runSteps arrival_stream stepFCFS t).running = some p)
   (h_wf : WellFormedStream arrival_stream) :
-  ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p := by
+  ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed,
+    Process.id q = Process.id p := by
   suffices H : ∀ (n t : ℕ) (p : AperiodicProcess),
       (runSteps arrival_stream stepFCFS t).running = some p →
       Process.remaining p ≤ n + 1 →
-      ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed, Process.id q = Process.id p by
+      ∃ k ≥ 1, ∃ q ∈ (runSteps arrival_stream stepFCFS (t + k)).completed,
+        Process.id q = Process.id p by
     have h_pos := (remaining_pos_of_ready_or_running arrival_stream h_wf t).2 p h_running
     exact H (Process.remaining p - 1) t p h_running (by omega)
   intro n
@@ -737,14 +749,16 @@ theorem running_eventually_completes
     intro t p h_running h_remaining
     have h_tick_p := Process.tick_decrements p
     have h_tick_le : Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
-    have h_running' : (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
+    have h_running' :
+        (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
     refine ⟨1, by omega, Process.tick p, ?_, Process.id_invariant_wrt_tick p⟩
     simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_le, ↓reduceIte]
     split <;> simp [List.mem_append]
   | succ n ih =>
     intro t p h_running h_remaining
     have h_tick_p := Process.tick_decrements p
-    have h_running' : (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
+    have h_running' :
+        (runSteps arrival_stream (stepNonPreemptive selectFCFS) t).running = some p := h_running
     by_cases h_finish : Process.remaining p ≤ 1
     · have h_tick_le : Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
       refine ⟨1, by omega, Process.tick p, ?_, Process.id_invariant_wrt_tick p⟩
@@ -752,7 +766,8 @@ theorem running_eventually_completes
       split <;> simp [List.mem_append]
     · push Not at h_finish
       have h_tick_not_le : ¬ Process.remaining (Process.tick p) ≤ 0 := by rw [h_tick_p]; omega
-      have h_next_running : (runSteps arrival_stream stepFCFS (t + 1)).running = some (Process.tick p) := by
+      have h_next_running :
+          (runSteps arrival_stream stepFCFS (t + 1)).running = some (Process.tick p) := by
         simp only [runSteps, stepFCFS, stepNonPreemptive, h_running', h_tick_not_le, ↓reduceIte]
       have h_remaining' : Process.remaining (Process.tick p) ≤ n + 1 := by rw [h_tick_p]; omega
       obtain ⟨k, h_k_pos, q, hq, hid⟩ := ih (t + 1) (Process.tick p) h_next_running h_remaining'
@@ -771,7 +786,8 @@ theorem ready_eventually_runs
   ∃ k, (runSteps arrival_stream stepFCFS (t + k)).running = some target := by
   induction hn : pre.length using Nat.strong_induction_on generalizing t pre suf with
   | _ n ih =>
-    obtain ⟨k, h_k_pos, h_concl⟩ := target_progresses arrival_stream h_wf target t pre suf h_split h_notin
+    obtain ⟨k, h_k_pos, h_concl⟩ :=
+      target_progresses arrival_stream h_wf target t pre suf h_split h_notin
     rcases h_concl with h_run | ⟨pre', suf', h_ready', h_notin', h_lt⟩
     · exact ⟨k, h_run⟩
     · obtain ⟨k', h_k'⟩ := ih pre'.length (by omega) (t + k) pre' suf' h_ready' h_notin' rfl
@@ -785,13 +801,16 @@ theorem StarvationFree
   (arrival_stream : Nat → List AperiodicProcess)
   (h_wf : WellFormedStream arrival_stream) :
   ∀ arrival_time process, process ∈ arrival_stream arrival_time →
-  ∃ completion_time, ∃ finished_process ∈ (runSteps arrival_stream stepFCFS completion_time).completed,
-    Process.id finished_process = Process.id process -- cannot directly compare a process via == since the `remaining` field changes
+  ∃ completion_time,
+    ∃ finished_process ∈ (runSteps arrival_stream stepFCFS completion_time).completed,
+    -- cannot directly compare a process via == since the `remaining` field changes
+    Process.id finished_process = Process.id process
   := by
   intro arrival_time process h_arrived
   rcases arrived_is_ready_or_running arrival_stream arrival_time process h_arrived h_wf with
     ⟨pre, suf, h_split, h_notin⟩ | h_running
-  · obtain ⟨k, h_running⟩ := ready_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
+  · obtain ⟨k, h_running⟩ :=
+      ready_eventually_runs arrival_stream process h_wf arrival_time pre suf h_split h_notin
     obtain ⟨k', h_k'_pos, q, h_q_mem, h_q_id⟩ :=
       running_eventually_completes arrival_stream (arrival_time + k) process h_running h_wf
     exact ⟨arrival_time + k + k', q, h_q_mem, h_q_id⟩

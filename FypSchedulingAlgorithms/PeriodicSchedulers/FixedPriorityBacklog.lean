@@ -258,7 +258,8 @@ theorem meetsDeadline_of_drainPoint {p : PeriodicProcess} {t : ℕ} (hp : p ∈ 
     obtain ⟨t', ht', hp'⟩ := mem_jobsBy.mp hp
     exact mem_jobsBy.mpr ⟨t', by rw [← arrival_of_mem_releasesAt hp']; omega, hp'⟩
   have h_e := ticksBefore_eq_burst_of_pre_eq_zero hf h_ids hS h_pre hp_e hpS h_lt
-  have h_mono := ticksBefore_mono (runSchedule (stepPreemptive PeriodicProcess f) tasks) (key p) h_le
+  have h_mono :=
+    ticksBefore_mono (runSchedule (stepPreemptive PeriodicProcess f) tasks) (key p) h_le
   have h_burst := ticksBefore_le_burst h_ids h_adm (t := absDeadline p)
     (by
       obtain ⟨t', ht', hp'⟩ := mem_jobsBy.mp hp

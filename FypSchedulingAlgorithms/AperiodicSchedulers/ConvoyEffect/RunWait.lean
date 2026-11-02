@@ -360,7 +360,8 @@ theorem runWait_batch_eq_totalWait {select : List AperiodicProcess → Option Ap
     (h_mem : ∀ l p, select l = some p → p ∈ l) (h_none : ∀ l, select l = none → l = [])
     (l : List AperiodicProcess) (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (T : ℕ)
     (hT : (l.map (·.burst)).sum ≤ T) :
-    runWait (fun arrival_stream => runSteps arrival_stream (stepNonPreemptive select)) (batchStream l) T =
+    runWait (fun arrival_stream => runSteps arrival_stream (stepNonPreemptive select))
+        (batchStream l) T =
       totalWait ((dispatchOrder select l).map (·.burst)) := by
   rw [runWait_batch_eq_waitFrom]
   -- step 0 starts from an idle CPU with the whole batch waiting
@@ -455,7 +456,8 @@ theorem hasBatchConvoyEffect_iff_runWait (select : List AperiodicProcess → Opt
       List.mem_map_of_mem ((dispatchOrder_perm h_mem h_none _).symm.subset
         ((List.mem_erase_of_ne h_ne).mpr hq))
     obtain ⟨mid, post, h_split⟩ := List.append_of_mem hq'
-    have h_order : (dispatchOrder select l).map (·.burst) = p.burst :: (mid ++ q.burst :: post) := by
+    have h_order :
+        (dispatchOrder select l).map (·.burst) = p.burst :: (mid ++ q.burst :: post) := by
       rw [dispatchOrder_of_select h_mem h_p, List.map_cons, h_split]
     rw [h_order]
     calc totalWait ((dispatchOrder selectSJF l).map (·.burst))

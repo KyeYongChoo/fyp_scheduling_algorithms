@@ -66,7 +66,8 @@ def default_num_steps := 30
 /-- The candidate with the *highest* `priority_func` value; among equal-priority
 candidates the **earliest** in the list wins (FIFO ties): a later candidate replaces
 the best so far only if its priority is strictly higher. -/
-def selectByPriority {process_type} (priority_func : process_type → ℤ) (candidates : List process_type) : Option process_type :=
+def selectByPriority {process_type} (priority_func : process_type → ℤ)
+    (candidates : List process_type) : Option process_type :=
   candidates.foldl (fun best p =>
     match best with
     | none   => some p
@@ -74,7 +75,8 @@ def selectByPriority {process_type} (priority_func : process_type → ℤ) (cand
     none
 
 -- Non-preemptive schedulers
-def stepNonPreemptive [Process AperiodicProcess] (select : List AperiodicProcess → Option AperiodicProcess) :
+def stepNonPreemptive [Process AperiodicProcess]
+    (select : List AperiodicProcess → Option AperiodicProcess) :
   SchedState → SchedState :=
   fun s =>
     match s.running with
