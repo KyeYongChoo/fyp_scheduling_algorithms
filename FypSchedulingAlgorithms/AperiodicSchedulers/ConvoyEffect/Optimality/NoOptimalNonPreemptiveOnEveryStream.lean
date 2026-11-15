@@ -3,8 +3,8 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.RunWait
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoyWitnesses
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.RunWait
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.ConvoyWitnesses
 import FypSchedulingAlgorithms.AperiodicSchedulers.NonPreemptiveLemmas
 
 /-!

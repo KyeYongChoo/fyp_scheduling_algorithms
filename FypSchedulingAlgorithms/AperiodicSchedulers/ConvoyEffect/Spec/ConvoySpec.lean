@@ -5,7 +5,7 @@ Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.Process
 import FypSchedulingAlgorithms.Step
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.TotalWait
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.TotalWait
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
 import Mathlib.Data.List.Nodup

@@ -3,11 +3,18 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.PreemptiveOptimality
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.PreemptiveOptimality
 import FypSchedulingAlgorithms.ListLemmas
 
 /-!
 # SRTF waits least among all admissible schedules
+
+**What this file shows.**  `SRTFConvoy` shows that SRTF's rule (run the job with the least
+remaining time) avoids a convoy, and `PreemptiveOptimality` shows that SRTF waits least on
+two witness streams.  This file proves the general statement: on *every* stream and
+horizon, no admissible schedule waits less than SRTF.  This is stronger than SRTF
+making the locally shortest choice at every dispatch (`ShortestAtEveryDispatchRun`), which
+says nothing about total waiting against other schedules.
 
 `PreemptiveOptimality` states the classic result of Schrage (1968) as
 `SRTFMinimisesWait`; this file proves it (`srtfMinimisesWait`).  On every

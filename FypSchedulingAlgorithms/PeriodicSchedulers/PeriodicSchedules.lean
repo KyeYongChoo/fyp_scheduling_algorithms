@@ -13,7 +13,7 @@ import Mathlib.Data.List.Nodup
 /-!
 # Admissible schedules for periodic jobs
 
-The periodic counterpart of `ConvoyEffect/Schedules.lean`.  A **schedule**
+The periodic counterpart of `ConvoyEffect/Optimality/Schedules.lean`.  A **schedule**
 `σ : PSchedule = ℕ → Option (ℕ × ℕ)` names, for each step `t`, the job that holds the
 CPU in the state after step `t`.  As in `runSteps` (tick convention in `Step`), that job
 receives the tick of step `t + 1`.  All jobs of a periodic task share the task's `id`,

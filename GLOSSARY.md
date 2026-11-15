@@ -61,11 +61,11 @@ infinitely many in total, but only finitely many at each time.
 its arrival time, is fresh, and an id is never announced twice except as the same job at the
 same time. Most theorems assume it.
 
-**No repeats.** `NoRepeats` (`ConvoyEffect/Schedules.lean`). No job is listed twice *in one
+**No repeats.** `NoRepeats` (`ConvoyEffect/Optimality/Schedules.lean`). No job is listed twice *in one
 release*, which `WellFormedStream` still allows. It is needed wherever jobs are named by id
 (admissible schedules).
 
-**All arrivals at zero (a *batch*).** `AllArrivalsAtZero` (`ConvoyEffect/ConvoySpec.lean`).
+**All arrivals at zero (a *batch*).** `AllArrivalsAtZero` (`ConvoyEffect/Spec/ConvoySpec.lean`).
 Fresh jobs with distinct ids, all present at time 0. `allArrivalsAtZeroStream l` releases `l`
 at time 0 and nothing afterwards. The textbook term, and the word the comments use, is
 *batch*.
@@ -86,7 +86,7 @@ built. `none` means "nothing to dispatch".
 
 **Non-preemptive state-select policy.** A `select : SchedState → Option AperiodicProcess` run by
 `stepNonPreemptiveStateSelect` (`runStateSelect` for its run) that only ever picks a waiting job
-(`DrawsFromReadyQueue`, `ConvoyEffect/NoOptimalNonPreemptiveOnEveryStream.lean`). It sees the
+(`DrawsFromReadyQueue`, `ConvoyEffect/Optimality/NoOptimalNonPreemptiveOnEveryStream.lean`). It sees the
 current state, including the bursts of jobs that have arrived, but not future arrivals; that
 comes from its type, not from `DrawsFromReadyQueue`. It may **idle on purpose**, returning
 `none` while jobs wait. Every `stepNonPreemptive sel` is one (`stepNonPreemptive_eq_stateSelect`).
@@ -106,7 +106,7 @@ DM: `-deadline`; EDF: `-(arrival + deadline)`).
 queue. `stepPreemptive` keeps the running job unless a waiting one is *strictly* better. These
 dynamic tie-breaks matter for fixed priorities (see *Strict*).
 
-**Dispatch, dispatch moment.** `DispatchesAt` (`ConvoyEffect/ConvoySpec.lean`). A job is
+**Dispatch, dispatch moment.** `DispatchesAt` (`ConvoyEffect/Spec/ConvoySpec.lean`). A job is
 dispatched at step `t` if it holds the CPU after step `t` and a different job (or none) held it
 after step `t - 1`. This covers dispatch into an idle CPU, after a completion and by preemption.
 A job that keeps the CPU is not dispatched again.
@@ -115,7 +115,7 @@ A job that keeps the CPU is not dispatched again.
 (`runSteps_ready_nil_of_idle`), and so are FCFS and SJF (`idle_implies_empty_ready`).
 State-select policies that idle on purpose are not.
 
-**Job-conserving.** `ConservesJobs` (`PreemptiveRuns.lean`, `ConvoyEffect/Schedules.lean`). A
+**Job-conserving.** `ConservesJobs` (`PreemptiveRuns.lean`, `ConvoyEffect/Optimality/Schedules.lean`). A
 step neither invents nor loses jobs: the jobs in the system afterwards are those before, with
 the running job ticked and dropped exactly when it finished. **Not the same as
 work-conserving:** a state-select policy that idles on purpose is job-conserving but not
@@ -134,16 +134,16 @@ Five measures, from pure arithmetic to real runs:
 
 | Name | File | What it counts |
 | --- | --- | --- |
-| `totalWait bs` | `ConvoyEffect/TotalWait.lean` | A batch run back-to-back from time 0 in list order: each job waits for the bursts ahead of it. No horizon. |
-| `truncWait r bs T` | `ConvoyEffect/SJFOptimalityGivenSamePast.lean` | The same, after a job with `r` ticks left finishes, cut off at horizon `T`. |
-| `waitFrom step s T` | `ConvoyEffect/RunWait.lean` | The `ready` lengths of `s, step s, step (step s), …`: the wait still to come from state `s`, with no arrivals. |
-| `runWait run arrival_stream T` | `ConvoyEffect/RunWait.lean` | The `ready` lengths of the states after steps `0, …, T - 1` of a real run. **The cost in every headline theorem.** |
-| `schedWait arrival_stream σ T` | `ConvoyEffect/Schedules.lean` | For an admissible schedule: each step, every unfinished job not on the CPU waits. Equal to `runWait` on runs (`runWait_eq_schedWait`). |
+| `totalWait bs` | `ConvoyEffect/Spec/TotalWait.lean` | A batch run back-to-back from time 0 in list order: each job waits for the bursts ahead of it. No horizon. |
+| `truncWait r bs T` | `ConvoyEffect/Optimality/SJFOptimalityGivenSamePast.lean` | The same, after a job with `r` ticks left finishes, cut off at horizon `T`. |
+| `waitFrom step s T` | `ConvoyEffect/Optimality/RunWait.lean` | The `ready` lengths of `s, step s, step (step s), …`: the wait still to come from state `s`, with no arrivals. |
+| `runWait run arrival_stream T` | `ConvoyEffect/Optimality/RunWait.lean` | The `ready` lengths of the states after steps `0, …, T - 1` of a real run. **The cost in every headline theorem.** |
+| `schedWait arrival_stream σ T` | `ConvoyEffect/Optimality/Schedules.lean` | For an admissible schedule: each step, every unfinished job not on the CPU waits. Equal to `runWait` on runs (`runWait_eq_schedWait`). |
 
 The bridges between them are `runWait_allArrivalsAtZero_eq_totalWait` (a batch run waits `totalWait` of its
 dispatch order), `waitFrom_eq_truncWait` and `runWait_eq_schedWait`.
 
-**Dispatch order.** `dispatchOrder select l` (`ConvoyEffect/RunWait.lean`). The order in which a
+**Dispatch order.** `dispatchOrder select l` (`ConvoyEffect/Optimality/RunWait.lean`). The order in which a
 policy would dispatch the queue `l` with nothing else arriving. It is a permutation of `l`.
 
 **Response time.** The time until a job first gets the CPU (`rrResponse`,
@@ -152,7 +152,7 @@ nor turnaround time is monotone in RR's quantum, but response time is.
 
 ## Comparing schedulers
 
-**Admissible schedule.** `IsAdmissible` (`ConvoyEffect/Schedules.lean`;
+**Admissible schedule.** `IsAdmissible` (`ConvoyEffect/Optimality/Schedules.lean`;
 `PeriodicSchedulers/PeriodicSchedules.lean`). A schedule `σ` says which job (by id, or by key
 for periodic jobs) holds the CPU after each step. It is *admissible* if it only runs jobs that
 have been released and still have work left. Anything else is allowed: preemption, idling, any
@@ -168,14 +168,14 @@ is always stated (non-preemptive state-select policies, admissible schedules, fi
 priorities…), and so is the horizon. **Beaten** and **strict** mean `<`.
 
 **Optimal / beaten over the first `T` steps.** `IsOptimalOverSteps T select` and
-`IsBeatenOverSteps T select` (`ConvoyEffect/NoOptimalNonPreemptiveOnEveryStream.lean`). The
+`IsBeatenOverSteps T select` (`ConvoyEffect/Optimality/NoOptimalNonPreemptiveOnEveryStream.lean`). The
 first definition of optimality for non-preemptive policies: wait least *on every stream*.
 `not_isOptimalOverSteps_iff` says "not optimal" is exactly "beaten": some competitor waits
 strictly less on some stream. No non-preemptive policy is optimal in this sense once `T ≥ 4`;
-for `T ≤ 3` SJF is (`exists_optimal_iff`, `ConvoyEffect/ShortHorizon.lean`).
+for `T ≤ 3` SJF is (`exists_optimal_iff`, `ConvoyEffect/Optimality/ShortHorizon.lean`).
 
 **Optimal given the same past.** The second definition, which SJF meets
-(`ConvoyEffect/SJFOptimalityGivenSamePast.lean`): on the instance known at time `t`, wait least
+(`ConvoyEffect/Optimality/SJFOptimalityGivenSamePast.lean`): on the instance known at time `t`, wait least
 against every competitor whose run agrees with yours before `t`.
 
 **Shares the past, agrees before `t`.** Two runs whose states are equal at every step `< t`. In
@@ -201,7 +201,7 @@ Every dispatch is a step, so *at some dispatch* implies *at some step*, and *at 
 implies *at every dispatch*.
 
 **Convoy effect at some dispatch.** `HasConvoyEffectAtSomeDispatch`
-(`ConvoyEffect/ConvoySpec.lean`). At some dispatch moment, a job with strictly less work left
+(`ConvoyEffect/Spec/ConvoySpec.lean`). At some dispatch moment, a job with strictly less work left
 is waiting. FCFS and RR have it; SJF and SRTF do not.
 
 **Convoy effect at some step.** `HasConvoyEffectAtSomeStep`. At some step, dispatch or not, a
