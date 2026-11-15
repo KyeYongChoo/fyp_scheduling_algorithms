@@ -171,7 +171,8 @@ priorities…), and so is the horizon. **Beaten** and **strict** mean `<`.
 `IsBeatenOverSteps T select` (`ConvoyEffect/NoOptimalNonPreemptiveOnEveryStream.lean`). The
 first definition of optimality for non-preemptive policies: wait least *on every stream*.
 `not_isOptimalOverSteps_iff` says "not optimal" is exactly "beaten": some competitor waits
-strictly less on some stream. No non-preemptive policy is optimal in this sense once `T ≥ 4`.
+strictly less on some stream. No non-preemptive policy is optimal in this sense once `T ≥ 4`;
+for `T ≤ 3` SJF is (`exists_optimal_iff`, `ConvoyEffect/ShortHorizon.lean`).
 
 **Optimal given the same past.** The second definition, which SJF meets
 (`ConvoyEffect/SJFOptimalityGivenSamePast.lean`): on the instance known at time `t`, wait least

@@ -47,7 +47,10 @@ both streams by step 4, after which nothing more arrives, so their waits are
 fixed from then on (`runWait_stateSelect_eq_of_drained`), while the beaten policy's
 wait can only grow (`runWait_mono`).  Four is the least horizon at which these
 two streams separate the policies: over three steps, dispatching the long job
-costs only 2 on `streamB`, no more than `idleThenSJF`.
+costs only 2 on `streamB`, no more than `idleThenSJF`.  It is the least horizon for
+every stream too: at every `T ≤ 3`, SJF is optimal (`sjf_isOptimalOverSteps_of_le_three`
+in `ShortHorizon`), so an optimal policy exists exactly when `T ≤ 3`
+(`exists_optimal_iff`).
 
 The competitor that beats a policy which dispatches at time 0 idles at time 0.
 The theorem is about the class that includes deliberate idling; a statement
