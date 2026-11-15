@@ -3,8 +3,8 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoySpec
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.ConvoyWitnesses
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.ConvoySpec
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.ConvoyWitnesses
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
 import FypSchedulingAlgorithms.PreemptiveRuns
@@ -13,14 +13,20 @@ import FypSchedulingAlgorithms.SchedStateSimpLemmas
 
 /-! # SRTF: preemption removes the late-arrival convoy
 
+**What this file shows.**  SRTF avoids the convoy effect because of the *rule* it
+follows, not because of how much it waits: the job on the CPU always has the least
+remaining time.  This is a property of SRTF itself, checked against SJF's behaviour on
+one stream.  It makes no claim that SRTF waits least; that is `PreemptiveOptimality`
+(two streams) and `SRTFOptimality` (every stream).
+
 SRTF is preemptive, so it is described by a priority function (`-remaining`)
 passed to `stepPreemptive`, not by a `select` function.  In every state of an SRTF
 run the job on the CPU has the least *remaining* time of the jobs in the system
 (`srtf_run_invariant`), an instance of the priority run invariant that holds for every
 preemptive scheduler (`PreemptiveRuns.runSteps_running_max`).  For a single selection,
 the job SRTF picks from a list of candidates has the least remaining time among them
-(`srtf_runs_shortest_remaining`, from `Preemptive.selectByPriority_spec`).  So SRTF
-has neither the convoy effect at some step nor, in particular, the convoy effect
+(`srtf_runs_shortest_remaining`, from `Preemptive.selectByPriority_spec`).  So no SRTF
+dispatch has the convoy effect, and neither does any SRTF run
 (`srtf_not_hasConvoyEffectAtSomeDispatch`).
 
 The payoff is the late-arrival convoy (`lateConvoyArrivalStream`): a long job

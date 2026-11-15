@@ -3,7 +3,7 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.NoOptimalNonPreemptiveOnEveryStream
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.NoOptimalNonPreemptiveOnEveryStream
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
 import FypSchedulingAlgorithms.PreemptiveRuns
 import FypSchedulingAlgorithms.ListLemmas
@@ -14,9 +14,9 @@ import FypSchedulingAlgorithms.ListLemmas
 To compare a scheduler with *every* possible way of running the jobs --
 preemptive or not, clairvoyant or not -- this file describes runs without a
 step function: a **schedule** `σ : ℕ → Option ℕ` names, for each step `t`, the
-job (by id) that holds the CPU in the state after step `t`.  As in `runSteps`
+job (by id) that holds the CPU after step `t`.  As in `runSteps`
 (see the tick convention in `Step`), that job receives the tick of step `t + 1`;
-the jobs in the state after step `t` are those released at times `0, …, t`
+the jobs after step `t` are those released at times `0, …, t`
 (`arrivedBy`), and job `i` has had `ticksBefore σ i t` ticks by then.
 
 **The class** (`IsAdmissible`): whenever `σ` puts job `i` on the CPU after step
@@ -67,11 +67,11 @@ open Preemptive
 
 /-! ## Schedules -/
 
-/-- A **schedule** says, for each step `t`, which job (by id) holds the CPU in the
-state after step `t`, if any.  That job receives the tick of step `t + 1`. -/
+/-- A **schedule** says, for each step `t`, which job (by id) holds the CPU after step `t`, if any.
+That job receives the tick of step `t + 1`. -/
 abbrev Schedule := ℕ → Option ℕ
 
-/-- The ticks job `i` has received from schedule `σ` by the state after step `t`:
+/-- The ticks job `i` has received from schedule `σ` before step `t`:
 one for each earlier step `t' < t` in which it held the CPU. -/
 def ticksBefore (σ : Schedule) (i t : ℕ) : ℕ :=
   (List.range t).countP fun t' => σ t' = some i
@@ -82,13 +82,12 @@ had fewer ticks than its burst. -/
 def IsAdmissible (arrival_stream : ℕ → List AperiodicProcess) (σ : Schedule) : Prop :=
   ∀ t i, σ t = some i → ∃ p ∈ arrivedBy arrival_stream t, p.id = i ∧ ticksBefore σ i t < p.burst
 
-/-- The jobs released by time `t` that `σ` has not finished by the state after
-step `t`. -/
+/-- The jobs released by time `t` that `σ` has not finished before step `t`. -/
 def unfinished (arrival_stream : ℕ → List AperiodicProcess) (σ : Schedule) (t : ℕ) :
     List AperiodicProcess :=
   (arrivedBy arrival_stream t).filter fun p => ticksBefore σ p.id t < p.burst
 
-/-- The jobs waiting in the state after step `t`: unfinished, and not on the CPU. -/
+/-- The jobs waiting after step `t`: unfinished, and not on the CPU. -/
 def waiting (arrival_stream : ℕ → List AperiodicProcess) (σ : Schedule) (t : ℕ) :
     List AperiodicProcess :=
   (unfinished arrival_stream σ t).filter fun p => σ t ≠ some p.id

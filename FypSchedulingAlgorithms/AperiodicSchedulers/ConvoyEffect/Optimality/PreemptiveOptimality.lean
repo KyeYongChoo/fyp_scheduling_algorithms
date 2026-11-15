@@ -3,12 +3,18 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Schedules
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SJFOptimalityGivenSamePast
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.SRTFConvoy
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.Schedules
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.SJFOptimalityGivenSamePast
+import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Convoy.SRTFConvoy
 
 /-!
 # Preemption removes the impossibility
+
+**What this file shows.**  `SRTFConvoy` says SRTF follows a good rule; this file
+measures SRTF by its outcome, the waiting time `schedWait`, against *every* admissible
+schedule.  It does so on two witness streams (`streamA`, `streamB`), which is enough to
+show that preemption removes the impossibility below.  The statement for every stream is
+only stated here (`SRTFMinimisesWait`) and is proved in `SRTFOptimality`.
 
 `NoOptimalNonPreemptiveOnEveryStream` shows that no non-preemptive state-select policy waits least
 on every stream: at time 0 a policy facing the 4-tick job of `streamA`/`streamB`
