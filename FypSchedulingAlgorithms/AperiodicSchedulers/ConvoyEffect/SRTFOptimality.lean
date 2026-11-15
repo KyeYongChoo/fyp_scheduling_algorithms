@@ -11,18 +11,19 @@ import FypSchedulingAlgorithms.ListLemmas
 
 `PreemptiveOptimality` states the classic result of Schrage (1968) as
 `SRTFMinimisesWait`; this file proves it (`srtfMinimisesWait`).  On every
-well-formed stream without repeats, at every horizon `T`, SRTF's run waits no
-longer than any admissible schedule (`Schedules`): preemptive or not, idling or
-not, clairvoyant or not.  So, unlike the non-preemptive case
+well-formed stream, at every horizon `T`, SRTF's run waits no longer than any
+admissible schedule (`Schedules`): preemptive or not, idling or not, clairvoyant or
+not.  So, unlike the non-preemptive case
 (`no_optimal_nonPreemptive_on_every_stream`), there is a scheduler that sees only the
 current state and is optimal on every stream, and it is SRTF; in particular it waits no longer than
 any non-preemptive state-select policy (`srtf_le_runStateSelect`) or any other
 job-conserving step function (`srtf_le_runWait_of_conservesJobs`).
 
 **Scope.**  The result holds inside the discrete model of `Schedules`: the
-shared tick convention of `Step`, no context-switch cost, and streams without
-repeats (`NoRepeats`).  "Optimal" means against every admissible schedule.  The
-corollaries do not cover Round Robin, which has no bridge for its `RRState`.
+shared tick convention of `Step`, no context-switch cost, and well-formed streams
+(`WellFormedStream`), which release no id twice.  "Optimal" means against every
+admissible schedule.  The corollaries do not cover Round Robin, which has no bridge
+for its `RRState`.
 Optimality is weak (`≤`): strictly less waiting is only claimed on the witness
 streams of `PreemptiveOptimality` (`srtf_beats_every_nonPreemptive`).
 
@@ -81,7 +82,6 @@ theorem length_unfinished_eq (arrival_stream : ℕ → List AperiodicProcess) (�
 section Admissible
 
 variable {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
-  (h_rep : NoRepeats arrival_stream)
 include h_wf
 
 /-- An admissible schedule has not run a job before its release. -/
@@ -108,7 +108,6 @@ theorem remWorkAfter_of_none {σ : Schedule} {t : ℕ} (h : σ t = none) :
     remWorkAfter arrival_stream σ t = remWork arrival_stream σ t :=
   List.map_congr_left fun p _ => by rw [ticksBefore_succ_of_ne (by simp [h])]
 
-include h_rep in
 /-- **A tick of an admissible schedule** lowers the remaining work `v > 0` of the
 job it runs by one and leaves the others, `X`, alone. -/
 theorem remWork_tick {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) {t i : ℕ}
@@ -119,7 +118,7 @@ theorem remWork_tick {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) {t
       0 < p0.burst - ticksBefore σ i t ∧
       ∀ u ∈ X, ∃ q ∈ arrivedBy arrival_stream t, q.id ≠ i ∧ u = q.burst - ticksBefore σ q.id t := by
   obtain ⟨p0, hp0, rfl, h_lt⟩ := h_adm t i h
-  have h_nd := arrivedBy_nodup h_wf h_rep t
+  have h_nd := h_wf.arrivedBy_nodup t
   have h_perm := List.perm_cons_erase hp0
   have h_ne : ∀ q ∈ (arrivedBy arrival_stream t).erase p0, q.id ≠ p0.id := fun q hq h_id =>
     ((h_nd.mem_erase_iff).mp hq).1 (arrivedBy_id_inj h_wf (List.mem_of_mem_erase hq) hp0 h_id)
@@ -145,15 +144,14 @@ end Admissible
 section SRTF
 
 variable {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
-  (h_rep : NoRepeats arrival_stream)
-include h_wf h_rep
+include h_wf
 
 /-- When SRTF idles, every released job is finished. -/
 theorem srtf_remWork_of_none {t : ℕ} (h : runSchedule stepSRTF arrival_stream t = none) :
     ∀ u ∈ remWork arrival_stream (runSchedule stepSRTF arrival_stream) t, u = 0 := by
   have h_run : (runSteps arrival_stream stepSRTF t).running = none := by
     simpa [runSchedule] using h
-  have h_sys := inSystem_perm stepSRTF_conservesJobs h_wf h_rep t
+  have h_sys := inSystem_perm stepSRTF_conservesJobs h_wf t
   rw [inSystem, srtf_ready_nil_of_idle arrival_stream t h_run, h_run] at h_sys
   have h_nil := List.eq_nil_of_length_eq_zero (by simpa using h_sys.length_eq.symm)
   intro u hu
@@ -173,7 +171,7 @@ theorem srtf_tick_min {t i : ℕ} (h : runSchedule stepSRTF arrival_stream t = s
       q.burst - ticksBefore (runSchedule stepSRTF arrival_stream) q.id t := by
   set σ := runSchedule stepSRTF arrival_stream
   obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp h
-  have h_inv := inSystem_perm stepSRTF_conservesJobs h_wf h_rep t
+  have h_inv := inSystem_perm stepSRTF_conservesJobs h_wf t
   obtain ⟨q', hq', hb'⟩ := List.mem_map.mp
     (h_inv.subset (show b ∈ inSystem _ by simp [inSystem, hb]))
   have h_eq : q' = p0 :=
@@ -201,13 +199,13 @@ end SRTF
 smallest remaining works of SRTF's schedule sum to no more than those of any
 admissible schedule. -/
 theorem srtf_majorises {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream)
+    (h_wf : WellFormedStream arrival_stream)
     {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) (t k : ℕ) :
     smallSum (remWork arrival_stream (runSchedule stepSRTF arrival_stream) t) k ≤
       smallSum (remWork arrival_stream σ t) k := by
   set σs := runSchedule stepSRTF arrival_stream
   have h_adms : IsAdmissible arrival_stream σs :=
-    runSchedule_isAdmissible stepSRTF_conservesJobs h_wf h_rep
+    runSchedule_isAdmissible stepSRTF_conservesJobs h_wf
   induction t generalizing k with
   | zero => simp [remWork]
   | succ t ih =>
@@ -215,14 +213,14 @@ theorem srtf_majorises {arrival_stream : ℕ → List AperiodicProcess}
     refine smallSum_append_mono (by simp [remWorkAfter]) (fun j => ?_) _ k
     cases hs : σs t with
     | none =>
-      rw [remWorkAfter_of_none hs, smallSum_eq_zero (srtf_remWork_of_none h_wf h_rep hs) j]
+      rw [remWorkAfter_of_none hs, smallSum_eq_zero (srtf_remWork_of_none h_wf hs) j]
       exact Nat.zero_le _
     | some i =>
-      obtain ⟨p0, hp0, h_id, X, h_rem, h_after, h_pos, hX⟩ := remWork_tick h_wf h_rep h_adms hs
+      obtain ⟨p0, hp0, h_id, X, h_rem, h_after, h_pos, hX⟩ := remWork_tick h_wf h_adms hs
       have h_min : ∀ u ∈ X, 0 < u → p0.burst - ticksBefore σs i t ≤ u := by
         intro u hu hu_pos
         obtain ⟨q, hq, hq_id, rfl⟩ := hX u hu
-        exact srtf_tick_min h_wf h_rep hs hp0 h_id hq hq_id hu_pos
+        exact srtf_tick_min h_wf hs hp0 h_id hq hq_id hu_pos
       have h_srtf := smallSum_cons_sub_one h_pos h_min j
       rw [← smallSum_perm h_after, ← smallSum_perm h_rem] at h_srtf
       have ih_j := ih j
@@ -231,7 +229,7 @@ theorem srtf_majorises {arrival_stream : ℕ → List AperiodicProcess}
         rw [remWorkAfter_of_none hσ]
         omega
       | some i' =>
-        obtain ⟨p1, -, -, Y, h_rem', h_after', -, -⟩ := remWork_tick h_wf h_rep h_adm hσ
+        obtain ⟨p1, -, -, Y, h_rem', h_after', -, -⟩ := remWork_tick h_wf h_adm hσ
         have h_tick := smallSum_cons_le (p1.burst - ticksBefore σ i' t) Y j
         rw [← smallSum_perm h_after', ← smallSum_perm h_rem'] at h_tick
         omega
@@ -239,50 +237,50 @@ theorem srtf_majorises {arrival_stream : ℕ → List AperiodicProcess}
 /-- **SRTF has the fewest unfinished jobs** after every step, among all
 admissible schedules (`N(t)` is pointwise minimal). -/
 theorem srtf_unfinished_le {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream)
+    (h_wf : WellFormedStream arrival_stream)
     {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) (t : ℕ) :
     (unfinished arrival_stream (runSchedule stepSRTF arrival_stream) t).length ≤
       (unfinished arrival_stream σ t).length := by
   rw [length_unfinished_eq, length_unfinished_eq]
-  exact length_filter_pos_le (by simp [remWork]) (srtf_majorises h_wf h_rep h_adm t)
+  exact length_filter_pos_le (by simp [remWork]) (srtf_majorises h_wf h_adm t)
 
 /-- **SRTF has the fewest waiting jobs** after every step, among all admissible
 schedules. -/
 theorem srtf_ready_le_waiting {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream)
+    (h_wf : WellFormedStream arrival_stream)
     {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) (t : ℕ) :
     (runSteps arrival_stream stepSRTF t).ready.length ≤ (waiting arrival_stream σ t).length := by
-  rw [srtf_ready_length h_wf h_rep t]
-  have := srtf_unfinished_le h_wf h_rep h_adm t
-  have := length_unfinished_sub_one_le h_wf h_rep h_adm t
+  rw [srtf_ready_length h_wf t]
+  have := srtf_unfinished_le h_wf h_adm t
+  have := length_unfinished_sub_one_le h_wf h_adm t
   omega
 
 /-- **SRTF waits least among all admissible schedules** (Schrage 1968), on every
-well-formed stream without repeats, at every horizon. -/
+well-formed stream, at every horizon. -/
 theorem srtfMinimisesWait : SRTFMinimisesWait := by
-  intro arrival_stream h_wf h_rep σ h_adm T
+  intro arrival_stream h_wf σ h_adm T
   unfold runWait schedWait
-  exact sum_map_le_sum_map _ fun t _ => srtf_ready_le_waiting h_wf h_rep h_adm t
+  exact sum_map_le_sum_map _ fun t _ => srtf_ready_le_waiting h_wf h_adm t
 
 /-- **SRTF waits no longer than any non-preemptive state-select policy**, on every
-well-formed stream without repeats, at every horizon. -/
+well-formed stream, at every horizon. -/
 theorem srtf_le_runStateSelect {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤
       runWait (runStateSelect select) arrival_stream T :=
-  srtf_le_runStateSelect_of srtfMinimisesWait h_mem h_wf h_rep T
+  srtf_le_runStateSelect_of srtfMinimisesWait h_mem h_wf T
 
 /-- **SRTF waits no longer than any job-conserving scheduler** (every preemptive
 priority scheduler, every non-preemptive state-select policy), on every well-formed
-stream without repeats, at every horizon. -/
+stream, at every horizon. -/
 theorem srtf_le_runWait_of_conservesJobs {step : SchedState → SchedState}
     (h_step : ConservesJobs step) {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤
       runWait (runSteps · step) arrival_stream T := by
-  rw [runWait_eq_schedWait h_step h_wf h_rep]
-  exact srtfMinimisesWait arrival_stream h_wf h_rep _
-    (runSchedule_isAdmissible h_step h_wf h_rep) T
+  rw [runWait_eq_schedWait h_step h_wf]
+  exact srtfMinimisesWait arrival_stream h_wf _
+    (runSchedule_isAdmissible h_step h_wf) T
 
 end ConvoyEffect

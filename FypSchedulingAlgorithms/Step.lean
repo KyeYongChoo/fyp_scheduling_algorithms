@@ -47,19 +47,115 @@ so step 0 is already a step and the state after step `t` reads `time = t + 1`; s
 the docstring of `runSteps`.
 -/
 
+/-- The jobs released by time `t`, in order of release. -/
+def arrivedBy (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) : List AperiodicProcess :=
+  (List.range (t + 1)).flatMap arrival_stream
+
+/-- Step 0 has seen the releases of time 0. -/
+@[simp] theorem arrivedBy_zero (arrival_stream : ℕ → List AperiodicProcess) :
+    arrivedBy arrival_stream 0 = arrival_stream 0 := by
+  simp [arrivedBy]
+
+/-- One more step, one more release. -/
+theorem arrivedBy_succ (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) :
+    arrivedBy arrival_stream (t + 1) = arrivedBy arrival_stream t ++ arrival_stream (t + 1) := by
+  simp [arrivedBy, List.range_succ, List.flatMap_append]
+
+/-- The jobs released by time `t` are those of the releases at times `t' ≤ t`. -/
+theorem mem_arrivedBy {arrival_stream : ℕ → List AperiodicProcess} {t : ℕ}
+    {p : AperiodicProcess} : p ∈ arrivedBy arrival_stream t ↔ ∃ t' ≤ t, p ∈ arrival_stream t' := by
+  simp [arrivedBy, Nat.lt_succ_iff]
+
+/-- The release at time `t` is part of the jobs released by time `t`. -/
+theorem sublist_arrivedBy (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) :
+    (arrival_stream t).Sublist (arrivedBy arrival_stream t) := by
+  cases t with
+  | zero => simp
+  | succ t => rw [arrivedBy_succ]; exact List.sublist_append_right _ _
+
 /-- An arrival stream is **well formed** when it is a plausible input: every job
 arriving at time `t` carries `arrival = t` (`consistent`), arrives untouched, with
-`remaining = burst` (`fresh`), and an id is never announced twice except as the same
-job at the same time (`unique`).  `unique` still allows a job to be listed twice in a
-single release; `NoRepeats` (`Schedules`) rules that out where a result names jobs
-by id.  Most results assume a well-formed stream: an ill-formed one can re-announce a
-job forever, or hand it a `remaining` that disagrees with its `burst`. -/
+`remaining = burst` (`fresh`), and no id is released twice: the ids of the jobs released
+by any time are distinct (`ids_nodup`).  So a job is never announced twice, neither at
+two times (`WellFormedStream.unique`) nor twice in one release
+(`WellFormedStream.nodup`); results that name jobs by id need both.  Most results
+assume a well-formed stream: an ill-formed one can re-announce a job forever, or hand it
+a `remaining` that disagrees with its `burst`.  `WellFormedStream.of_unique_of_nodup`
+builds one from the two separate facts. -/
 structure WellFormedStream (arrival_stream : ℕ → List AperiodicProcess) : Prop where
   consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t
   fresh : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.remaining = p.burst
-  unique : ∀ (p1 p2 : AperiodicProcess) (t1 t2 : ℕ),
-    p1 ∈ arrival_stream t1 → p2 ∈ arrival_stream t2 →
-    Process.id p1 = Process.id p2 → t1 = t2 ∧ p1 = p2
+  ids_nodup : ∀ t, ((arrivedBy arrival_stream t).map AperiodicProcess.id).Nodup
+
+namespace WellFormedStream
+
+variable {arrival_stream : ℕ → List AperiodicProcess}
+
+/-- In a list whose ids are distinct, two jobs with the same id are the same job. -/
+theorem eq_of_mem_of_ids_nodup {l : List AperiodicProcess} (h : (l.map AperiodicProcess.id).Nodup)
+    {p q : AperiodicProcess} (hp : p ∈ l) (hq : q ∈ l) (h_id : p.id = q.id) : p = q := by
+  induction l with
+  | nil => simp at hp
+  | cons a l ih =>
+    simp only [List.map_cons, List.nodup_cons, List.mem_map, not_exists, not_and] at h
+    rcases List.mem_cons.mp hp with rfl | hp' <;> rcases List.mem_cons.mp hq with rfl | hq'
+    · rfl
+    · exact absurd h_id.symm (h.1 q hq')
+    · exact absurd h_id (h.1 p hp')
+    · exact ih h.2 hp' hq'
+
+/-- No job is released twice by any time. -/
+theorem arrivedBy_nodup (h_wf : WellFormedStream arrival_stream) (t : ℕ) :
+    (arrivedBy arrival_stream t).Nodup :=
+  (List.pairwise_map.mp (h_wf.ids_nodup t)).imp fun h_ne h_eq =>
+    h_ne (congrArg AperiodicProcess.id h_eq)
+
+/-- No job is listed twice in one release. -/
+theorem nodup (h_wf : WellFormedStream arrival_stream) (t : ℕ) : (arrival_stream t).Nodup :=
+  (h_wf.arrivedBy_nodup t).sublist (sublist_arrivedBy arrival_stream t)
+
+/-- An id is never announced twice except as the same job at the same time. -/
+theorem unique (h_wf : WellFormedStream arrival_stream) (p1 p2 : AperiodicProcess) (t1 t2 : ℕ)
+    (h1 : p1 ∈ arrival_stream t1) (h2 : p2 ∈ arrival_stream t2)
+    (h_id : Process.id p1 = Process.id p2) : t1 = t2 ∧ p1 = p2 := by
+  have hp1 : p1 ∈ arrivedBy arrival_stream (max t1 t2) :=
+    mem_arrivedBy.mpr ⟨t1, Nat.le_max_left _ _, h1⟩
+  have hp2 : p2 ∈ arrivedBy arrival_stream (max t1 t2) :=
+    mem_arrivedBy.mpr ⟨t2, Nat.le_max_right _ _, h2⟩
+  have h_eq : p1 = p2 := eq_of_mem_of_ids_nodup (h_wf.ids_nodup _) hp1 hp2 h_id
+  subst h_eq
+  exact ⟨(h_wf.consistent p1 t1 h1).symm.trans (h_wf.consistent p1 t2 h2), rfl⟩
+
+/-- **Building a well-formed stream** from the two halves of `ids_nodup`: an id is never
+announced at two times or as two jobs (`unique`), and no release lists a job twice
+(`nodup`). -/
+theorem of_unique_of_nodup
+    (consistent : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.arrival = t)
+    (fresh : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ arrival_stream t → p.remaining = p.burst)
+    (unique : ∀ (p1 p2 : AperiodicProcess) (t1 t2 : ℕ),
+      p1 ∈ arrival_stream t1 → p2 ∈ arrival_stream t2 →
+      Process.id p1 = Process.id p2 → t1 = t2 ∧ p1 = p2)
+    (nodup : ∀ t, (arrival_stream t).Nodup) :
+    WellFormedStream arrival_stream := by
+  refine ⟨consistent, fresh, fun t => ?_⟩
+  have h_nodup : (arrivedBy arrival_stream t).Nodup := by
+    induction t with
+    | zero => simpa using nodup 0
+    | succ t ih =>
+      rw [arrivedBy_succ]
+      refine List.nodup_append.mpr ⟨ih, nodup _, fun p hp q hq h_eq => ?_⟩
+      subst h_eq
+      obtain ⟨t', ht', hp⟩ := mem_arrivedBy.mp hp
+      have h1 := consistent p _ hp
+      have h2 := consistent p _ hq
+      omega
+  rw [List.Nodup, List.pairwise_map]
+  refine h_nodup.imp_of_mem fun {p q} hp hq h_ne h_id => h_ne ?_
+  obtain ⟨t1, -, hp⟩ := mem_arrivedBy.mp hp
+  obtain ⟨t2, -, hq⟩ := mem_arrivedBy.mp hq
+  exact (unique p q t1 t2 hp hq h_id).2
+
+end WellFormedStream
 
 def default_num_steps := 30
 

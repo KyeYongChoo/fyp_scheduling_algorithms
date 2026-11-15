@@ -49,10 +49,10 @@ invariant `inSystem_perm`: after every step the jobs in `ready` and on the CPU
 are exactly the released, unfinished jobs, each with its burst less the ticks
 the schedule gave it.
 
-**Assumptions.**  Streams are well formed (`WellFormedStream`) and list no job
-twice in one release (`NoRepeats`; `WellFormedStream` allows a job to be listed
-twice at the same time, and then a run holds two copies of it that a schedule,
-which names jobs by id, cannot tell apart).  Round Robin is not covered by the
+**Assumptions.**  Streams are well formed (`WellFormedStream`).  In particular no
+id is released twice (`WellFormedStream.ids_nodup`): were a job listed twice, a run
+would hold two copies of it that a schedule, which names jobs by id, cannot tell
+apart.  Round Robin is not covered by the
 bridge here, but only because of its state type: `stepRR` acts on an `RRState`,
 and its choice depends on the slice counter `ticksUsed`, so it is not a
 `SchedState → SchedState`.  Its step also neither invents nor loses jobs, so an
@@ -66,10 +66,6 @@ open scoped List
 open Preemptive
 
 /-! ## Schedules -/
-
-/-- The jobs released by time `t`, in order of release. -/
-def arrivedBy (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) : List AperiodicProcess :=
-  (List.range (t + 1)).flatMap arrival_stream
 
 /-- A **schedule** says, for each step `t`, which job (by id) holds the CPU in the
 state after step `t`, if any.  That job receives the tick of step `t + 1`. -/
@@ -102,11 +98,6 @@ waiting job waits one tick.  This is `runWait` for schedules
 (`runWait_eq_schedWait`). -/
 def schedWait (arrival_stream : ℕ → List AperiodicProcess) (σ : Schedule) (T : ℕ) : ℕ :=
   ((List.range T).map fun t => (waiting arrival_stream σ t).length).sum
-
-/-- No job is listed twice in one release.  (`WellFormedStream` already forces
-two releases of the same id to be the same job at the same time.) -/
-def NoRepeats (arrival_stream : ℕ → List AperiodicProcess) : Prop :=
-  ∀ t, (arrival_stream t).Nodup
 
 /-! ## Steps that neither invent nor lose jobs -/
 
@@ -166,21 +157,6 @@ theorem stepNonPreemptiveStateSelect_conservesJobs {select : SchedState → Opti
 
 /-! ## Facts about schedules -/
 
-/-- Step 0 has seen the releases of time 0. -/
-@[simp] theorem arrivedBy_zero (arrival_stream : ℕ → List AperiodicProcess) :
-    arrivedBy arrival_stream 0 = arrival_stream 0 := by
-  simp [arrivedBy]
-
-/-- One more step, one more release. -/
-theorem arrivedBy_succ (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) :
-    arrivedBy arrival_stream (t + 1) = arrivedBy arrival_stream t ++ arrival_stream (t + 1) := by
-  simp [arrivedBy, List.range_succ, List.flatMap_append]
-
-/-- The jobs released by time `t` are those of the releases at times `t' ≤ t`. -/
-theorem mem_arrivedBy {arrival_stream : ℕ → List AperiodicProcess} {t : ℕ}
-    {p : AperiodicProcess} : p ∈ arrivedBy arrival_stream t ↔ ∃ t' ≤ t, p ∈ arrival_stream t' := by
-  simp [arrivedBy, Nat.lt_succ_iff]
-
 /-- On a well-formed stream, two jobs released by time `t` with the same id are
 the same job. -/
 theorem arrivedBy_id_inj {arrival_stream : ℕ → List AperiodicProcess}
@@ -190,21 +166,6 @@ theorem arrivedBy_id_inj {arrival_stream : ℕ → List AperiodicProcess}
   obtain ⟨t1, -, hp⟩ := mem_arrivedBy.mp hp
   obtain ⟨t2, -, hq⟩ := mem_arrivedBy.mp hq
   exact (h_wf.unique p q t1 t2 hp hq h_id).2
-
-/-- On a well-formed stream without repeats, no job is released twice. -/
-theorem arrivedBy_nodup {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (t : ℕ) :
-    (arrivedBy arrival_stream t).Nodup := by
-  induction t with
-  | zero => simpa using h_rep 0
-  | succ t ih =>
-    rw [arrivedBy_succ]
-    refine List.nodup_append.mpr ⟨ih, h_rep _, fun p hp q hq h_eq => ?_⟩
-    subst h_eq
-    obtain ⟨t', ht', hp⟩ := mem_arrivedBy.mp hp
-    have h1 := h_wf.consistent p _ hp
-    have h2 := h_wf.consistent p _ hq
-    omega
 
 /-- No ticks before step 0. -/
 @[simp] theorem ticksBefore_zero (σ : Schedule) (i : ℕ) : ticksBefore σ i 0 = 0 := rfl
@@ -250,10 +211,9 @@ theorem length_filter_id_ne {l : List AperiodicProcess} (h_nodup : l.Nodup)
   simpa [Option.some.injEq] using fun h_id => h_ne (h_inj p hp' q hq h_id.symm)
 
 /-- **What waiting looks like.** For an admissible schedule on a well-formed
-stream without repeats, the waiting jobs are the unfinished ones less the one on
-the CPU, if any. -/
+stream, the waiting jobs are the unfinished ones less the one on the CPU, if any. -/
 theorem length_waiting {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream)
+    (h_wf : WellFormedStream arrival_stream)
     {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) (t : ℕ) :
     (waiting arrival_stream σ t).length =
       (unfinished arrival_stream σ t).length - (σ t).toList.length := by
@@ -263,7 +223,7 @@ theorem length_waiting {arrival_stream : ℕ → List AperiodicProcess}
   · obtain ⟨q, hq, rfl, h_lt⟩ := h_adm t _ h
     have hq' : q ∈ unfinished arrival_stream σ t := List.mem_filter.mpr ⟨hq, by simpa using h_lt⟩
     have := length_filter_id_ne (l := unfinished arrival_stream σ t)
-      ((arrivedBy_nodup h_wf h_rep t).filter _)
+      ((h_wf.arrivedBy_nodup t).filter _)
       (fun p hp q hq => arrivedBy_id_inj h_wf (List.mem_of_mem_filter hp)
         (List.mem_of_mem_filter hq)) hq'
     simp only [Option.toList_some, List.length_singleton]
@@ -272,10 +232,10 @@ theorem length_waiting {arrival_stream : ℕ → List AperiodicProcess}
 /-- **Every admissible schedule leaves all but at most one unfinished job
 waiting.** -/
 theorem length_unfinished_sub_one_le {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream)
+    (h_wf : WellFormedStream arrival_stream)
     {σ : Schedule} (h_adm : IsAdmissible arrival_stream σ) (t : ℕ) :
     (unfinished arrival_stream σ t).length - 1 ≤ (waiting arrival_stream σ t).length := by
-  rw [length_waiting h_wf h_rep h_adm]
+  rw [length_waiting h_wf h_adm]
   rcases σ t <;> simp
 
 /-- Waiting can only grow with the horizon. -/
@@ -311,8 +271,7 @@ section Bridge
 
 variable {step : SchedState → SchedState} (h_step : ConservesJobs step)
   {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
-  (h_rep : NoRepeats arrival_stream)
-include h_step h_wf h_rep
+include h_step h_wf
 
 /-- **The run invariant.** After every step of a job-conserving run, the jobs in
 the system are exactly the jobs its schedule has released and not finished,
@@ -388,7 +347,7 @@ theorem inSystem_perm (t : ℕ) :
       have hq_lt : ticksBefore σ q.id t < q.burst := by simpa using (List.mem_filter.mp hq).2
       have h_tick : ticksBefore σ q.id (t + 1) = ticksBefore σ q.id t + 1 := by
         simp [ticksBefore_succ, hσt, jobAt]
-      obtain ⟨rest, h_old, h_upd⟩ := filter_map_update (arrivedBy_nodup h_wf h_rep t) hqL
+      obtain ⟨rest, h_old, h_upd⟩ := filter_map_update (h_wf.arrivedBy_nodup t) hqL
         (fun p => decide (ticksBefore σ p.id t < p.burst))
         (fun p => decide (ticksBefore σ p.id (t + 1) < p.burst)) (jobAt σ t) (jobAt σ (t + 1))
         (fun p hp h_ne => by
@@ -422,7 +381,7 @@ theorem runSchedule_isAdmissible :
     IsAdmissible arrival_stream (runSchedule step arrival_stream) := by
   intro t i h
   obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp h
-  obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ((inSystem_perm h_step h_wf h_rep t).subset
+  obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ((inSystem_perm h_step h_wf t).subset
     (show b ∈ inSystem _ by simp [inSystem, hb]))
   exact ⟨q, List.mem_of_mem_filter hq, rfl, by simpa [jobAt] using (List.mem_filter.mp hq).2⟩
 
@@ -431,8 +390,8 @@ schedule leaves waiting. -/
 theorem ready_length_eq_waiting (t : ℕ) :
     (runSteps arrival_stream step t).ready.length =
       (waiting arrival_stream (runSchedule step arrival_stream) t).length := by
-  rw [length_waiting h_wf h_rep (runSchedule_isAdmissible h_step h_wf h_rep)]
-  have := (inSystem_perm h_step h_wf h_rep t).length_eq
+  rw [length_waiting h_wf (runSchedule_isAdmissible h_step h_wf)]
+  have := (inSystem_perm h_step h_wf t).length_eq
   simp only [inSystem, List.length_append, List.length_map] at this
   cases h : (runSteps arrival_stream step t).running
   · simp_all [runSchedule]
@@ -441,14 +400,14 @@ theorem ready_length_eq_waiting (t : ℕ) :
 
 /-- **The bridge: a run waits what its schedule waits.** For every
 job-conserving step (every preemptive scheduler, every non-preemptive state-select
-policy), on every well-formed stream without repeats, `runWait` of the run is
-`schedWait` of the schedule it follows, at every horizon. -/
+policy), on every well-formed stream, `runWait` of the run is `schedWait` of the
+schedule it follows, at every horizon. -/
 theorem runWait_eq_schedWait (T : ℕ) :
     runWait (runSteps · step) arrival_stream T =
       schedWait arrival_stream (runSchedule step arrival_stream) T := by
   unfold runWait schedWait
   congr 1
-  exact List.map_congr_left fun t _ => ready_length_eq_waiting h_step h_wf h_rep t
+  exact List.map_congr_left fun t _ => ready_length_eq_waiting h_step h_wf t
 
 end Bridge
 
