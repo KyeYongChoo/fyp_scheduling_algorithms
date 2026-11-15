@@ -60,15 +60,17 @@ theorem mem_lateConvoyArrivalStream {L : ℕ} {hL : 0 < L} {p : AperiodicProcess
   rcases t with _ | _ | t <;> simp_all [lateConvoyArrivalStream]
 
 theorem lateConvoyArrivalStream_wf (L : ℕ) (hL : 0 < L) :
-    WellFormedStream (lateConvoyArrivalStream L hL) where
-  consistent p t h := by
-    rcases mem_lateConvoyArrivalStream h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl
-  fresh p t h := by
-    rcases mem_lateConvoyArrivalStream h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl
-  unique p1 p2 t1 t2 h1 h2 h_id := by
-    rcases mem_lateConvoyArrivalStream h1 with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
-      rcases mem_lateConvoyArrivalStream h2 with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
-      simp_all [longJob, lateShortJob]
+    WellFormedStream (lateConvoyArrivalStream L hL) :=
+  .of_unique_of_nodup
+    (fun p t h => by
+      rcases mem_lateConvoyArrivalStream h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl)
+    (fun p t h => by
+      rcases mem_lateConvoyArrivalStream h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl)
+    (fun p1 p2 t1 t2 h1 h2 h_id => by
+      rcases mem_lateConvoyArrivalStream h1 with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+        rcases mem_lateConvoyArrivalStream h2 with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+        simp_all [longJob, lateShortJob])
+    (fun t => by rcases t with _ | _ | t <;> simp [lateConvoyArrivalStream])
 
 /-- Every job in the convoy arrives at time 0, and is the long or the short job. -/
 theorem mem_convoyArrivalStream {L : ℕ} {hL : 0 < L} {p : AperiodicProcess} {t : ℕ}
@@ -77,14 +79,16 @@ theorem mem_convoyArrivalStream {L : ℕ} {hL : 0 < L} {p : AperiodicProcess} {t
   rcases t with _ | t <;> simp_all [convoyArrivalStream]
 
 theorem convoyArrivalStream_wf (L : ℕ) (hL : 0 < L) :
-    WellFormedStream (convoyArrivalStream L hL) where
-  consistent p t h := by
-    rcases mem_convoyArrivalStream h with ⟨rfl, rfl | rfl⟩ <;> rfl
-  fresh p t h := by
-    rcases mem_convoyArrivalStream h with ⟨rfl, rfl | rfl⟩ <;> rfl
-  unique p1 p2 t1 t2 h1 h2 h_id := by
-    rcases mem_convoyArrivalStream h1 with ⟨rfl, rfl | rfl⟩ <;>
-      rcases mem_convoyArrivalStream h2 with ⟨rfl, rfl | rfl⟩ <;>
-      simp_all [longJob, shortJob]
+    WellFormedStream (convoyArrivalStream L hL) :=
+  .of_unique_of_nodup
+    (fun p t h => by
+      rcases mem_convoyArrivalStream h with ⟨rfl, rfl | rfl⟩ <;> rfl)
+    (fun p t h => by
+      rcases mem_convoyArrivalStream h with ⟨rfl, rfl | rfl⟩ <;> rfl)
+    (fun p1 p2 t1 t2 h1 h2 h_id => by
+      rcases mem_convoyArrivalStream h1 with ⟨rfl, rfl | rfl⟩ <;>
+        rcases mem_convoyArrivalStream h2 with ⟨rfl, rfl | rfl⟩ <;>
+        simp_all [longJob, shortJob])
+    (fun t => by rcases t with _ | t <;> simp [convoyArrivalStream, longJob, shortJob])
 
 end ConvoyEffect

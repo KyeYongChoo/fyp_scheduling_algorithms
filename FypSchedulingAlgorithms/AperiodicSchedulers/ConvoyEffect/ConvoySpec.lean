@@ -272,15 +272,20 @@ theorem mem_allArrivalsAtZeroStream {ready : List AperiodicProcess} {p : Aperiod
 /-- Releasing a batch at time 0 is a well-formed arrival stream. -/
 theorem allArrivalsAtZeroStream_wf {ready : List AperiodicProcess}
     (h_atZero : AllArrivalsAtZero ready) :
-    WellFormedStream (allArrivalsAtZeroStream ready) where
-  consistent p t h := by
-    obtain ⟨rfl, hp⟩ := mem_allArrivalsAtZeroStream h
-    exact (h_atZero.1 p hp).1
-  fresh p t h := (h_atZero.1 p (mem_allArrivalsAtZeroStream h).2).2
-  unique p1 p2 t1 t2 h1 h2 h_id := by
-    obtain ⟨rfl, hp1⟩ := mem_allArrivalsAtZeroStream h1
-    obtain ⟨rfl, hp2⟩ := mem_allArrivalsAtZeroStream h2
-    exact ⟨rfl, List.inj_on_of_nodup_map h_atZero.2 hp1 hp2 h_id⟩
+    WellFormedStream (allArrivalsAtZeroStream ready) :=
+  .of_unique_of_nodup
+    (fun p t h => by
+      obtain ⟨rfl, hp⟩ := mem_allArrivalsAtZeroStream h
+      exact (h_atZero.1 p hp).1)
+    (fun p t h => (h_atZero.1 p (mem_allArrivalsAtZeroStream h).2).2)
+    (fun p1 p2 t1 t2 h1 h2 h_id => by
+      obtain ⟨rfl, hp1⟩ := mem_allArrivalsAtZeroStream h1
+      obtain ⟨rfl, hp2⟩ := mem_allArrivalsAtZeroStream h2
+      exact ⟨rfl, List.inj_on_of_nodup_map h_atZero.2 hp1 hp2 h_id⟩)
+    (fun t => by
+      rcases t with _ | t
+      · exact h_atZero.2.of_map _
+      · simp [allArrivalsAtZeroStream])
 
 /-- **The convoy effect on all arrivals at zero is the convoy effect at step 0.** If a
 non-preemptive policy passes over a shorter job in some batch, then releasing

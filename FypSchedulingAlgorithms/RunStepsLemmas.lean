@@ -72,9 +72,14 @@ theorem knownAt_wf {arrival_stream : ℕ → List AperiodicProcess}
     split at hp
     · exact hp
     · simp at hp
-  exact ⟨fun p j hp => h_wf.consistent p j (h_mem p j hp),
-    fun p j hp => h_wf.fresh p j (h_mem p j hp),
-    fun p1 p2 t1 t2 h1 h2 h_id => h_wf.unique p1 p2 t1 t2 (h_mem _ _ h1) (h_mem _ _ h2) h_id⟩
+  refine .of_unique_of_nodup (fun p j hp => h_wf.consistent p j (h_mem p j hp))
+    (fun p j hp => h_wf.fresh p j (h_mem p j hp))
+    (fun p1 p2 t1 t2 h1 h2 h_id => h_wf.unique p1 p2 t1 t2 (h_mem _ _ h1) (h_mem _ _ h2) h_id)
+    (fun j => ?_)
+  unfold knownAt
+  split
+  · exact h_wf.nodup j
+  · exact List.nodup_nil
 
 /-- **A run cannot see the future**: up to time `t` it is the same on the
 stream and on the instance known at `t`. -/

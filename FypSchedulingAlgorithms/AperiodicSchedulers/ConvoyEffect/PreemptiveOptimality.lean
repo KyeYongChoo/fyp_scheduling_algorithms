@@ -38,8 +38,8 @@ its unfinished jobs but one waiting (`srtf_ready_length`), and counting the
 unfinished jobs of the schedule is enough.
 
 **The general theorem** (`SRTFMinimisesWait`, Schrage 1968): on every
-well-formed stream without repeats, at every horizon, SRTF waits no longer than
-any admissible schedule.  It is stated here as a proposition and proved in
+well-formed stream, at every horizon, SRTF waits no longer than any admissible
+schedule.  It is stated here as a proposition and proved in
 `SRTFOptimality` (`srtfMinimisesWait`); `srtf_le_runStateSelect_of` derives from it
 that SRTF waits no longer than any non-preemptive state-select policy on every such
 stream, the contrast with `no_optimal_nonPreemptive_on_every_stream`.
@@ -69,10 +69,10 @@ theorem srtf_ready_nil_of_idle (arrival_stream : ℕ → List AperiodicProcess) 
 
 /-- **SRTF leaves waiting all its unfinished jobs but one**: the one it runs. -/
 theorem srtf_ready_length {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (t : ℕ) :
+    (h_wf : WellFormedStream arrival_stream) (t : ℕ) :
     (runSteps arrival_stream stepSRTF t).ready.length =
       (unfinished arrival_stream (runSchedule stepSRTF arrival_stream) t).length - 1 := by
-  have := (inSystem_perm stepSRTF_conservesJobs h_wf h_rep t).length_eq
+  have := (inSystem_perm stepSRTF_conservesJobs h_wf t).length_eq
   simp only [inSystem, List.length_append, List.length_map] at this
   cases h : (runSteps arrival_stream stepSRTF t).running
   · rw [srtf_ready_nil_of_idle arrival_stream t h] at this ⊢
@@ -82,16 +82,6 @@ theorem srtf_ready_length {arrival_stream : ℕ → List AperiodicProcess}
     omega
 
 /-! ## The witness streams again -/
-
-/-- Stream A lists no job twice. -/
-theorem streamA_noRepeats : NoRepeats streamA := by
-  intro t
-  cases t <;> simp [streamA, allArrivalsAtZeroStream]
-
-/-- Stream B lists no job twice. -/
-theorem streamB_noRepeats : NoRepeats streamB := by
-  intro t
-  rcases t with _ | _ | t <;> simp [streamB, lateConvoyArrivalStream]
 
 /-- The long job is all that stream A ever releases. -/
 theorem arrivedBy_streamA (t : ℕ) : arrivedBy streamA t = [longJob4] := by
@@ -146,7 +136,7 @@ theorem srtf_runWait_streamA (T : ℕ) : runWait (runSteps · stepSRTF) streamA 
   refine List.sum_eq_zero_iff_forall_eq_nat.mpr fun x hx => ?_
   obtain ⟨t, -, rfl⟩ := List.mem_map.mp hx
   dsimp only
-  rw [srtf_ready_length streamA_wf streamA_noRepeats t]
+  rw [srtf_ready_length streamA_wf t]
   have : (unfinished streamA (runSchedule stepSRTF streamA) t).length ≤ 1 :=
     (List.length_filter_le _ _).trans (by simp [arrivedBy_streamA])
   omega
@@ -159,7 +149,7 @@ theorem srtf_streamB_schedule_one : runSchedule stepSRTF streamB 1 = some 1 := b
 /-- After step 0 of stream B, SRTF has the long job on the CPU and nobody
 waits. -/
 theorem srtf_streamB_ready_zero : (runSteps streamB stepSRTF 0).ready.length = 0 := by
-  rw [srtf_ready_length streamB_wf streamB_noRepeats]
+  rw [srtf_ready_length streamB_wf]
   have : (unfinished streamB (runSchedule stepSRTF streamB) 0).length ≤ 1 :=
     (List.length_filter_le _ _).trans (by simp [streamB, lateConvoyArrivalStream])
   omega
@@ -168,12 +158,12 @@ theorem srtf_streamB_ready_zero : (runSteps streamB stepSRTF 0).ready.length = 0
 for the one step the unit job runs. -/
 theorem srtf_runWait_streamB {T : ℕ} (hT : 2 ≤ T) :
     runWait (runSteps · stepSRTF) streamB T = 1 := by
-  have h_len := srtf_ready_length streamB_wf streamB_noRepeats
+  have h_len := srtf_ready_length streamB_wf
   set σ := runSchedule stepSRTF streamB
   have h0 := srtf_streamB_ready_zero
   have h1 : (runSteps streamB stepSRTF 1).ready.length = 1 := by
     rw [h_len, unfinished_streamB_one
-      (runSchedule_isAdmissible stepSRTF_conservesJobs streamB_wf streamB_noRepeats)]
+      (runSchedule_isAdmissible stepSRTF_conservesJobs streamB_wf)]
   have h_late : ∀ j, (runSteps streamB stepSRTF (2 + j)).ready.length = 0 := by
     intro j
     rw [show 2 + j = j + 1 + 1 by omega, h_len]
@@ -199,7 +189,7 @@ step 1 both jobs are unfinished, so one of them waits. -/
 theorem one_le_schedWait_streamB {σ : Schedule} (h_adm : IsAdmissible streamB σ) {T : ℕ}
     (hT : 2 ≤ T) : 1 ≤ schedWait streamB σ T := by
   refine le_trans ?_ (schedWait_mono streamB σ hT)
-  have := length_unfinished_sub_one_le streamB_wf streamB_noRepeats h_adm 1
+  have := length_unfinished_sub_one_le streamB_wf h_adm 1
   rw [unfinished_streamB_one h_adm] at this
   simp [schedWait, List.range_succ]
   omega
@@ -230,19 +220,19 @@ theorem srtf_le_schedWait_streamB {σ : Schedule} (h_adm : IsAdmissible streamB 
 /-- A non-preemptive state-select run is an admissible schedule. -/
 theorem runStateSelect_isAdmissible {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) :
+    (h_wf : WellFormedStream arrival_stream) :
     IsAdmissible arrival_stream
       (runSchedule (stepNonPreemptiveStateSelect select) arrival_stream) :=
-  runSchedule_isAdmissible (stepNonPreemptiveStateSelect_conservesJobs h_mem) h_wf h_rep
+  runSchedule_isAdmissible (stepNonPreemptiveStateSelect_conservesJobs h_mem) h_wf
 
 /-- A non-preemptive state-select run waits what its schedule waits. -/
 theorem runWait_runStateSelect_eq_schedWait {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
     runWait (runStateSelect select) arrival_stream T =
       schedWait arrival_stream
         (runSchedule (stepNonPreemptiveStateSelect select) arrival_stream) T :=
-  runWait_eq_schedWait (stepNonPreemptiveStateSelect_conservesJobs h_mem) h_wf h_rep T
+  runWait_eq_schedWait (stepNonPreemptiveStateSelect_conservesJobs h_mem) h_wf T
 
 /-- **SRTF beats every non-preemptive state-select policy on stream A or on stream B**,
 at every horizon `T ≥ 4`.  A policy that idles at time 0 waits at least 1 on
@@ -267,8 +257,8 @@ theorem srtf_beats_every_nonPreemptive (select : SchedState → Option Aperiodic
 /-! ## The general theorem -/
 
 /-- **SRTF waits least among all admissible schedules** (Schrage 1968): on every
-well-formed stream without repeats, at every horizon `T`, SRTF's run waits no
-longer than any admissible schedule, preemptive or not, clairvoyant or not.
+well-formed stream, at every horizon `T`, SRTF's run waits no longer than any
+admissible schedule, preemptive or not, clairvoyant or not.
 SRTF itself is not clairvoyant: its step sees only the current state.
 
 Proved in `SRTFOptimality` (`srtfMinimisesWait`), along these lines, in the
@@ -296,20 +286,20 @@ and `srtf_run_invariant` (the running job has the least remaining work, and
 every job in the system has work left). -/
 def SRTFMinimisesWait : Prop :=
   ∀ arrival_stream : ℕ → List AperiodicProcess, WellFormedStream arrival_stream →
-    NoRepeats arrival_stream → ∀ σ : Schedule, IsAdmissible arrival_stream σ → ∀ T : ℕ,
+    ∀ σ : Schedule, IsAdmissible arrival_stream σ → ∀ T : ℕ,
       runWait (runSteps · stepSRTF) arrival_stream T ≤ schedWait arrival_stream σ T
 
 /-- **Given the general theorem, SRTF waits no longer than any non-preemptive
-state-select policy** on every well-formed stream without repeats, at every
+state-select policy** on every well-formed stream, at every
 horizon: so among schedulers that see only the current state there is an optimal one
 once preemption is allowed, in contrast with `no_optimal_nonPreemptive_on_every_stream`. -/
 theorem srtf_le_runStateSelect_of (h : SRTFMinimisesWait)
     {select : SchedState → Option AperiodicProcess}
     (h_mem : DrawsFromReadyQueue select) {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) (h_rep : NoRepeats arrival_stream) (T : ℕ) :
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤
       runWait (runStateSelect select) arrival_stream T := by
-  rw [runWait_runStateSelect_eq_schedWait h_mem h_wf h_rep]
-  exact h arrival_stream h_wf h_rep _ (runStateSelect_isAdmissible h_mem h_wf h_rep) T
+  rw [runWait_runStateSelect_eq_schedWait h_mem h_wf]
+  exact h arrival_stream h_wf _ (runStateSelect_isAdmissible h_mem h_wf) T
 
 end ConvoyEffect
