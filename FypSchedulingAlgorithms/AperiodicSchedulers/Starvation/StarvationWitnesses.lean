@@ -35,19 +35,18 @@ def starvation_stream : ℕ → List AperiodicProcess
   | 0     => [victim, flood 0]
   | t + 1 => [flood (t + 1)]
 
-theorem starvation_stream_wf : WellFormedStream starvation_stream where
-  consistent p t h_mem := by
-    cases t <;>
+theorem starvation_stream_wf : WellFormedStream starvation_stream := by
+  refine .of_unique_of_nodup (fun p t h_mem => ?_) (fun p t h_mem => ?_)
+    (fun p1 p2 t1 t2 h_mem1 h_mem2 h_id => ?_) (fun t => ?_)
+  · cases t <;>
       simp only [starvation_stream, List.mem_cons, List.not_mem_nil, or_false] at h_mem
     · rcases h_mem with rfl | rfl <;> rfl
     · subst h_mem; rfl
-  fresh p t h_mem := by
-    cases t <;>
+  · cases t <;>
       simp only [starvation_stream, List.mem_cons, List.not_mem_nil, or_false] at h_mem
     · rcases h_mem with rfl | rfl <;> rfl
     · subst h_mem; rfl
-  unique p1 p2 t1 t2 h_mem1 h_mem2 h_id := by
-    -- every member of the stream is either the victim (only at time 0) or that tick's flood job
+  · -- every member of the stream is either the victim (only at time 0) or that tick's flood job
     have key : ∀ (p : AperiodicProcess) (t : ℕ), p ∈ starvation_stream t →
         (p = victim ∧ t = 0) ∨ p = flood t := by
       intro p t hp
@@ -68,5 +67,6 @@ theorem starvation_stream_wf : WellFormedStream starvation_stream where
       have : t1 = t2 := by omega
       subst this
       exact ⟨rfl, rfl⟩
+  · cases t <;> simp [starvation_stream, victim, flood]
 
 end StarvationWitnesses

@@ -58,12 +58,11 @@ the same `id`", not `=`.
 infinitely many in total, but only finitely many at each time.
 
 **Well-formed stream.** `WellFormedStream` (`Step.lean`). Each arrival has `arrival` equal to
-its arrival time, is fresh, and an id is never announced twice except as the same job at the
-same time. Most theorems assume it.
-
-**No repeats.** `NoRepeats` (`ConvoyEffect/Optimality/Schedules.lean`). No job is listed twice *in one
-release*, which `WellFormedStream` still allows. It is needed wherever jobs are named by id
-(admissible schedules).
+its arrival time, is fresh, and no id is released twice: the ids of the jobs released by any
+time (`arrivedBy`) are distinct (`ids_nodup`). So a job is announced neither at two times nor
+twice in one release (`WellFormedStream.unique`, `WellFormedStream.nodup`), which matters
+wherever jobs are named by id (admissible schedules). `WellFormedStream.of_unique_of_nodup`
+builds one from those two facts. Most theorems assume it.
 
 **All arrivals at zero (a *batch*).** `AllArrivalsAtZero` (`ConvoyEffect/Spec/ConvoySpec.lean`).
 Fresh jobs with distinct ids, all present at time 0. `allArrivalsAtZeroStream l` releases `l`
