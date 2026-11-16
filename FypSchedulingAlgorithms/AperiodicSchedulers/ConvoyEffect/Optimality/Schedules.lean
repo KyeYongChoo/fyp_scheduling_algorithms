@@ -38,26 +38,39 @@ time axis, not a handicap of some schedules.  There are no context-switch
 costs, as in the step functions.
 
 **The cost** (`schedWait`): at each step every unfinished job that is not on the
-CPU waits one tick.  It is `runWait` for schedules: for any step function that
-neither invents nor loses jobs (`ConservesJobs`) -- every preemptive priority
-scheduler (`stepPreemptive_conservesJobs`, SRTF included) and every non-preemptive
-state-select policy (`stepNonPreemptiveStateSelect_conservesJobs`: FCFS, SJF,
-policies that idle) -- the run's schedule (`runSchedule`) is admissible
-(`runSchedule_isAdmissible`) and the run waits exactly what its schedule waits,
-at every horizon (`runWait_eq_schedWait`).  The bridge rests on the run
-invariant `inSystem_perm`: after every step the jobs in `ready` and on the CPU
-are exactly the released, unfinished jobs, each with its burst less the ticks
-the schedule gave it.
+CPU waits one tick.  It is `runWait` for schedules, for every run that neither
+invents nor loses jobs at any step (`ConservesJobsAtEveryStep`): the run's schedule
+(`scheduleOfRun`) is admissible (`ConservesJobsAtEveryStep.scheduleOfRun_isAdmissible`)
+and the run waits exactly what its schedule waits, at every horizon
+(`ConservesJobsAtEveryStep.runWait_eq_schedWait`).  The bridge rests on the run
+invariant `ConservesJobsAtEveryStep.inSystem_perm`: after every step the jobs in
+`ready` and on the CPU are exactly the released, unfinished jobs, each with its burst
+less the ticks the schedule gave it.
+
+**Which runs.**  The predicate is stated about the run, not the step, so it covers:
+
+* the run of every step function that neither invents nor loses jobs (`ConservesJobs`,
+  `runSteps_conservesJobsAtEveryStep`) -- every preemptive priority scheduler
+  (`stepPreemptive_conservesJobs`, SRTF included) and every non-preemptive state-select
+  policy (`stepNonPreemptiveStateSelect_conservesJobs`: FCFS, SJF, policies that idle).
+  For these the step-level names keep their statements: `runSchedule`,
+  `inSystem_perm`, `runSchedule_isAdmissible`, `ready_length_eq_waiting`,
+  `runWait_eq_schedWait`;
+* Round Robin, for every quantum (`runStepsRR_conservesJobsAtEveryStep`,
+  `runStepsRR_isAdmissible`, `runWait_runStepsRR_eq_schedWait`).  `stepRR` acts on an
+  `RRState` and its choice depends on the slice counter `ticksUsed`, so it is not a
+  `SchedState → SchedState`; for each fixed counter its step conserves jobs
+  (`stepRR_conservesJobs`), and that is all the run needs.
+
+The run-level predicate is the hook for any other scheduler that carries extra state
+from step to step, such as a multilevel feedback queue (queue levels) or aging
+(waiting counters): proving its run conserves jobs at every step is enough for the
+bridge.  No such scheduler is formalised here.
 
 **Assumptions.**  Streams are well formed (`WellFormedStream`).  In particular no
 id is released twice (`WellFormedStream.ids_nodup`): were a job listed twice, a run
 would hold two copies of it that a schedule, which names jobs by id, cannot tell
-apart.  Round Robin is not covered by the
-bridge here, but only because of its state type: `stepRR` acts on an `RRState`,
-and its choice depends on the slice counter `ticksUsed`, so it is not a
-`SchedState → SchedState`.  Its step also neither invents nor loses jobs, so an
-`RRState` version of `ConservesJobs` should hold, but it is not stated or proved
-here.
+apart.
 -/
 
 namespace ConvoyEffect
@@ -245,16 +258,88 @@ theorem schedWait_mono (arrival_stream : ℕ → List AperiodicProcess) (σ : Sc
   rw [List.range_add, List.map_append, List.sum_append]
   exact Nat.le_add_right _ _
 
+/-! ## Runs that neither invent nor lose jobs -/
+
+/-- The jobs in the system: waiting, or on the CPU. -/
+def inSystem (s : SchedState) : List AperiodicProcess := s.ready ++ s.running.toList
+
+/-- A run **conserves jobs at every step** if none of its steps invents or loses a job.  After
+step 0 the jobs in the system (`inSystem`) are the arrivals of time 0.  After step `t + 1` they
+are the jobs waiting after step `t`, the arrivals of time `t + 1`, and the job on the CPU after
+step `t`, ticked, kept exactly when that tick left it work.  As with `ConservesJobs`, a step may
+reorder the queue and swap the job on the CPU, but it adds and loses nothing.
+
+This is `ConservesJobs` asked of a run instead of a step function
+(`runSteps_conservesJobsAtEveryStep`), and it is all the bridge to schedules needs
+(`ConservesJobsAtEveryStep.runWait_eq_schedWait`).  Since it only looks at the
+`SchedState` after each step, it also covers schedulers that carry extra state from step to
+step and so are not a `SchedState → SchedState`: Round Robin's slice counter
+(`runStepsRR_conservesJobsAtEveryStep`), and in the same way the queue levels of a multilevel
+feedback queue or the counters of an aging scheme, which are not formalised here. -/
+def ConservesJobsAtEveryStep (arrival_stream : ℕ → List AperiodicProcess)
+    (run : ℕ → SchedState) : Prop :=
+  inSystem (run 0) ~ arrival_stream 0 ∧
+    ∀ t, inSystem (run (t + 1)) ~
+      ((run t).ready ++ arrival_stream (t + 1)) ++
+        ((run t).running.toList.map fun b => { b with remaining := b.remaining - 1 }).filter
+          fun b => 0 < b.remaining
+
+/-- **The run of a job-conserving step conserves jobs at every step**, on every stream. -/
+theorem runSteps_conservesJobsAtEveryStep {step : SchedState → SchedState}
+    (h_step : ConservesJobs step) (arrival_stream : ℕ → List AperiodicProcess) :
+    ConservesJobsAtEveryStep arrival_stream (runSteps arrival_stream step) := by
+  refine ⟨?_, fun t => h_step _⟩
+  simpa [inSystem, runSteps] using h_step { SchedStateMethods.init with ready := arrival_stream 0 }
+
+/-- **A Round Robin step conserves jobs**, whatever the quantum and the slice counter: on the
+`SchedState` inside its `RRState`, for each fixed `ticksUsed`, `stepRR` is a job-conserving
+step.  (`stepRR` itself is not a `SchedState → SchedState`, since its choice depends on
+`ticksUsed`.) -/
+theorem stepRR_conservesJobs (quantum ticksUsed : ℕ) :
+    ConservesJobs fun s => (stepRR quantum { sched := s, ticksUsed := ticksUsed }).sched := by
+  intro s
+  unfold stepRR
+  rcases hr : s.running with _ | p
+  · rcases hq : s.ready with _ | ⟨nx, ps⟩ <;> simp [hr, hq]
+  · by_cases h_done : p.remaining ≤ 1
+    · rcases hq : s.ready with _ | ⟨nx, ps⟩ <;> simp [hr, hq, h_done]
+    · have h0 : 0 < p.remaining - 1 := by omega
+      by_cases h_slice : ticksUsed ≥ quantum - 1
+      · rcases hq : s.ready with _ | ⟨nx, ps⟩
+        · simp [hr, hq, h_done, h0, h_slice]
+        · simp [hr, hq, h_done, h0, h_slice]
+          have := List.perm_append_singleton nx (ps ++ [{ p with remaining := p.remaining - 1 }])
+          rwa [List.append_assoc, List.singleton_append] at this
+      · simp [hr, h_done, h0, h_slice]
+
+/-- **Every Round Robin run conserves jobs at every step**, for every quantum (quantum 0
+behaves as 1) and on every stream. -/
+theorem runStepsRR_conservesJobsAtEveryStep (quantum : ℕ)
+    (arrival_stream : ℕ → List AperiodicProcess) :
+    ConservesJobsAtEveryStep arrival_stream
+      fun t => (runStepsRR quantum arrival_stream t).sched := by
+  refine ⟨?_, fun t =>
+    stepRR_conservesJobs quantum (runStepsRR quantum arrival_stream t).ticksUsed _⟩
+  simpa [inSystem, runStepsRR] using
+    stepRR_conservesJobs quantum 0 { SchedStateMethods.init with ready := arrival_stream 0 }
+
 /-! ## Runs as schedules -/
 
+/-- The schedule a run follows: the id of the job on the CPU after each step. -/
+def scheduleOfRun (run : ℕ → SchedState) : Schedule :=
+  fun t => (run t).running.map (·.id)
+
 /-- The schedule a run of `step` follows: the id of the job on the CPU after each
-step. -/
+step (`scheduleOfRun` of `runSteps`, `runSchedule_eq_scheduleOfRun`). -/
 def runSchedule (step : SchedState → SchedState) (arrival_stream : ℕ → List AperiodicProcess) :
     Schedule :=
   fun t => (runSteps arrival_stream step t).running.map (·.id)
 
-/-- The jobs in the system: waiting, or on the CPU. -/
-def inSystem (s : SchedState) : List AperiodicProcess := s.ready ++ s.running.toList
+/-- `runSchedule` is `scheduleOfRun` of `runSteps`, by definition. -/
+theorem runSchedule_eq_scheduleOfRun (step : SchedState → SchedState)
+    (arrival_stream : ℕ → List AperiodicProcess) :
+    runSchedule step arrival_stream = scheduleOfRun (runSteps arrival_stream step) :=
+  rfl
 
 /-- Job `p` as it stands after step `t` of `σ`: its burst less the ticks it has had. -/
 def jobAt (σ : Schedule) (t : ℕ) (p : AperiodicProcess) : AperiodicProcess :=
@@ -266,27 +351,28 @@ theorem jobAt_fresh {σ : Schedule} {t : ℕ} {p : AperiodicProcess}
   cases p
   simp_all [jobAt]
 
-section Bridge
+/-! ## The bridge, for runs -/
 
-variable {step : SchedState → SchedState} (h_step : ConservesJobs step)
-  {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
-include h_step h_wf
+section RunBridge
 
-/-- **The run invariant.** After every step of a job-conserving run, the jobs in
-the system are exactly the jobs its schedule has released and not finished,
-each with its burst less the ticks the schedule gave it. -/
-theorem inSystem_perm (t : ℕ) :
-    inSystem (runSteps arrival_stream step t) ~
-      (unfinished arrival_stream (runSchedule step arrival_stream) t).map
-        (jobAt (runSchedule step arrival_stream) t) := by
-  set σ := runSchedule step arrival_stream with hσ
+variable {arrival_stream : ℕ → List AperiodicProcess}
+
+/-- **The run invariant.** After every step of a run that conserves jobs at every step, the
+jobs in the system are exactly the jobs its schedule has released and not finished, each with
+its burst less the ticks the schedule gave it. -/
+theorem ConservesJobsAtEveryStep.inSystem_perm {run : ℕ → SchedState}
+    (h_run : ConservesJobsAtEveryStep arrival_stream run)
+    (h_wf : WellFormedStream arrival_stream) (t : ℕ) :
+    inSystem (run t) ~
+      (unfinished arrival_stream (scheduleOfRun run) t).map (jobAt (scheduleOfRun run) t) := by
+  set σ := scheduleOfRun run with hσ
   induction t using Nat.strong_induction_on with
   | _ t ih =>
   -- a job on the CPU after an earlier step was released by then
   have h_src : ∀ t' < t, ∀ i, σ t' = some i → ∃ q ∈ arrivedBy arrival_stream t', q.id = i := by
     intro t' ht' i hi
     obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp hi
-    have hb' : b ∈ inSystem (runSteps arrival_stream step t') := by simp [inSystem, hb]
+    have hb' : b ∈ inSystem (run t') := by simp [inSystem, hb]
     obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ((ih t' ht').subset hb')
     exact ⟨q, List.mem_of_mem_filter hq, rfl⟩
   -- so a job released at time `t` has had no ticks before step `t`
@@ -306,18 +392,12 @@ theorem inSystem_perm (t : ℕ) :
     exact (List.map_congr_left fun p hp => (h_fresh p hp).2).trans (List.map_id _)
   cases t with
   | zero =>
-    have h0 := h_step { SchedStateMethods.init with ready := arrival_stream 0 }
-    simp only [SchedStateG.init_aperiodic, Option.toList_none, List.map_nil, List.filter_nil,
-      List.append_nil] at h0
     unfold unfinished
     rw [arrivedBy_zero, h_arr]
-    simpa [inSystem, runSteps] using h0
+    exact h_run.1
   | succ t =>
-    set S := runSteps arrival_stream step t with hS
-    have h1 := h_step { S with ready := S.ready ++ arrival_stream (t + 1) }
-    simp only at h1
-    change inSystem (runSteps arrival_stream step (t + 1)) ~ _ at h1 ⊢
-    refine h1.trans ?_
+    set S := run t with hS
+    refine (h_run.2 t).trans ?_
     have ih_t := ih t (by omega)
     rw [← hS] at ih_t
     unfold unfinished
@@ -332,14 +412,14 @@ theorem inSystem_perm (t : ℕ) :
         (by rw [← List.append_assoc]; exact h.append_right _)
     rcases hr : S.running with _ | b
     · -- an idle CPU: nobody was ticked
-      have hσt : σ t = none := by simp [hσ, runSchedule, ← hS, hr]
+      have hσt : σ t = none := by simp [hσ, scheduleOfRun, ← hS, hr]
       have h_same : ∀ p : AperiodicProcess, ticksBefore σ p.id (t + 1) = ticksBefore σ p.id t :=
         fun p => ticksBefore_succ_of_ne (by simp [hσt])
       have hJ : jobAt σ (t + 1) = jobAt σ t := funext fun p => by simp [jobAt, h_same]
       simp only [h_same, hJ, Option.toList_none, List.map_nil, List.filter_nil, List.append_nil]
       simpa [inSystem, hr, unfinished] using ih_t
     · -- `b` was on the CPU: it is some released job `q`, which receives the tick
-      have hσt : σ t = some b.id := by simp [hσ, runSchedule, ← hS, hr]
+      have hσt : σ t = some b.id := by simp [hσ, scheduleOfRun, ← hS, hr]
       obtain ⟨q, hq, rfl⟩ := List.mem_map.mp
         (ih_t.subset (show b ∈ inSystem S by simp [inSystem, hr]))
       have hqL := List.mem_of_mem_filter hq
@@ -374,28 +454,77 @@ theorem inSystem_perm (t : ℕ) :
       rw [h_tf]
       exact List.perm_append_comm.trans (h_ready.append_left _)
 
+/-- **A run that conserves jobs at every step is an admissible schedule**: it only ever runs a
+released job with work left. -/
+theorem ConservesJobsAtEveryStep.scheduleOfRun_isAdmissible {run : ℕ → SchedState}
+    (h_run : ConservesJobsAtEveryStep arrival_stream run)
+    (h_wf : WellFormedStream arrival_stream) :
+    IsAdmissible arrival_stream (scheduleOfRun run) := by
+  intro t i h
+  obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ((h_run.inSystem_perm h_wf t).subset
+    (show b ∈ inSystem _ by simp [inSystem, hb]))
+  exact ⟨q, List.mem_of_mem_filter hq, rfl, by simpa [jobAt] using (List.mem_filter.mp hq).2⟩
+
+/-- After each step of a run that conserves jobs at every step, the ready queue holds exactly
+the jobs its schedule leaves waiting. -/
+theorem ConservesJobsAtEveryStep.ready_length_eq_waiting {run : ℕ → SchedState}
+    (h_run : ConservesJobsAtEveryStep arrival_stream run)
+    (h_wf : WellFormedStream arrival_stream) (t : ℕ) :
+    (run t).ready.length = (waiting arrival_stream (scheduleOfRun run) t).length := by
+  rw [length_waiting h_wf (h_run.scheduleOfRun_isAdmissible h_wf)]
+  have := (h_run.inSystem_perm h_wf t).length_eq
+  simp only [inSystem, List.length_append, List.length_map] at this
+  cases h : (run t).running
+  · simp_all [scheduleOfRun]
+  · simp_all [scheduleOfRun]
+    omega
+
+/-- **The bridge, for runs: a run waits what its schedule waits.** For every run function
+whose run on a well-formed stream conserves jobs at every step (the run of every job-conserving
+step function, every Round Robin run), `runWait` of the run is `schedWait` of the schedule it
+follows, at every horizon. -/
+theorem ConservesJobsAtEveryStep.runWait_eq_schedWait
+    {run : (ℕ → List AperiodicProcess) → ℕ → SchedState}
+    (h_run : ConservesJobsAtEveryStep arrival_stream (run arrival_stream))
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
+    runWait run arrival_stream T =
+      schedWait arrival_stream (scheduleOfRun (run arrival_stream)) T := by
+  unfold runWait schedWait
+  congr 1
+  exact List.map_congr_left fun t _ => h_run.ready_length_eq_waiting h_wf t
+
+end RunBridge
+
+/-! ## The bridge, for step functions -/
+
+section Bridge
+
+variable {step : SchedState → SchedState} (h_step : ConservesJobs step)
+  {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
+include h_step h_wf
+
+/-- **The run invariant.** After every step of a job-conserving run, the jobs in
+the system are exactly the jobs its schedule has released and not finished,
+each with its burst less the ticks the schedule gave it. -/
+theorem inSystem_perm (t : ℕ) :
+    inSystem (runSteps arrival_stream step t) ~
+      (unfinished arrival_stream (runSchedule step arrival_stream) t).map
+        (jobAt (runSchedule step arrival_stream) t) :=
+  (runSteps_conservesJobsAtEveryStep h_step arrival_stream).inSystem_perm h_wf t
+
 /-- **A run is an admissible schedule**: it only ever runs a released job with
 work left. -/
 theorem runSchedule_isAdmissible :
-    IsAdmissible arrival_stream (runSchedule step arrival_stream) := by
-  intro t i h
-  obtain ⟨b, hb, rfl⟩ := Option.map_eq_some_iff.mp h
-  obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ((inSystem_perm h_step h_wf t).subset
-    (show b ∈ inSystem _ by simp [inSystem, hb]))
-  exact ⟨q, List.mem_of_mem_filter hq, rfl, by simpa [jobAt] using (List.mem_filter.mp hq).2⟩
+    IsAdmissible arrival_stream (runSchedule step arrival_stream) :=
+  (runSteps_conservesJobsAtEveryStep h_step arrival_stream).scheduleOfRun_isAdmissible h_wf
 
 /-- After each step of a run, the ready queue holds exactly the jobs its
 schedule leaves waiting. -/
 theorem ready_length_eq_waiting (t : ℕ) :
     (runSteps arrival_stream step t).ready.length =
-      (waiting arrival_stream (runSchedule step arrival_stream) t).length := by
-  rw [length_waiting h_wf (runSchedule_isAdmissible h_step h_wf)]
-  have := (inSystem_perm h_step h_wf t).length_eq
-  simp only [inSystem, List.length_append, List.length_map] at this
-  cases h : (runSteps arrival_stream step t).running
-  · simp_all [runSchedule]
-  · simp_all [runSchedule]
-    omega
+      (waiting arrival_stream (runSchedule step arrival_stream) t).length :=
+  (runSteps_conservesJobsAtEveryStep h_step arrival_stream).ready_length_eq_waiting h_wf t
 
 /-- **The bridge: a run waits what its schedule waits.** For every
 job-conserving step (every preemptive scheduler, every non-preemptive state-select
@@ -403,11 +532,32 @@ policy), on every well-formed stream, `runWait` of the run is `schedWait` of the
 schedule it follows, at every horizon. -/
 theorem runWait_eq_schedWait (T : ℕ) :
     runWait (runSteps · step) arrival_stream T =
-      schedWait arrival_stream (runSchedule step arrival_stream) T := by
-  unfold runWait schedWait
-  congr 1
-  exact List.map_congr_left fun t _ => ready_length_eq_waiting h_step h_wf t
+      schedWait arrival_stream (runSchedule step arrival_stream) T :=
+  (runSteps_conservesJobsAtEveryStep h_step arrival_stream).runWait_eq_schedWait
+    (run := (runSteps · step)) h_wf T
 
 end Bridge
+
+/-! ## Round Robin -/
+
+/-- **A Round Robin run is an admissible schedule**, for every quantum, on every
+well-formed stream. -/
+theorem runStepsRR_isAdmissible (quantum : ℕ) {arrival_stream : ℕ → List AperiodicProcess}
+    (h_wf : WellFormedStream arrival_stream) :
+    IsAdmissible arrival_stream
+      (scheduleOfRun fun t => (runStepsRR quantum arrival_stream t).sched) :=
+  (runStepsRR_conservesJobsAtEveryStep quantum arrival_stream).scheduleOfRun_isAdmissible h_wf
+
+/-- **A Round Robin run waits what its schedule waits**, for every quantum, on every
+well-formed stream, at every horizon. -/
+theorem runWait_runStepsRR_eq_schedWait (quantum : ℕ)
+    {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
+    (T : ℕ) :
+    runWait (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched)
+        arrival_stream T =
+      schedWait arrival_stream
+        (scheduleOfRun fun t => (runStepsRR quantum arrival_stream t).sched) T :=
+  (runStepsRR_conservesJobsAtEveryStep quantum arrival_stream).runWait_eq_schedWait
+    (run := fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) h_wf T
 
 end ConvoyEffect
