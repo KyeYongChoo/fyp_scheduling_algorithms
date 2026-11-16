@@ -8,7 +8,6 @@ import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.TotalWait
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
-import Mathlib.Data.List.Nodup
 
 /-!
 # The convoy effect
@@ -127,13 +126,10 @@ theorem dispatchesAt_zero {run : (ℕ → List AperiodicProcess) → ℕ → Sch
     (h : (run arrival_stream 0).running = some p) : DispatchesAt run arrival_stream 0 p :=
   ⟨h, fun t' ht' => by omega⟩
 
-/-! ## The convoy effect on all arrivals at zero -/
+/-! ## The convoy effect on all arrivals at zero
 
-/-- A **batch**: jobs that all arrive at time 0, untouched (`remaining = burst`),
-with distinct ids.  These are the ready queues a scheduler can actually face at
-the start of a well-formed run (`allArrivalsAtZeroStream_wf`). -/
-def AllArrivalsAtZero (ready : List AperiodicProcess) : Prop :=
-  (∀ p ∈ ready, p.arrival = 0 ∧ p.remaining = p.burst) ∧ (ready.map (·.id)).Nodup
+Batches (`AllArrivalsAtZero`) and the stream that releases one at time 0
+(`allArrivalsAtZeroStream`) are defined in `Step`, next to `WellFormedStream`. -/
 
 /-- A selection policy never dispatches a job from a batch while a strictly
 shorter job of the batch is waiting.  (Only jobs *from* the batch count: a
@@ -259,33 +255,6 @@ theorem hasConvoyEffectAtSomeDispatchRun_imp_atSomeStep
     {run : (ℕ → List AperiodicProcess) → ℕ → SchedState}
     (h : HasConvoyEffectAtSomeDispatchRun run) : HasConvoyEffectAtSomeStepRun run :=
   fun h_short => h (shortestAtEveryStepRun_imp_atEveryDispatch h_short)
-
-/-- The arrival stream that releases `ready` at time 0 and nothing afterwards. -/
-def allArrivalsAtZeroStream (ready : List AperiodicProcess) : ℕ → List AperiodicProcess
-  | 0 => ready
-  | _ => []
-
-theorem mem_allArrivalsAtZeroStream {ready : List AperiodicProcess} {p : AperiodicProcess} {t : ℕ}
-    (h : p ∈ allArrivalsAtZeroStream ready t) : t = 0 ∧ p ∈ ready := by
-  rcases t with _ | t <;> simp_all [allArrivalsAtZeroStream]
-
-/-- Releasing a batch at time 0 is a well-formed arrival stream. -/
-theorem allArrivalsAtZeroStream_wf {ready : List AperiodicProcess}
-    (h_atZero : AllArrivalsAtZero ready) :
-    WellFormedStream (allArrivalsAtZeroStream ready) :=
-  .of_unique_of_nodup
-    (fun p t h => by
-      obtain ⟨rfl, hp⟩ := mem_allArrivalsAtZeroStream h
-      exact (h_atZero.1 p hp).1)
-    (fun p t h => (h_atZero.1 p (mem_allArrivalsAtZeroStream h).2).2)
-    (fun p1 p2 t1 t2 h1 h2 h_id => by
-      obtain ⟨rfl, hp1⟩ := mem_allArrivalsAtZeroStream h1
-      obtain ⟨rfl, hp2⟩ := mem_allArrivalsAtZeroStream h2
-      exact ⟨rfl, List.inj_on_of_nodup_map h_atZero.2 hp1 hp2 h_id⟩)
-    (fun t => by
-      rcases t with _ | t
-      · exact h_atZero.2.of_map _
-      · simp [allArrivalsAtZeroStream])
 
 /-- **The convoy effect on all arrivals at zero is the convoy effect at step 0.** If a
 non-preemptive policy passes over a shorter job in some batch, then releasing

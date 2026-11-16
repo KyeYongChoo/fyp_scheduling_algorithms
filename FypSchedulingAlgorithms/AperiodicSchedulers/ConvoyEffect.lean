@@ -10,7 +10,6 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Convoy.FCFSConvo
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Convoy.SJFConvoy
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Convoy.RRConvoy
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Convoy.SRTFConvoy
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.RRResponse
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.RunWait
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.NoOptimalNonPreemptiveOnEveryStream
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.ShortHorizon
@@ -30,8 +29,9 @@ The folder answers two questions, in this order.
 
 2. **`Convoy/` -- does a policy's *rule* produce a convoy?**  One file per policy:
    `FCFSConvoy`, `SJFConvoy`, `RRConvoy`, `SRTFConvoy`.  These are properties of the rule
-   (which job is dispatched), shown on a few streams.  `RRResponse` is the neighbouring
-   question of response time for Round Robin.
+   (which job is dispatched), shown on a few streams.  The neighbouring question of
+   response time, where Round Robin's quantum does help, has its own folder,
+   `ResponseTime/` (index `AperiodicSchedulers/ResponseTime`).
 
 3. **`Optimality/` -- which policy *waits least*?**  The cost is `runWait`, compared against
    other policies and then against every admissible schedule.
@@ -44,4 +44,9 @@ The folder answers two questions, in this order.
      bridge from runs to schedules (job-conserving steps, Round Robin).
    * `PreemptiveOptimality`: preemption removes the impossibility (two witness streams).
    * `SRTFOptimality`: SRTF waits least on every stream (Schrage 1968).
+
+Two pieces of general machinery that the folder uses are not about convoys and live
+outside it: batches (`AllArrivalsAtZero`, `allArrivalsAtZeroStream`) in `Step`, and what a
+schedule is (`Schedule`, `ticksBefore`, `scheduleOfRun`, `runSchedule`) in
+`AperiodicSchedulers/Schedule`.
 -/

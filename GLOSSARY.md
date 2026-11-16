@@ -64,7 +64,7 @@ twice in one release (`WellFormedStream.unique`, `WellFormedStream.nodup`), whic
 wherever jobs are named by id (admissible schedules). `WellFormedStream.of_unique_of_nodup`
 builds one from those two facts. Most theorems assume it.
 
-**All arrivals at zero (a *batch*).** `AllArrivalsAtZero` (`ConvoyEffect/Spec/ConvoySpec.lean`).
+**All arrivals at zero (a *batch*).** `AllArrivalsAtZero` (`Step.lean`).
 Fresh jobs with distinct ids, all present at time 0. `allArrivalsAtZeroStream l` releases `l`
 at time 0 and nothing afterwards. The textbook term, and the word the comments use, is
 *batch*.
@@ -157,25 +157,34 @@ dispatch order), `waitFrom_eq_truncWait` and `runWait_eq_schedWait`.
 **Dispatch order.** `dispatchOrder select l` (`ConvoyEffect/Optimality/RunWait.lean`). The order in which a
 policy would dispatch the queue `l` with nothing else arriving. It is a permutation of `l`.
 
-**Response time.** The time until a job first gets the CPU (`rrResponse`,
-`ConvoyEffect/RRResponse.lean`). **Turnaround** is the time until it completes. Neither waiting
-nor turnaround time is monotone in RR's quantum, but response time is.
+**First dispatch, response time.** `IsFirstDispatchAt σ i t`
+(`ResponseTime/ResponseTimeSpec.lean`): schedule `σ` puts job `i` on the CPU after step `t`, and
+never before. It is a predicate on schedules, so it covers every scheduler through
+`scheduleOfRun`, and a starving schedule simply has no first dispatch. When there is one it is
+unique (`IsFirstDispatchAt.unique`). The *response time* of job `p` is `t - p.arrival` for that
+`t` (`HasResponseTime`); on a batch it is `t`. **Turnaround** is the time until a job
+completes. Neither waiting nor turnaround time is monotone in RR's quantum, but response time
+is (`rr_allArrivalsAtZero_firstDispatch_mono`, `ResponseTime/RRResponseTime.lean`).
 
 ## Comparing schedulers
 
-**Admissible schedule.** `IsAdmissible` (`ConvoyEffect/Optimality/Schedules.lean`;
+**Schedule.** `Schedule` (`AperiodicSchedulers/Schedule.lean`; `PSchedule` in
 `PeriodicSchedulers/PeriodicSchedules.lean`). A schedule `σ` says which job (by id, or by key
-for periodic jobs) holds the CPU after each step. It is *admissible* if it only runs jobs that
-have been released and still have work left. Anything else is allowed: preemption, idling, any
-order, clairvoyance. This is the "every possible way of running the jobs" that optimality
+for periodic jobs) holds the CPU after each step. `ticksBefore σ i t` counts the ticks job `i`
+has had before step `t`.
+
+**Admissible schedule.** `IsAdmissible` (`ConvoyEffect/Optimality/Schedules.lean`;
+`PeriodicSchedulers/PeriodicSchedules.lean`). A schedule is *admissible* if it only runs jobs
+that have been released and still have work left. Anything else is allowed: preemption, idling,
+any order, clairvoyance. This is the "every possible way of running the jobs" that optimality
 theorems compare against.
 
-**Run as schedule.** `scheduleOfRun run` is the schedule a run follows (the id of the job on the
-CPU after each step); `runSchedule step arrival_stream` is the same for the run of a step
-function. For a run that conserves jobs at every step (every job-conserving step function, Round
-Robin) it is admissible, and the run waits what the schedule waits
-(`ConservesJobsAtEveryStep.runWait_eq_schedWait`, `runWait_eq_schedWait`). The invariant behind
-this is `ConservesJobsAtEveryStep.inSystem_perm` (step-level corollary `inSystem_perm`).
+**Run as schedule.** `scheduleOfRun run` (`AperiodicSchedulers/Schedule.lean`) is the schedule a
+run follows (the id of the job on the CPU after each step); `runSchedule step arrival_stream` is
+the same for the run of a step function. For a run that conserves jobs at every step (every
+job-conserving step function, Round Robin) it is admissible, and the run waits what the schedule
+waits (`ConservesJobsAtEveryStep.runWait_eq_schedWait`, `runWait_eq_schedWait`). The invariant
+behind this is `ConservesJobsAtEveryStep.inSystem_perm` (step-level corollary `inSystem_perm`).
 
 **Optimal.** Weak: waits *no longer than* (`≤`) every competitor in the stated class. The class
 is always stated (non-preemptive state-select policies, admissible schedules, fixed

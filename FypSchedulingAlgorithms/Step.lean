@@ -45,6 +45,14 @@ step.  So the state after a step shows who holds the CPU *going into* the next t
 many at a time.  `runSteps arrival_stream step t` is the state **after** step `t`,
 so step 0 is already a step and the state after step `t` reads `time = t + 1`; see
 the docstring of `runSteps`.
+
+## Arrival streams
+
+`arrivedBy` collects the jobs released by a given time, and `WellFormedStream` says
+when a stream is a plausible input.  A *batch* (`AllArrivalsAtZero`) is a list of fresh
+jobs with distinct ids, all present at time 0; `allArrivalsAtZeroStream` releases one at
+time 0 and nothing afterwards, which is a well-formed stream
+(`allArrivalsAtZeroStream_wf`).
 -/
 
 /-- The jobs released by time `t`, in order of release. -/
@@ -156,6 +164,54 @@ theorem of_unique_of_nodup
   exact (unique p q t1 t2 hp hq h_id).2
 
 end WellFormedStream
+
+/-! ## All arrivals at zero -/
+
+/-- A **batch**: jobs that all arrive at time 0, untouched (`remaining = burst`),
+with distinct ids.  These are the ready queues a scheduler can actually face at
+the start of a well-formed run (`allArrivalsAtZeroStream_wf`). -/
+def AllArrivalsAtZero (ready : List AperiodicProcess) : Prop :=
+  (∀ p ∈ ready, p.arrival = 0 ∧ p.remaining = p.burst) ∧ (ready.map (·.id)).Nodup
+
+/-- In a batch, ids name positions: two positions holding jobs with the same id are the
+same position. -/
+theorem AllArrivalsAtZero.getElem_id_inj {ready : List AperiodicProcess}
+    (h_atZero : AllArrivalsAtZero ready) {i j : ℕ} (hi : i < ready.length)
+    (hj : j < ready.length) (h_id : ready[i].id = ready[j].id) : i = j := by
+  have h_pw := List.pairwise_iff_getElem.mp (List.pairwise_map.mp h_atZero.2)
+  rcases Nat.lt_trichotomy i j with h_lt | h_eq | h_gt
+  · exact absurd h_id (h_pw i j hi hj h_lt)
+  · exact h_eq
+  · exact absurd h_id.symm (h_pw j i hj hi h_gt)
+
+/-- The arrival stream that releases `ready` at time 0 and nothing afterwards. -/
+def allArrivalsAtZeroStream (ready : List AperiodicProcess) : ℕ → List AperiodicProcess
+  | 0 => ready
+  | _ => []
+
+/-- A job of the batch stream is released at time 0 and belongs to the batch. -/
+theorem mem_allArrivalsAtZeroStream {ready : List AperiodicProcess} {p : AperiodicProcess} {t : ℕ}
+    (h : p ∈ allArrivalsAtZeroStream ready t) : t = 0 ∧ p ∈ ready := by
+  rcases t with _ | t <;> simp_all [allArrivalsAtZeroStream]
+
+/-- Releasing a batch at time 0 is a well-formed arrival stream. -/
+theorem allArrivalsAtZeroStream_wf {ready : List AperiodicProcess}
+    (h_atZero : AllArrivalsAtZero ready) :
+    WellFormedStream (allArrivalsAtZeroStream ready) :=
+  .of_unique_of_nodup
+    (fun p t h => by
+      obtain ⟨rfl, hp⟩ := mem_allArrivalsAtZeroStream h
+      exact (h_atZero.1 p hp).1)
+    (fun p t h => (h_atZero.1 p (mem_allArrivalsAtZeroStream h).2).2)
+    (fun p1 p2 t1 t2 h1 h2 h_id => by
+      obtain ⟨rfl, hp1⟩ := mem_allArrivalsAtZeroStream h1
+      obtain ⟨rfl, hp2⟩ := mem_allArrivalsAtZeroStream h2
+      exact ⟨rfl, WellFormedStream.eq_of_mem_of_ids_nodup h_atZero.2 hp1 hp2 h_id⟩)
+    (fun t => by
+      rcases t with _ | t
+      · exact (List.pairwise_map.mp h_atZero.2).imp fun h_ne h_eq =>
+          h_ne (congrArg AperiodicProcess.id h_eq)
+      · simp [allArrivalsAtZeroStream])
 
 def default_num_steps := 30
 
