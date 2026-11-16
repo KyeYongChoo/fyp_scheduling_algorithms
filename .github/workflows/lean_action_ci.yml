@@ -16,7 +16,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-26.04 (ubuntu-latest from 2026-11-16) the docgen step fails with
+    # `resource exhausted (error code: 12, cannot allocate memory)` when it starts its
+    # srcUri.github subprocesses; on 24.04 the same action and toolchain succeed.
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v5
