@@ -157,9 +157,14 @@ dispatch order), `waitFrom_eq_truncWait` and `runWait_eq_schedWait`.
 **Dispatch order.** `dispatchOrder select l` (`ConvoyEffect/Optimality/RunWait.lean`). The order in which a
 policy would dispatch the queue `l` with nothing else arriving. It is a permutation of `l`.
 
-**Response time.** The time until a job first gets the CPU (`rrResponse`,
-`ConvoyEffect/RRResponse.lean`). **Turnaround** is the time until it completes. Neither waiting
-nor turnaround time is monotone in RR's quantum, but response time is.
+**First dispatch, response time.** `IsFirstDispatchAt σ i t`
+(`ResponseTime/ResponseTimeSpec.lean`): schedule `σ` puts job `i` on the CPU after step `t`, and
+never before. It is a predicate on schedules, so it covers every scheduler through
+`scheduleOfRun`, and a starving schedule simply has no first dispatch. When there is one it is
+unique (`IsFirstDispatchAt.unique`). The *response time* of job `p` is `t - p.arrival` for that
+`t` (`HasResponseTime`); on a batch it is `t`. **Turnaround** is the time until a job
+completes. Neither waiting nor turnaround time is monotone in RR's quantum, but response time
+is (`rr_allArrivalsAtZero_firstDispatch_mono`, `ResponseTime/RRResponseTime.lean`).
 
 ## Comparing schedulers
 

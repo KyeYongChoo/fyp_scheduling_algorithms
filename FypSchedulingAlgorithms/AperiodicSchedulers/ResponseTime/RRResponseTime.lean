@@ -3,85 +3,94 @@ Copyright (c) 2026 Choo Kye Yong. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Choo Kye Yong
 -/
-import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.ConvoySpec
+import FypSchedulingAlgorithms.AperiodicSchedulers.ResponseTime.ResponseTimeSpec
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
+import Mathlib.Data.List.Nodup
 
 /-! # Round Robin response time on a batch
 
-*Response time* is the time until a job first gets the CPU.  It is the one
-metric a smaller quantum reliably improves: total waiting and turnaround time
-are not monotone in the quantum (`rr_smaller_quantum_not_better`), but response
-time is.
+Response time (`ResponseTimeSpec`) is the one metric a smaller quantum reliably improves:
+total waiting and turnaround time are not monotone in the quantum
+(`rr_smaller_quantum_not_better`), but response time is.
 
 On a batch released at time 0, RR's first round serves the jobs in queue order,
-and each job ahead of you holds the CPU for one slice, `min quantum burst`.  So
-job `i` is first dispatched at step
+and each job ahead of you holds the CPU for one slice, `firstSlice quantum p = min quantum
+p.burst`.  So job `i` is first dispatched at step
 
-  `rrResponse quantum l i = Σ_{j < i} min quantum (burst j)`
+  `sumOfFirstSlicesAhead quantum l i = Σ_{j < i} min quantum (burst j)`
 
-(`rr_allArrivalsAtZero_dispatch`), and is waiting untouched in `ready` until then
-(`rr_allArrivalsAtZero_waiting`).  This is the general form of `rr_convoy_dispatch`.
+(`rr_allArrivalsAtZero_isFirstDispatchAt`).  The run puts job `i` on the CPU then
+(`rr_allArrivalsAtZero_dispatch`), and until then job `i` waits untouched in `ready`
+(`rr_allArrivalsAtZero_waiting`) while the jobs ahead of it take their slices.  This is the
+general form of `rr_convoy_dispatch`.
 
 Two consequences:
 
-* `rrResponse_mono`: response time is monotone in the quantum;
-* `rrResponse_of_large_quantum`: once the quantum covers every burst, it is the
-  sum of the bursts ahead -- exactly FCFS's response time.
+* `rr_allArrivalsAtZero_firstDispatch_mono`: the first dispatch step is monotone in the
+  quantum (from the formula-level `sumOfFirstSlicesAhead_mono`);
+* `sumOfFirstSlicesAhead_of_large_quantum`: once the quantum covers every burst, the formula
+  is the sum of the bursts ahead -- exactly FCFS's first dispatch step
+  (`FCFSResponseTime`).
 
 The quantum must be positive: `stepRR` treats quantum 0 like quantum 1.
 -/
 
-namespace ConvoyEffect
+namespace ResponseTime
 
 /-! ## Response time as a formula -/
 
 /-- The slice job `p` gets in RR's first round. -/
 def firstSlice (quantum : ℕ) (p : AperiodicProcess) : ℕ := min quantum p.burst
 
-/-- RR's first-round response time of the job at index `i` of a batch: every
-job ahead of it holds the CPU for one slice. -/
-def rrResponse (quantum : ℕ) (l : List AperiodicProcess) (i : ℕ) : ℕ :=
+/-- The sum of the first-round slices of the jobs ahead of index `i` of a batch: in RR's
+first round every job ahead of job `i` holds the CPU for one slice, so this is the step at
+which job `i` is first dispatched (`rr_allArrivalsAtZero_isFirstDispatchAt`). -/
+def sumOfFirstSlicesAhead (quantum : ℕ) (l : List AperiodicProcess) (i : ℕ) : ℕ :=
   ((l.take i).map (firstSlice quantum)).sum
 
+/-- With a positive quantum every slice is at least one tick. -/
 theorem firstSlice_pos {quantum : ℕ} (hq : 0 < quantum) (p : AperiodicProcess) :
     0 < firstSlice quantum p := by
   have := p.burst_exceed_zero
   simp only [firstSlice]
   omega
 
-theorem rrResponse_succ (quantum : ℕ) (l : List AperiodicProcess) {i : ℕ}
+/-- One more job ahead, one more slice. -/
+theorem sumOfFirstSlicesAhead_succ (quantum : ℕ) (l : List AperiodicProcess) {i : ℕ}
     (hi : i < l.length) :
-    rrResponse quantum l (i + 1) = rrResponse quantum l i + firstSlice quantum l[i] := by
-  rw [rrResponse, rrResponse, List.take_add_one, List.getElem?_eq_getElem hi,
-    Option.toList_some, List.map_append, List.sum_append, List.map_singleton,
-    List.sum_singleton]
+    sumOfFirstSlicesAhead quantum l (i + 1) =
+      sumOfFirstSlicesAhead quantum l i + firstSlice quantum l[i] := by
+  rw [sumOfFirstSlicesAhead, sumOfFirstSlicesAhead, List.take_add_one,
+    List.getElem?_eq_getElem hi, Option.toList_some, List.map_append, List.sum_append,
+    List.map_singleton, List.sum_singleton]
 
-/-- **Response time is monotone in the quantum.** -/
-theorem rrResponse_mono {quantum quantum' : ℕ} (h : quantum ≤ quantum')
+/-- **The formula is monotone in the quantum.** -/
+theorem sumOfFirstSlicesAhead_mono {quantum quantum' : ℕ} (h : quantum ≤ quantum')
     (l : List AperiodicProcess) (i : ℕ) :
-    rrResponse quantum l i ≤ rrResponse quantum' l i := by
-  unfold rrResponse
+    sumOfFirstSlicesAhead quantum l i ≤ sumOfFirstSlicesAhead quantum' l i := by
+  unfold sumOfFirstSlicesAhead
   induction l.take i with
   | nil => simp
   | cons p ps ih =>
     simp only [List.map_cons, List.sum_cons, firstSlice] at ih ⊢
     omega
 
-/-- **Large quantum = FCFS.** Once the quantum covers every burst, a job's
-response time is the sum of the bursts ahead of it. -/
-theorem rrResponse_of_large_quantum {quantum : ℕ} {l : List AperiodicProcess}
+/-- **Large quantum = FCFS, as a formula.** Once the quantum covers every burst, the sum of
+the first slices ahead of a job is the sum of the bursts ahead of it. -/
+theorem sumOfFirstSlicesAhead_of_large_quantum {quantum : ℕ} {l : List AperiodicProcess}
     (h : ∀ p ∈ l, p.burst ≤ quantum) (i : ℕ) :
-    rrResponse quantum l i = ((l.take i).map (·.burst)).sum := by
-  unfold rrResponse
+    sumOfFirstSlicesAhead quantum l i = ((l.take i).map (·.burst)).sum := by
+  unfold sumOfFirstSlicesAhead
   congr 1
   apply List.map_congr_left
   intro p hp
-  exact min_eq_right (h p (List.mem_of_mem_take hp))
+  exact Nat.min_eq_right (h p (List.mem_of_mem_take hp))
 
 /-! ## What one RR step does -/
 
+/-- An idle CPU takes the head of the queue, unticked, with a fresh slice. -/
 theorem stepRR_dispatch (quantum : ℕ) (rs : RRState) (nx : AperiodicProcess)
     (ps : List AperiodicProcess)
     (h_run : rs.sched.running = none) (h_ready : rs.sched.ready = nx :: ps) :
@@ -89,6 +98,7 @@ theorem stepRR_dispatch (quantum : ℕ) (rs : RRState) (nx : AperiodicProcess)
       (stepRR quantum rs).ticksUsed = 0 := by
   simp [stepRR, h_run, h_ready]
 
+/-- Within a slice, a job with work left after this tick is ticked and keeps the CPU. -/
 theorem stepRR_tick (quantum : ℕ) (rs : RRState) (p : AperiodicProcess)
     (h_run : rs.sched.running = some p) (h_left : ¬ p.remaining ≤ 1)
     (h_quantum : ¬ rs.ticksUsed ≥ quantum - 1) :
@@ -97,6 +107,7 @@ theorem stepRR_tick (quantum : ℕ) (rs : RRState) (p : AperiodicProcess)
       (stepRR quantum rs).ticksUsed = rs.ticksUsed + 1 := by
   simp [stepRR, h_run, h_left, h_quantum]
 
+/-- A job on its last tick completes, and the head of the queue is dispatched, unticked. -/
 theorem stepRR_complete (quantum : ℕ) (rs : RRState) (p nx : AperiodicProcess)
     (ps : List AperiodicProcess)
     (h_run : rs.sched.running = some p) (h_done : p.remaining ≤ 1)
@@ -105,6 +116,8 @@ theorem stepRR_complete (quantum : ℕ) (rs : RRState) (p nx : AperiodicProcess)
       (stepRR quantum rs).ticksUsed = 0 := by
   simp [stepRR, h_run, h_done, h_ready]
 
+/-- The tick that uses up the quantum sends the ticked job to the back of the queue and
+dispatches the head, unticked. -/
 theorem stepRR_preempt (quantum : ℕ) (rs : RRState) (p nx : AperiodicProcess)
     (ps : List AperiodicProcess)
     (h_run : rs.sched.running = some p) (h_left : ¬ p.remaining ≤ 1)
@@ -187,28 +200,29 @@ theorem rr_first_round_next (quantum : ℕ) (hq : 0 < quantum) (l : List Aperiod
     rw [List.take_add_one, List.getElem?_eq_getElem hi, Option.toList_some]
   by_cases hb : l[i].burst ≤ quantum
   · -- job `i` finishes within its slice; it does not re-enter the queue
-    have hs : firstSlice quantum l[i] = l[i].burst := min_eq_right hb
+    have hs : firstSlice quantum l[i] = l[i].burst := Nat.min_eq_right hb
     obtain ⟨h1, h2, h3⟩ := stepRR_complete quantum rs _ _ _ h_run
       (by rw [hs]; simp; omega) h_ready
     refine ⟨by rw [h1, h_next], ?_, h3⟩
     rw [h2, h_take, leftovers, leftovers, List.filter_append, List.map_append]
     simp [show ¬ quantum < l[i].burst by omega]
   · -- job `i` is preempted after one quantum and goes to the back of the queue
-    have hs : firstSlice quantum l[i] = quantum := min_eq_left (by omega)
+    have hs : firstSlice quantum l[i] = quantum := Nat.min_eq_left (by omega)
     obtain ⟨h1, h2, h3⟩ := stepRR_preempt quantum rs _ _ _ h_run
-      (by rw [hs]; simp; omega) (by rw [h_ticks, hs]) h_ready
+      (by rw [hs]; simp; omega) (by omega) h_ready
     refine ⟨by rw [h1, h_next], ?_, h3⟩
     rw [h2, h_take, leftovers, leftovers, List.filter_append, List.map_append]
     simp [show quantum < l[i].burst by omega, hs]
     omega
 
-/-- **RR's first round on a batch.** At step `rrResponse quantum l i + k`, for
+/-- **RR's first round on a batch.** At step `sumOfFirstSlicesAhead quantum l i + k`, for
 `k` within job `i`'s slice, RR is `k` ticks into job `i`'s first slice. -/
 theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) :
     ∀ (i : ℕ) (hi : i < l.length) (k : ℕ), k < firstSlice quantum l[i] →
       RRFirstRoundAt quantum l i hi k
-        (runStepsRR quantum (allArrivalsAtZeroStream l) (rrResponse quantum l i + k)) := by
+        (runStepsRR quantum (allArrivalsAtZeroStream l)
+          (sumOfFirstSlicesAhead quantum l i + k)) := by
   intro i
   induction i with
   | zero =>
@@ -216,7 +230,7 @@ theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicPro
     induction k with
     | zero =>
       intro _
-      rw [show rrResponse quantum l 0 + 0 = 0 by simp [rrResponse]]
+      rw [show sumOfFirstSlicesAhead quantum l 0 + 0 = 0 by simp [sumOfFirstSlicesAhead]]
       exact rr_first_round_start quantum l h_fresh hi
     | succ k ih =>
       intro hk
@@ -229,9 +243,9 @@ theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicPro
     | zero =>
       intro _
       have hs := firstSlice_pos hq l[i]
-      have h_step : rrResponse quantum l (i + 1) + 0 =
-          rrResponse quantum l i + (firstSlice quantum l[i] - 1) + 1 := by
-        rw [rrResponse_succ quantum l hi']
+      have h_step : sumOfFirstSlicesAhead quantum l (i + 1) + 0 =
+          sumOfFirstSlicesAhead quantum l i + (firstSlice quantum l[i] - 1) + 1 := by
+        rw [sumOfFirstSlicesAhead_succ quantum l hi']
         omega
       rw [h_step, runStepsRR_allArrivalsAtZero_succ]
       exact rr_first_round_next quantum hq l h_fresh i hi' hi _
@@ -241,42 +255,43 @@ theorem rr_first_round (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicPro
       rw [← Nat.add_assoc, runStepsRR_allArrivalsAtZero_succ]
       exact rr_first_round_tick quantum l (i + 1) hi k _ (ihk (by omega)) hk
 
-/-! ## Response time -/
+/-! ## The run, step by step -/
 
-/-- **RR's response time on a batch.** Job `i` is dispatched at step
-`rrResponse quantum l i`, untouched. -/
+/-- **RR puts job `i` of a batch on the CPU at step `sumOfFirstSlicesAhead quantum l i`**,
+untouched. -/
 theorem rr_allArrivalsAtZero_dispatch (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (i : ℕ) (hi : i < l.length) :
-    (runStepsRR quantum (allArrivalsAtZeroStream l) (rrResponse quantum l i)).sched.running =
-      some l[i] := by
+    (runStepsRR quantum (allArrivalsAtZeroStream l)
+        (sumOfFirstSlicesAhead quantum l i)).sched.running = some l[i] := by
   have h := (rr_first_round quantum hq l h_fresh i hi 0 (firstSlice_pos hq _)).1
   rw [Nat.add_zero] at h
   rw [h, with_remaining_burst (h_fresh _ (List.getElem_mem hi))]
 
-/-- Every step before `rrResponse quantum l i` falls inside the first slice of
+/-- Every step before `sumOfFirstSlicesAhead quantum l i` falls inside the first slice of
 some earlier job. -/
-theorem rrResponse_decompose (quantum : ℕ) (l : List AperiodicProcess) :
-    ∀ (i : ℕ) (hi : i ≤ l.length), ∀ t, t < rrResponse quantum l i →
+theorem sumOfFirstSlicesAhead_decompose (quantum : ℕ) (l : List AperiodicProcess) :
+    ∀ (i : ℕ) (hi : i ≤ l.length), ∀ t, t < sumOfFirstSlicesAhead quantum l i →
       ∃ j, ∃ hj : j < i, ∃ k < firstSlice quantum (l[j]'(by omega)),
-        t = rrResponse quantum l j + k := by
+        t = sumOfFirstSlicesAhead quantum l j + k := by
   intro i
   induction i with
-  | zero => intro _ t ht; simp [rrResponse] at ht
+  | zero => intro _ t ht; simp [sumOfFirstSlicesAhead] at ht
   | succ i ih =>
     intro hi t ht
-    rw [rrResponse_succ quantum l (by omega)] at ht
-    by_cases h : t < rrResponse quantum l i
+    rw [sumOfFirstSlicesAhead_succ quantum l (by omega)] at ht
+    by_cases h : t < sumOfFirstSlicesAhead quantum l i
     · obtain ⟨j, hj, k, hk, rfl⟩ := ih (by omega) t h
       exact ⟨j, by omega, k, hk, rfl⟩
-    · exact ⟨i, by omega, t - rrResponse quantum l i, by omega, by omega⟩
+    · exact ⟨i, by omega, t - sumOfFirstSlicesAhead quantum l i, by omega, by omega⟩
 
-/-- **Until its response time, a job is waiting untouched.** Before step
-`rrResponse quantum l i`, job `i` sits in the ready queue exactly as it arrived. -/
+/-- **Until its first dispatch, a job is waiting untouched.** Before step
+`sumOfFirstSlicesAhead quantum l i`, job `i` sits in the ready queue exactly as it
+arrived. -/
 theorem rr_allArrivalsAtZero_waiting (quantum : ℕ) (hq : 0 < quantum) (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (i : ℕ) (hi : i < l.length) (t : ℕ)
-    (ht : t < rrResponse quantum l i) :
+    (ht : t < sumOfFirstSlicesAhead quantum l i) :
     l[i] ∈ (runStepsRR quantum (allArrivalsAtZeroStream l) t).sched.ready := by
-  obtain ⟨j, hj, k, hk, rfl⟩ := rrResponse_decompose quantum l i hi.le t ht
+  obtain ⟨j, hj, k, hk, rfl⟩ := sumOfFirstSlicesAhead_decompose quantum l i (Nat.le_of_lt hi) t ht
   rw [(rr_first_round quantum hq l h_fresh j (by omega) k hk).2.1]
   apply List.mem_append_left
   have h_get : (l.drop (j + 1))[i - (j + 1)]'(by simp; omega) = l[i] := by
@@ -286,4 +301,58 @@ theorem rr_allArrivalsAtZero_waiting (quantum : ℕ) (hq : 0 < quantum) (l : Lis
   rw [← h_get]
   exact List.getElem_mem _
 
-end ConvoyEffect
+/-- Before step `sumOfFirstSlicesAhead quantum l i`, the job on the CPU is an earlier job of
+the batch, so with distinct ids it is not job `i`. -/
+theorem rr_allArrivalsAtZero_running_ne (quantum : ℕ) (hq : 0 < quantum)
+    {l : List AperiodicProcess} (h_atZero : AllArrivalsAtZero l) (i : ℕ) (hi : i < l.length)
+    (t : ℕ) (ht : t < sumOfFirstSlicesAhead quantum l i) :
+    (runRR quantum (allArrivalsAtZeroStream l) t).running.map (·.id) ≠ some l[i].id := by
+  obtain ⟨j, hj, k, hk, rfl⟩ := sumOfFirstSlicesAhead_decompose quantum l i (Nat.le_of_lt hi) t ht
+  rw [runRR_apply,
+    (rr_first_round quantum hq l (fun p hp => (h_atZero.1 p hp).2) j (by omega) k hk).1]
+  intro h_id
+  simp only [Option.map_some, Option.some.injEq] at h_id
+  have h_eq : (l.map (·.id))[j]'(by simp; omega) = (l.map (·.id))[i]'(by simp; omega) := by
+    simpa using h_id
+  have := (h_atZero.2.getElem_inj_iff).mp h_eq
+  omega
+
+/-! ## Response time -/
+
+/-- **RR's first dispatch on a batch.** With a positive quantum, Round Robin on a batch
+first puts job `i` on the CPU at step `sumOfFirstSlicesAhead quantum l i`: after every job
+ahead of it has had one slice. -/
+theorem rr_allArrivalsAtZero_isFirstDispatchAt (quantum : ℕ) (hq : 0 < quantum)
+    {l : List AperiodicProcess} (h_atZero : AllArrivalsAtZero l) (i : ℕ) (hi : i < l.length) :
+    IsFirstDispatchAt (scheduleOfRun (runRR quantum (allArrivalsAtZeroStream l))) l[i].id
+      (sumOfFirstSlicesAhead quantum l i) := by
+  refine ⟨?_, fun t ht => rr_allArrivalsAtZero_running_ne quantum hq h_atZero i hi t ht⟩
+  simp only [scheduleOfRun, runRR_apply,
+    rr_allArrivalsAtZero_dispatch quantum hq l (fun p hp => (h_atZero.1 p hp).2) i hi,
+    Option.map_some]
+
+/-- **RR's response time on a batch** is `sumOfFirstSlicesAhead quantum l i`: the jobs of a
+batch arrive at time 0, so response time is the first dispatch step. -/
+theorem rr_allArrivalsAtZero_hasResponseTime (quantum : ℕ) (hq : 0 < quantum)
+    {l : List AperiodicProcess} (h_atZero : AllArrivalsAtZero l) (i : ℕ) (hi : i < l.length) :
+    HasResponseTime (scheduleOfRun (runRR quantum (allArrivalsAtZeroStream l))) l[i]
+      (sumOfFirstSlicesAhead quantum l i) :=
+  (hasResponseTime_iff_of_arrival_eq_zero _ (h_atZero.1 _ (List.getElem_mem hi)).1 _).mpr
+    (rr_allArrivalsAtZero_isFirstDispatchAt quantum hq h_atZero i hi)
+
+/-- **Response time is monotone in the quantum.** On a batch, if Round Robin with quantum
+`quantum` first dispatches job `i` at step `t` and Round Robin with a quantum
+`quantum' ≥ quantum` first dispatches it at step `t'`, then `t ≤ t'`. -/
+theorem rr_allArrivalsAtZero_firstDispatch_mono {quantum quantum' : ℕ} (hq : 0 < quantum)
+    (h_le : quantum ≤ quantum') {l : List AperiodicProcess} (h_atZero : AllArrivalsAtZero l)
+    (i : ℕ) (hi : i < l.length) {t t' : ℕ}
+    (ht : IsFirstDispatchAt (scheduleOfRun (runRR quantum (allArrivalsAtZeroStream l)))
+      l[i].id t)
+    (ht' : IsFirstDispatchAt (scheduleOfRun (runRR quantum' (allArrivalsAtZeroStream l)))
+      l[i].id t') :
+    t ≤ t' := by
+  rw [ht.unique (rr_allArrivalsAtZero_isFirstDispatchAt quantum hq h_atZero i hi),
+    ht'.unique (rr_allArrivalsAtZero_isFirstDispatchAt quantum' (by omega) h_atZero i hi)]
+  exact sumOfFirstSlicesAhead_mono h_le l i
+
+end ResponseTime
