@@ -56,8 +56,8 @@ less the ticks the schedule gave it.
   For these the step-level names keep their statements: `runSchedule`,
   `inSystem_perm`, `runSchedule_isAdmissible`, `ready_length_eq_waiting`,
   `runWait_eq_schedWait`;
-* Round Robin, for every quantum (`runStepsRR_conservesJobsAtEveryStep`,
-  `scheduleOfRun_runStepsRR_isAdmissible`, `runWait_runStepsRR_eq_schedWait`).  `stepRR` acts on an
+* Round Robin, for every quantum, through its run `runRR` (`runRR_conservesJobsAtEveryStep`,
+  `scheduleOfRun_runRR_isAdmissible`, `runWait_runRR_eq_schedWait`).  `stepRR` acts on an
   `RRState` and its choice depends on the slice counter `ticksUsed`, so it is not a
   `SchedState → SchedState`; for each fixed counter its step conserves jobs
   (`stepRR_conservesJobs`), and that is all the run needs.
@@ -277,7 +277,7 @@ This is `ConservesJobs` asked of a run instead of a step function
 (`ConservesJobsAtEveryStep.runWait_eq_schedWait`).  Since it only looks at the
 `SchedState` after each step, it also covers schedulers that carry extra state from step to
 step and so are not a `SchedState → SchedState`: Round Robin's slice counter
-(`runStepsRR_conservesJobsAtEveryStep`), and in the same way the queue levels of a multilevel
+(`runRR_conservesJobsAtEveryStep`), and in the same way the queue levels of a multilevel
 feedback queue or the counters of an aging scheme, which are not formalised here.  The extra
 state may record levels or counters, but every waiting job must sit in `ready` (`runWait`
 counts only `ready`); an MLFQ whose queues live in the extra state would have to keep `ready`
@@ -320,10 +320,9 @@ theorem stepRR_conservesJobs (quantum ticksUsed : ℕ) :
 
 /-- **Every Round Robin run conserves jobs at every step**, for every quantum (quantum 0
 behaves as 1) and on every stream. -/
-theorem runStepsRR_conservesJobsAtEveryStep (quantum : ℕ)
+theorem runRR_conservesJobsAtEveryStep (quantum : ℕ)
     (arrival_stream : ℕ → List AperiodicProcess) :
-    ConservesJobsAtEveryStep arrival_stream
-      fun t => (runStepsRR quantum arrival_stream t).sched := by
+    ConservesJobsAtEveryStep arrival_stream (runRR quantum arrival_stream) := by
   refine ⟨?_, fun t =>
     stepRR_conservesJobs quantum (runStepsRR quantum arrival_stream t).ticksUsed _⟩
   simpa [inSystem, runStepsRR] using
@@ -548,22 +547,19 @@ end Bridge
 
 /-- **A Round Robin run is an admissible schedule** (the schedule it follows is admissible),
 for every quantum, on every well-formed stream. -/
-theorem scheduleOfRun_runStepsRR_isAdmissible (quantum : ℕ)
+theorem scheduleOfRun_runRR_isAdmissible (quantum : ℕ)
     {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream) :
-    IsAdmissible arrival_stream
-      (scheduleOfRun fun t => (runStepsRR quantum arrival_stream t).sched) :=
-  (runStepsRR_conservesJobsAtEveryStep quantum arrival_stream).scheduleOfRun_isAdmissible h_wf
+    IsAdmissible arrival_stream (scheduleOfRun (runRR quantum arrival_stream)) :=
+  (runRR_conservesJobsAtEveryStep quantum arrival_stream).scheduleOfRun_isAdmissible h_wf
 
 /-- **A Round Robin run waits what its schedule waits**, for every quantum, on every
 well-formed stream, at every horizon. -/
-theorem runWait_runStepsRR_eq_schedWait (quantum : ℕ)
+theorem runWait_runRR_eq_schedWait (quantum : ℕ)
     {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream)
     (T : ℕ) :
-    runWait (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched)
-        arrival_stream T =
-      schedWait arrival_stream
-        (scheduleOfRun fun t => (runStepsRR quantum arrival_stream t).sched) T :=
-  (runStepsRR_conservesJobsAtEveryStep quantum arrival_stream).runWait_eq_schedWait
-    (run := fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) h_wf T
+    runWait (runRR quantum) arrival_stream T =
+      schedWait arrival_stream (scheduleOfRun (runRR quantum arrival_stream)) T :=
+  (runRR_conservesJobsAtEveryStep quantum arrival_stream).runWait_eq_schedWait
+    (run := runRR quantum) h_wf T
 
 end ConvoyEffect

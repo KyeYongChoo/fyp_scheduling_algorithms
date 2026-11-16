@@ -25,7 +25,7 @@ not.  So, unlike the non-preemptive case
 current state and is optimal on every stream, and it is SRTF; in particular it waits no longer than
 any non-preemptive state-select policy (`srtf_le_runStateSelect`), any other
 job-conserving step function (`srtf_le_runWait_of_conservesJobs`), Round Robin with any
-quantum (`srtf_le_runStepsRR`), and any scheduler whose run conserves jobs at every step
+quantum (`srtf_le_runRR`), and any scheduler whose run conserves jobs at every step
 (`srtf_le_runWait_of_conservesJobsAtEveryStep`), the hook for schedulers that carry
 extra state, such as a multilevel feedback queue or aging (not formalised here).
 
@@ -305,13 +305,10 @@ theorem srtf_le_runWait_of_conservesJobs {step : SchedState → SchedState}
 
 /-- **SRTF waits no longer than Round Robin**, for every quantum (quantum 0 behaves as 1),
 on every well-formed stream, at every horizon. -/
-theorem srtf_le_runStepsRR (quantum : ℕ) {arrival_stream : ℕ → List AperiodicProcess}
+theorem srtf_le_runRR (quantum : ℕ) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
-    runWait (runSteps · stepSRTF) arrival_stream T ≤
-      runWait (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched)
-        arrival_stream T :=
-  srtf_le_runWait_of_conservesJobsAtEveryStep
-    (run := fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched)
-    (runStepsRR_conservesJobsAtEveryStep quantum arrival_stream) h_wf T
+    runWait (runSteps · stepSRTF) arrival_stream T ≤ runWait (runRR quantum) arrival_stream T :=
+  srtf_le_runWait_of_conservesJobsAtEveryStep (run := runRR quantum)
+    (runRR_conservesJobsAtEveryStep quantum arrival_stream) h_wf T
 
 end ConvoyEffect

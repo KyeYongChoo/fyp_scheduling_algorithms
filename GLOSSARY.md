@@ -28,7 +28,7 @@ for everyone and handicaps no one. The periodic miss rule absorbs it (see *Miss 
 **Run, run function.** A run is the sequence of states of a scheduler on a stream. A *run
 function* `run : (ℕ → List AperiodicProcess) → ℕ → SchedState` gives the state after each step.
 Properties are stated over run functions so that Round Robin, whose state is an `RRState`, fits
-too (`fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
+too (`runRR q`, defined as `fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
 
 **Horizon.** The `T` in `runWait run arrival_stream T`, `schedWait arrival_stream σ T`, `waitFrom step s T`: the number
 of steps measured (steps `0, …, T - 1`). Waiting after that is not counted. Results say at which
@@ -126,7 +126,7 @@ function: after step 0 the jobs in the system are the arrivals of time 0, and af
 they are those after step `t` plus the arrivals of time `t + 1`, with the running job ticked and
 dropped exactly when it finished. The run of a job-conserving step has it
 (`runSteps_conservesJobsAtEveryStep`), and so does every Round Robin run
-(`runStepsRR_conservesJobsAtEveryStep`), although `stepRR` is not a `SchedState → SchedState`.
+(`runRR_conservesJobsAtEveryStep`), although `stepRR` is not a `SchedState → SchedState`.
 It is the hook for any scheduler that carries extra state (queue levels of a multilevel feedback
 queue, aging counters); none of those is formalised. The extra state may record levels or
 counters, but every waiting job must sit in `ready` (`runWait` counts only `ready`); an MLFQ
