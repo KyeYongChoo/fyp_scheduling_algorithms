@@ -8,7 +8,6 @@ import FypSchedulingAlgorithms.Step
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Spec.TotalWait
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
-import Mathlib.Data.List.Nodup
 
 /-!
 # The convoy effect

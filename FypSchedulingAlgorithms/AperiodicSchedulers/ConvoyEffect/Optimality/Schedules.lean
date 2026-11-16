@@ -8,6 +8,7 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
 import FypSchedulingAlgorithms.AperiodicSchedulers.Schedule
 import FypSchedulingAlgorithms.PreemptiveRuns
 import FypSchedulingAlgorithms.ListLemmas
+import Mathlib.Data.List.Nodup
 
 /-!
 # Admissible schedules
@@ -55,9 +56,9 @@ less the ticks the schedule gave it.
   `runSteps_conservesJobsAtEveryStep`) -- every preemptive priority scheduler
   (`stepPreemptive_conservesJobs`, SRTF included) and every non-preemptive state-select
   policy (`stepNonPreemptiveStateSelect_conservesJobs`: FCFS, SJF, policies that idle).
-  For these the step-level names keep their statements: `runSchedule`,
-  `inSystem_perm`, `runSchedule_isAdmissible`, `ready_length_eq_waiting`,
-  `runWait_eq_schedWait`;
+  For these the step-level names keep their statements: `inSystem_perm`,
+  `runSchedule_isAdmissible`, `ready_length_eq_waiting`, `runWait_eq_schedWait`, all about
+  `runSchedule` (defined in `AperiodicSchedulers/Schedule`);
 * Round Robin, for every quantum, through its run `runRR` (`runRR_conservesJobsAtEveryStep`,
   `scheduleOfRun_runRR_isAdmissible`, `runWait_runRR_eq_schedWait`).  `stepRR` acts on an
   `RRState` and its choice depends on the slice counter `ticksUsed`, so it is not a
