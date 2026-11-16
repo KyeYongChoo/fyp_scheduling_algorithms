@@ -18,7 +18,8 @@ The step functions for the classic aperiodic schedulers, built on the shared mac
 * `stepSRTF` -- Shortest Remaining Time First, preemptive (`stepPreemptive`, priority
   `-remaining`);
 * `stepRR` -- Round Robin with a quantum.  It carries a slice counter, so it acts on an
-  `RRState` and has its own run, `runStepsRR`.
+  `RRState` and has its own run, `runStepsRR`; `runRR` is that run as a run function on
+  `SchedState`.
 -/
 
 -- ─── SRTF (preemptive: on every tick, run the shortest remaining time) ─────────
@@ -115,6 +116,19 @@ def runStepsRR [SchedStateMethods AperiodicProcess] (quantum : Nat)
     let prev := runStepsRR quantum arrivalStream n
     stepRR quantum
       {prev with sched := {prev.sched with ready := prev.sched.ready ++ arrivalStream (n + 1)} }
+
+/-- **The run of Round Robin** with quantum `quantum`, in the shape of a run function
+`(ℕ → List AperiodicProcess) → ℕ → SchedState`, which is what `runWait`, the run-level
+properties (`StarvationFreeRun`, `HasConvoyEffectAtSomeDispatchRun`, …) and the bridge to
+schedules take: `runRR quantum arrival_stream t` is the `SchedState` inside
+`runStepsRR quantum arrival_stream t`, the state after step `t`. -/
+def runRR (quantum : ℕ) : (ℕ → List AperiodicProcess) → ℕ → SchedState :=
+  fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched
+
+/-- `runRR` unfolds to the `SchedState` of `runStepsRR`. -/
+@[simp] theorem runRR_apply (quantum : ℕ) (arrival_stream : ℕ → List AperiodicProcess) (t : ℕ) :
+    runRR quantum arrival_stream t = (runStepsRR quantum arrival_stream t).sched :=
+  rfl
 
 def runStepsRRAccumulateResults [SchedStateMethods AperiodicProcess] (quantum : Nat)
   (num_steps := default_num_steps)

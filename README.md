@@ -117,7 +117,7 @@ Proved for batches (`AllArrivalsAtZero`: fresh jobs with distinct ids, all relea
 
 #### SRTF (preemptive SJF) minimizes average waiting time — same result for the preemptive case. Requires reasoning about preemption points.
 
-Proved: `ConvoyEffect.srtfMinimisesWait` (SRTFOptimality.lean). On every well-formed stream, at every horizon, SRTF's total waiting time is at most that of any admissible schedule, preemptive or not, clairvoyant or not. This is in the discrete tick model with no context-switch cost, and optimality is weak (`≤`). Corollaries: SRTF waits no longer than any non-preemptive state-select policy (`ConvoyEffect.srtf_le_runStateSelect`) or any job-conserving step function (`ConvoyEffect.srtf_le_runWait_of_conservesJobs`); Round Robin is not covered.
+Proved: `ConvoyEffect.srtfMinimisesWait` (SRTFOptimality.lean). On every well-formed stream, at every horizon, SRTF's total waiting time is at most that of any admissible schedule, preemptive or not, clairvoyant or not. This is in the discrete tick model with no context-switch cost, and optimality is weak (`≤`). Corollaries: SRTF waits no longer than any non-preemptive state-select policy (`ConvoyEffect.srtf_le_runStateSelect`), any job-conserving step function (`ConvoyEffect.srtf_le_runWait_of_conservesJobs`), Round Robin with any quantum (`ConvoyEffect.srtf_le_runRR`), and any scheduler whose run conserves jobs at every step (`ConvoyEffect.srtf_le_runWait_of_conservesJobsAtEveryStep`). That run-level hypothesis is what a scheduler with extra state, such as a multilevel feedback queue or aging, would need to prove to be covered; none of those is formalised.
 
 #### EDF is optimal for single-processor deadline scheduling — if any algorithm can meet all deadlines, EDF can.
 

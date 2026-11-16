@@ -93,8 +93,7 @@ theorem rr_convoy_eq_fcfs (quantum L : ℕ) (hL : 0 < L) (hq : L ≤ quantum) :
 the queue, so on the convoy with `L = 2` it dispatches the long job (2 ticks) at
 step 0 while the short job (1 tick) waits. -/
 theorem rr_hasConvoyEffectAtSomeDispatch (quantum : ℕ) :
-    HasConvoyEffectAtSomeDispatchRun
-      (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) := by
+    HasConvoyEffectAtSomeDispatchRun (runRR quantum) := by
   rw [hasConvoyEffectAtSomeDispatchRun_iff]
   refine ⟨_, convoyArrivalStream_wf 2 (by omega), 0, longJob 2 (by omega),
     dispatchesAt_zero ?_, shortJob, ?_, by simp [shortJob, longJob]⟩ <;>
@@ -103,8 +102,7 @@ theorem rr_hasConvoyEffectAtSomeDispatch (quantum : ℕ) :
 /-- **RR has the convoy effect at some step, for every quantum** (a consequence of the
 convoy effect at some dispatch). -/
 theorem rr_hasConvoyEffectAtSomeStep (quantum : ℕ) :
-    HasConvoyEffectAtSomeStepRun
-      (fun arrival_stream t => (runStepsRR quantum arrival_stream t).sched) :=
+    HasConvoyEffectAtSomeStepRun (runRR quantum) :=
   hasConvoyEffectAtSomeDispatchRun_imp_atSomeStep (rr_hasConvoyEffectAtSomeDispatch quantum)
 
 /-! ### A smaller quantum is not better in general -/

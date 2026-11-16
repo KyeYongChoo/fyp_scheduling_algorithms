@@ -22,7 +22,7 @@ to actual executions.
   each job's time in the ready queue -- the textbook definition -- and it makes
   sense for any scheduler presented as a run function: non-preemptive,
   preemptive (`runSteps · stepSRTF`) or Round Robin
-  (`fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
+  (`runRR q`, the `SchedState` of `runStepsRR q`).
 * `dispatchOrder select l` is the order in which a non-preemptive policy
   dispatches a batch `l`: ask `select`, remove its choice, repeat.  It is a
   permutation of `l` (`dispatchOrder_perm`).

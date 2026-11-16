@@ -40,7 +40,8 @@ The folder answers two questions, in this order.
      state-select policy is optimal.
    * `ShortHorizon`: the bound is sharp, SJF is optimal over the first `T ≤ 3` steps.
    * `SJFOptimalityGivenSamePast`: what does hold for SJF.
-   * `Schedules`: admissible schedules, the yardstick that includes preemption.
+   * `Schedules`: admissible schedules, the yardstick that includes preemption, and the
+     bridge from runs to schedules (job-conserving steps, Round Robin).
    * `PreemptiveOptimality`: preemption removes the impossibility (two witness streams).
    * `SRTFOptimality`: SRTF waits least on every stream (Schrage 1968).
 -/

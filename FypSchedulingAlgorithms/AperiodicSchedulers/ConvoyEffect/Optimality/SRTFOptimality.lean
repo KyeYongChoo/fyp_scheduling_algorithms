@@ -23,16 +23,17 @@ admissible schedule (`Schedules`): preemptive or not, idling or not, clairvoyant
 not.  So, unlike the non-preemptive case
 (`no_optimal_nonPreemptive_on_every_stream`), there is a scheduler that sees only the
 current state and is optimal on every stream, and it is SRTF; in particular it waits no longer than
-any non-preemptive state-select policy (`srtf_le_runStateSelect`) or any other
-job-conserving step function (`srtf_le_runWait_of_conservesJobs`).
+any non-preemptive state-select policy (`srtf_le_runStateSelect`), any other
+job-conserving step function (`srtf_le_runWait_of_conservesJobs`), Round Robin with any
+quantum (`srtf_le_runRR`), and any scheduler whose run conserves jobs at every step
+(`srtf_le_runWait_of_conservesJobsAtEveryStep`), the hook for schedulers that carry
+extra state, such as a multilevel feedback queue or aging (not formalised here).
 
 **Scope.**  The result holds inside the discrete model of `Schedules`: the
 shared tick convention of `Step`, no context-switch cost, and well-formed streams
 (`WellFormedStream`), which release no id twice.  "Optimal" means against every
-admissible schedule.  The corollaries do not cover Round Robin, which has no bridge
-for its `RRState`.
-Optimality is weak (`≤`): strictly less waiting is only claimed on the witness
-streams of `PreemptiveOptimality` (`srtf_beats_every_nonPreemptive`).
+admissible schedule.  Optimality is weak (`≤`): strictly less waiting is only claimed on the
+witness streams of `PreemptiveOptimality` (`srtf_beats_every_nonPreemptive`).
 
 **Stronger, pointwise.**  After every step SRTF has no more unfinished jobs
 than any admissible schedule (`srtf_unfinished_le`), and so no more waiting
@@ -157,7 +158,7 @@ include h_wf
 theorem srtf_remWork_of_none {t : ℕ} (h : runSchedule stepSRTF arrival_stream t = none) :
     ∀ u ∈ remWork arrival_stream (runSchedule stepSRTF arrival_stream) t, u = 0 := by
   have h_run : (runSteps arrival_stream stepSRTF t).running = none := by
-    simpa [runSchedule] using h
+    simpa [runSchedule, scheduleOfRun] using h
   have h_sys := inSystem_perm stepSRTF_conservesJobs h_wf t
   rw [inSystem, srtf_ready_nil_of_idle arrival_stream t h_run, h_run] at h_sys
   have h_nil := List.eq_nil_of_length_eq_zero (by simpa using h_sys.length_eq.symm)
@@ -278,6 +279,19 @@ theorem srtf_le_runStateSelect {select : SchedState → Option AperiodicProcess}
       runWait (runStateSelect select) arrival_stream T :=
   srtf_le_runStateSelect_of srtfMinimisesWait h_mem h_wf T
 
+/-- **SRTF waits no longer than any scheduler whose run conserves jobs at every step**
+(`ConservesJobsAtEveryStep`: every job-conserving step function, Round Robin, and any
+scheduler with extra state that neither invents nor loses jobs), on every well-formed
+stream, at every horizon. -/
+theorem srtf_le_runWait_of_conservesJobsAtEveryStep
+    {run : (ℕ → List AperiodicProcess) → ℕ → SchedState}
+    {arrival_stream : ℕ → List AperiodicProcess}
+    (h_run : ConservesJobsAtEveryStep arrival_stream (run arrival_stream))
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
+    runWait (runSteps · stepSRTF) arrival_stream T ≤ runWait run arrival_stream T := by
+  rw [h_run.runWait_eq_schedWait h_wf]
+  exact srtfMinimisesWait arrival_stream h_wf _ (h_run.scheduleOfRun_isAdmissible h_wf) T
+
 /-- **SRTF waits no longer than any job-conserving scheduler** (every preemptive
 priority scheduler, every non-preemptive state-select policy), on every well-formed
 stream, at every horizon. -/
@@ -285,9 +299,16 @@ theorem srtf_le_runWait_of_conservesJobs {step : SchedState → SchedState}
     (h_step : ConservesJobs step) {arrival_stream : ℕ → List AperiodicProcess}
     (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
     runWait (runSteps · stepSRTF) arrival_stream T ≤
-      runWait (runSteps · step) arrival_stream T := by
-  rw [runWait_eq_schedWait h_step h_wf]
-  exact srtfMinimisesWait arrival_stream h_wf _
-    (runSchedule_isAdmissible h_step h_wf) T
+      runWait (runSteps · step) arrival_stream T :=
+  srtf_le_runWait_of_conservesJobsAtEveryStep (run := (runSteps · step))
+    (runSteps_conservesJobsAtEveryStep h_step arrival_stream) h_wf T
+
+/-- **SRTF waits no longer than Round Robin**, for every quantum (quantum 0 behaves as 1),
+on every well-formed stream, at every horizon. -/
+theorem srtf_le_runRR (quantum : ℕ) {arrival_stream : ℕ → List AperiodicProcess}
+    (h_wf : WellFormedStream arrival_stream) (T : ℕ) :
+    runWait (runSteps · stepSRTF) arrival_stream T ≤ runWait (runRR quantum) arrival_stream T :=
+  srtf_le_runWait_of_conservesJobsAtEveryStep (run := runRR quantum)
+    (runRR_conservesJobsAtEveryStep quantum arrival_stream) h_wf T
 
 end ConvoyEffect

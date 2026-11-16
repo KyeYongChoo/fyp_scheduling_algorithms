@@ -28,7 +28,7 @@ for everyone and handicaps no one. The periodic miss rule absorbs it (see *Miss 
 **Run, run function.** A run is the sequence of states of a scheduler on a stream. A *run
 function* `run : (ℕ → List AperiodicProcess) → ℕ → SchedState` gives the state after each step.
 Properties are stated over run functions so that Round Robin, whose state is an `RRState`, fits
-too (`fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
+too (`runRR q`, defined as `fun arrival_stream t => (runStepsRR q arrival_stream t).sched`).
 
 **Horizon.** The `T` in `runWait run arrival_stream T`, `schedWait arrival_stream σ T`, `waitFrom step s T`: the number
 of steps measured (steps `0, …, T - 1`). Waiting after that is not counted. Results say at which
@@ -120,6 +120,18 @@ the running job ticked and dropped exactly when it finished. **Not the same as
 work-conserving:** a state-select policy that idles on purpose is job-conserving but not
 work-conserving. Job conservation is what makes a run an admissible schedule.
 
+**Conserves jobs at every step.** `ConservesJobsAtEveryStep arrival_stream run`
+(`ConvoyEffect/Optimality/Schedules.lean`). The same property asked of a run instead of a step
+function: after step 0 the jobs in the system are the arrivals of time 0, and after step `t + 1`
+they are those after step `t` plus the arrivals of time `t + 1`, with the running job ticked and
+dropped exactly when it finished. The run of a job-conserving step has it
+(`runSteps_conservesJobsAtEveryStep`), and so does every Round Robin run
+(`runRR_conservesJobsAtEveryStep`), although `stepRR` is not a `SchedState → SchedState`.
+It is the hook for any scheduler that carries extra state (queue levels of a multilevel feedback
+queue, aging counters); none of those is formalised. The extra state may record levels or
+counters, but every waiting job must sit in `ready` (`runWait` counts only `ready`); an MLFQ
+whose queues live in the extra state would have to keep `ready` as their concatenation.
+
 **Priority run invariant.** `runSteps_running_max` (`PreemptiveRuns.lean`). In every state of a
 `stepPreemptive f` run, the running job's priority is at least that of every waiting job. It
 needs no hypothesis on `f`.
@@ -158,9 +170,12 @@ have been released and still have work left. Anything else is allowed: preemptio
 order, clairvoyance. This is the "every possible way of running the jobs" that optimality
 theorems compare against.
 
-**Run as schedule.** `runSchedule step arrival_stream` is the schedule a run follows. For a job-conserving
-step it is admissible, and the run waits what the schedule waits. The invariant behind this is
-`inSystem_perm`.
+**Run as schedule.** `scheduleOfRun run` is the schedule a run follows (the id of the job on the
+CPU after each step); `runSchedule step arrival_stream` is the same for the run of a step
+function. For a run that conserves jobs at every step (every job-conserving step function, Round
+Robin) it is admissible, and the run waits what the schedule waits
+(`ConservesJobsAtEveryStep.runWait_eq_schedWait`, `runWait_eq_schedWait`). The invariant behind
+this is `ConservesJobsAtEveryStep.inSystem_perm` (step-level corollary `inSystem_perm`).
 
 **Optimal.** Weak: waits *no longer than* (`≤`) every competitor in the stated class. The class
 is always stated (non-preemptive state-select policies, admissible schedules, fixed
