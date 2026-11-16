@@ -128,7 +128,9 @@ dropped exactly when it finished. The run of a job-conserving step has it
 (`runSteps_conservesJobsAtEveryStep`), and so does every Round Robin run
 (`runStepsRR_conservesJobsAtEveryStep`), although `stepRR` is not a `SchedState → SchedState`.
 It is the hook for any scheduler that carries extra state (queue levels of a multilevel feedback
-queue, aging counters); none of those is formalised.
+queue, aging counters); none of those is formalised. The extra state may record levels or
+counters, but every waiting job must sit in `ready` (`runWait` counts only `ready`); an MLFQ
+whose queues live in the extra state would have to keep `ready` as their concatenation.
 
 **Priority run invariant.** `runSteps_running_max` (`PreemptiveRuns.lean`). In every state of a
 `stepPreemptive f` run, the running job's priority is at least that of every waiting job. It
@@ -173,7 +175,7 @@ CPU after each step); `runSchedule step arrival_stream` is the same for the run 
 function. For a run that conserves jobs at every step (every job-conserving step function, Round
 Robin) it is admissible, and the run waits what the schedule waits
 (`ConservesJobsAtEveryStep.runWait_eq_schedWait`, `runWait_eq_schedWait`). The invariant behind
-this is `inSystem_perm`.
+this is `ConservesJobsAtEveryStep.inSystem_perm` (step-level corollary `inSystem_perm`).
 
 **Optimal.** Weak: waits *no longer than* (`≤`) every competitor in the stated class. The class
 is always stated (non-preemptive state-select policies, admissible schedules, fixed

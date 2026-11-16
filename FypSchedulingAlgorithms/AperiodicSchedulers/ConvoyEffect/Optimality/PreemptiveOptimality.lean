@@ -150,7 +150,8 @@ theorem srtf_runWait_streamA (T : ℕ) : runWait (runSteps · stepSRTF) streamA 
 /-- On stream B, SRTF puts the unit job on the CPU after step 1, preempting the
 long job. -/
 theorem srtf_streamB_schedule_one : runSchedule stepSRTF streamB 1 = some 1 := by
-  simp [runSchedule, streamB, (srtf_late_convoy_completes 4 (by omega)).1, lateShortJob]
+  simp [runSchedule, scheduleOfRun, streamB, (srtf_late_convoy_completes 4 (by omega)).1,
+    lateShortJob]
 
 /-- After step 0 of stream B, SRTF has the long job on the CPU and nobody
 waits. -/

@@ -57,7 +57,7 @@ less the ticks the schedule gave it.
   `inSystem_perm`, `runSchedule_isAdmissible`, `ready_length_eq_waiting`,
   `runWait_eq_schedWait`;
 * Round Robin, for every quantum (`runStepsRR_conservesJobsAtEveryStep`,
-  `runStepsRR_isAdmissible`, `runWait_runStepsRR_eq_schedWait`).  `stepRR` acts on an
+  `scheduleOfRun_runStepsRR_isAdmissible`, `runWait_runStepsRR_eq_schedWait`).  `stepRR` acts on an
   `RRState` and its choice depends on the slice counter `ticksUsed`, so it is not a
   `SchedState → SchedState`; for each fixed counter its step conserves jobs
   (`stepRR_conservesJobs`), and that is all the run needs.
@@ -65,7 +65,10 @@ less the ticks the schedule gave it.
 The run-level predicate is the hook for any other scheduler that carries extra state
 from step to step, such as a multilevel feedback queue (queue levels) or aging
 (waiting counters): proving its run conserves jobs at every step is enough for the
-bridge.  No such scheduler is formalised here.
+bridge.  The extra state may record levels or counters, but every waiting job must sit
+in `ready` (`runWait` counts only `ready`); an MLFQ whose queues live in the extra state
+would have to keep `ready` as their concatenation.  No such scheduler is formalised
+here.
 
 **Assumptions.**  Streams are well formed (`WellFormedStream`).  In particular no
 id is released twice (`WellFormedStream.ids_nodup`): were a job listed twice, a run
@@ -275,7 +278,10 @@ This is `ConservesJobs` asked of a run instead of a step function
 `SchedState` after each step, it also covers schedulers that carry extra state from step to
 step and so are not a `SchedState → SchedState`: Round Robin's slice counter
 (`runStepsRR_conservesJobsAtEveryStep`), and in the same way the queue levels of a multilevel
-feedback queue or the counters of an aging scheme, which are not formalised here. -/
+feedback queue or the counters of an aging scheme, which are not formalised here.  The extra
+state may record levels or counters, but every waiting job must sit in `ready` (`runWait`
+counts only `ready`); an MLFQ whose queues live in the extra state would have to keep `ready`
+as their concatenation. -/
 def ConservesJobsAtEveryStep (arrival_stream : ℕ → List AperiodicProcess)
     (run : ℕ → SchedState) : Prop :=
   inSystem (run 0) ~ arrival_stream 0 ∧
@@ -333,7 +339,7 @@ def scheduleOfRun (run : ℕ → SchedState) : Schedule :=
 step (`scheduleOfRun` of `runSteps`, `runSchedule_eq_scheduleOfRun`). -/
 def runSchedule (step : SchedState → SchedState) (arrival_stream : ℕ → List AperiodicProcess) :
     Schedule :=
-  fun t => (runSteps arrival_stream step t).running.map (·.id)
+  scheduleOfRun (runSteps arrival_stream step)
 
 /-- `runSchedule` is `scheduleOfRun` of `runSteps`, by definition. -/
 theorem runSchedule_eq_scheduleOfRun (step : SchedState → SchedState)
@@ -540,10 +546,10 @@ end Bridge
 
 /-! ## Round Robin -/
 
-/-- **A Round Robin run is an admissible schedule**, for every quantum, on every
-well-formed stream. -/
-theorem runStepsRR_isAdmissible (quantum : ℕ) {arrival_stream : ℕ → List AperiodicProcess}
-    (h_wf : WellFormedStream arrival_stream) :
+/-- **A Round Robin run is an admissible schedule** (the schedule it follows is admissible),
+for every quantum, on every well-formed stream. -/
+theorem scheduleOfRun_runStepsRR_isAdmissible (quantum : ℕ)
+    {arrival_stream : ℕ → List AperiodicProcess} (h_wf : WellFormedStream arrival_stream) :
     IsAdmissible arrival_stream
       (scheduleOfRun fun t => (runStepsRR quantum arrival_stream t).sched) :=
   (runStepsRR_conservesJobsAtEveryStep quantum arrival_stream).scheduleOfRun_isAdmissible h_wf

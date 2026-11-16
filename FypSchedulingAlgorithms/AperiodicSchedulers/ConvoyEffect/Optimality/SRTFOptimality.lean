@@ -158,7 +158,7 @@ include h_wf
 theorem srtf_remWork_of_none {t : ℕ} (h : runSchedule stepSRTF arrival_stream t = none) :
     ∀ u ∈ remWork arrival_stream (runSchedule stepSRTF arrival_stream) t, u = 0 := by
   have h_run : (runSteps arrival_stream stepSRTF t).running = none := by
-    simpa [runSchedule] using h
+    simpa [runSchedule, scheduleOfRun] using h
   have h_sys := inSystem_perm stepSRTF_conservesJobs h_wf t
   rw [inSystem, srtf_ready_nil_of_idle arrival_stream t h_run, h_run] at h_sys
   have h_nil := List.eq_nil_of_length_eq_zero (by simpa using h_sys.length_eq.symm)
