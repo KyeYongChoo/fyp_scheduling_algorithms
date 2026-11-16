@@ -5,6 +5,7 @@ Authors: Choo Kye Yong
 -/
 import FypSchedulingAlgorithms.AperiodicSchedulers.ConvoyEffect.Optimality.NoOptimalNonPreemptiveOnEveryStream
 import FypSchedulingAlgorithms.AperiodicSchedulers.PreemptiveLemmas
+import FypSchedulingAlgorithms.AperiodicSchedulers.Schedule
 import FypSchedulingAlgorithms.PreemptiveRuns
 import FypSchedulingAlgorithms.ListLemmas
 
@@ -12,10 +13,11 @@ import FypSchedulingAlgorithms.ListLemmas
 # Admissible schedules
 
 To compare a scheduler with *every* possible way of running the jobs --
-preemptive or not, clairvoyant or not -- this file describes runs without a
-step function: a **schedule** `σ : ℕ → Option ℕ` names, for each step `t`, the
-job (by id) that holds the CPU after step `t`.  As in `runSteps`
-(see the tick convention in `Step`), that job receives the tick of step `t + 1`;
+preemptive or not, clairvoyant or not -- this file uses runs without a
+step function: a **schedule** `σ : ℕ → Option ℕ` (`Schedule`, defined in
+`AperiodicSchedulers/Schedule` with `ticksBefore`, `scheduleOfRun` and `runSchedule`)
+names, for each step `t`, the job (by id) that holds the CPU after step `t`.  As in
+`runSteps` (see the tick convention in `Step`), that job receives the tick of step `t + 1`;
 the jobs after step `t` are those released at times `0, …, t`
 (`arrivedBy`), and job `i` has had `ticksBefore σ i t` ticks by then.
 
@@ -81,16 +83,7 @@ namespace ConvoyEffect
 open scoped List
 open Preemptive
 
-/-! ## Schedules -/
-
-/-- A **schedule** says, for each step `t`, which job (by id) holds the CPU after step `t`, if any.
-That job receives the tick of step `t + 1`. -/
-abbrev Schedule := ℕ → Option ℕ
-
-/-- The ticks job `i` has received from schedule `σ` before step `t`:
-one for each earlier step `t' < t` in which it held the CPU. -/
-def ticksBefore (σ : Schedule) (i t : ℕ) : ℕ :=
-  (List.range t).countP fun t' => σ t' = some i
+/-! ## Admissible schedules -/
 
 /-- **Admissible schedules.** Whenever `σ` puts job `i` on the CPU after step `t`,
 a job with id `i` has been released by time `t` and still has work left: it has
@@ -181,34 +174,6 @@ theorem arrivedBy_id_inj {arrival_stream : ℕ → List AperiodicProcess}
   obtain ⟨t1, -, hp⟩ := mem_arrivedBy.mp hp
   obtain ⟨t2, -, hq⟩ := mem_arrivedBy.mp hq
   exact (h_wf.unique p q t1 t2 hp hq h_id).2
-
-/-- No ticks before step 0. -/
-@[simp] theorem ticksBefore_zero (σ : Schedule) (i : ℕ) : ticksBefore σ i 0 = 0 := rfl
-
-/-- Step `t` adds a tick to the job on the CPU after it. -/
-theorem ticksBefore_succ (σ : Schedule) (i t : ℕ) :
-    ticksBefore σ i (t + 1) = ticksBefore σ i t + if σ t = some i then 1 else 0 := by
-  simp [ticksBefore, List.range_succ, List.countP_append]
-
-/-- A job that never held the CPU before step `t` has had no ticks. -/
-theorem ticksBefore_eq_zero {σ : Schedule} {i t : ℕ} (h : ∀ t' < t, σ t' ≠ some i) :
-    ticksBefore σ i t = 0 := by
-  unfold ticksBefore
-  rw [List.countP_eq_zero]
-  intro t' ht'
-  simpa using h t' (List.mem_range.mp ht')
-
-/-- Ticks only accumulate. -/
-theorem ticksBefore_mono (σ : Schedule) (i : ℕ) {t t' : ℕ} (h : t ≤ t') :
-    ticksBefore σ i t ≤ ticksBefore σ i t' := by
-  induction t', h using Nat.le_induction with
-  | base => exact le_rfl
-  | succ n _ ih => rw [ticksBefore_succ]; omega
-
-/-- Ticking `σ`'s job of step `t` is the only change from step `t` to `t + 1`. -/
-theorem ticksBefore_succ_of_ne {σ : Schedule} {i t : ℕ} (h : σ t ≠ some i) :
-    ticksBefore σ i (t + 1) = ticksBefore σ i t := by
-  simp [ticksBefore_succ, h]
 
 /-- In a list in which no two jobs share an id, exactly one job has the id of
 `q`, if `q` is in it. -/
@@ -328,23 +293,7 @@ theorem runRR_conservesJobsAtEveryStep (quantum : ℕ)
   simpa [inSystem, runStepsRR] using
     stepRR_conservesJobs quantum 0 { SchedStateMethods.init with ready := arrival_stream 0 }
 
-/-! ## Runs as schedules -/
-
-/-- The schedule a run follows: the id of the job on the CPU after each step. -/
-def scheduleOfRun (run : ℕ → SchedState) : Schedule :=
-  fun t => (run t).running.map (·.id)
-
-/-- The schedule a run of `step` follows: the id of the job on the CPU after each
-step (`scheduleOfRun` of `runSteps`, `runSchedule_eq_scheduleOfRun`). -/
-def runSchedule (step : SchedState → SchedState) (arrival_stream : ℕ → List AperiodicProcess) :
-    Schedule :=
-  scheduleOfRun (runSteps arrival_stream step)
-
-/-- `runSchedule` is `scheduleOfRun` of `runSteps`, by definition. -/
-theorem runSchedule_eq_scheduleOfRun (step : SchedState → SchedState)
-    (arrival_stream : ℕ → List AperiodicProcess) :
-    runSchedule step arrival_stream = scheduleOfRun (runSteps arrival_stream step) :=
-  rfl
+/-! ## Jobs as a schedule leaves them -/
 
 /-- Job `p` as it stands after step `t` of `σ`: its burst less the ticks it has had. -/
 def jobAt (σ : Schedule) (t : ℕ) (p : AperiodicProcess) : AperiodicProcess :=

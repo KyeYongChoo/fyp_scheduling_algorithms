@@ -44,4 +44,9 @@ The folder answers two questions, in this order.
      bridge from runs to schedules (job-conserving steps, Round Robin).
    * `PreemptiveOptimality`: preemption removes the impossibility (two witness streams).
    * `SRTFOptimality`: SRTF waits least on every stream (Schrage 1968).
+
+Two pieces of general machinery that the folder uses are not about convoys and live
+outside it: batches (`AllArrivalsAtZero`, `allArrivalsAtZeroStream`) in `Step`, and what a
+schedule is (`Schedule`, `ticksBefore`, `scheduleOfRun`, `runSchedule`) in
+`AperiodicSchedulers/Schedule`.
 -/
