@@ -1,7 +1,10 @@
 name: Lean Action CI
 
+# Branches are built through their pull request, so a push to a PR branch does not run CI
+# a second time; pushes to master still build.
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -35,4 +38,8 @@ jobs:
       - uses: leanprover/lean-action@v1
         with:
           use-mathlib-cache: false
+      # The documentation site is only published from master, and generating it for Mathlib
+      # and the other dependencies is slow and can run the runner out of memory, so branch
+      # and pull-request runs only build the proofs.
       - uses: leanprover-community/docgen-action@v1
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
