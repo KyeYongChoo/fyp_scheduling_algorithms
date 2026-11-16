@@ -28,7 +28,7 @@ every job eventually runs (`Starvation/`).
 3. **`FCFSResponseTime` -- FCFS on a batch, and RR with a large quantum.**  FCFS first
    dispatches job `i` at step `sumOfBurstsAhead l i` (`fcfs_allArrivalsAtZero_isFirstDispatchAt`);
    once the quantum covers every burst, RR first dispatches every job exactly when FCFS does
-   (`rr_isFirstDispatchAt_iff_fcfs_of_large_quantum`).
+   (`rr_allArrivalsAtZero_isFirstDispatchAt_iff_fcfs_of_large_quantum`).
 
 ## Round Robin's three properties
 
@@ -42,5 +42,5 @@ Response time is where Round Robin's quantum pays off; the other two properties 
   smaller quantum can finish jobs later (`rr_smaller_quantum_not_better`).
 * **Response time monotone in the quantum** (`ResponseTime/`): on a batch, a smaller quantum
   never delays any job's first dispatch (`rr_allArrivalsAtZero_firstDispatch_mono`), and the
-  largest quanta give FCFS's (`rr_isFirstDispatchAt_iff_fcfs_of_large_quantum`).
+  largest quanta give FCFS's (`rr_allArrivalsAtZero_isFirstDispatchAt_iff_fcfs_of_large_quantum`).
 -/

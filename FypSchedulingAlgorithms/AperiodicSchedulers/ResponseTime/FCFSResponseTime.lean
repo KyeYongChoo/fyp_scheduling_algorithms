@@ -18,8 +18,8 @@ is first dispatched once every job ahead of it has run its whole burst, at step
 Round Robin's first round serves the same jobs in the same order, each for one slice
 `min quantum burst` (`RRResponseTime`).  Once the quantum covers every burst, every slice is
 a whole burst, and RR first dispatches every job of the batch exactly when FCFS does
-(`rr_isFirstDispatchAt_iff_fcfs_of_large_quantum`).  With a smaller quantum RR's first
-dispatch step can only be earlier (`rr_allArrivalsAtZero_firstDispatch_mono`).
+(`rr_allArrivalsAtZero_isFirstDispatchAt_iff_fcfs_of_large_quantum`).  With a smaller
+quantum RR's first dispatch step is no later (`rr_allArrivalsAtZero_firstDispatch_mono`).
 -/
 
 namespace ResponseTime
@@ -39,24 +39,18 @@ theorem sumOfBurstsAhead_succ (l : List AperiodicProcess) {i : ℕ} (hi : i < l.
     Option.toList_some, List.map_append, List.sum_append, List.map_singleton,
     List.sum_singleton]
 
-/-- Once the quantum covers every burst, RR's formula is FCFS's. -/
-theorem sumOfFirstSlicesAhead_eq_sumOfBurstsAhead {quantum : ℕ} {l : List AperiodicProcess}
-    (h : ∀ p ∈ l, p.burst ≤ quantum) (i : ℕ) :
-    sumOfFirstSlicesAhead quantum l i = sumOfBurstsAhead l i :=
-  sumOfFirstSlicesAhead_of_large_quantum h i
-
 /-! ## FCFS on a batch, job by job -/
 
 /-- FCFS on batch `l` at the `k`-th tick of job `i`: job `i` is on the CPU with `k` ticks
 done, and the jobs after it wait in order. -/
-def FCFSAt (l : List AperiodicProcess) (i : ℕ) (hi : i < l.length) (k : ℕ)
+def FCFSAllArrivalsAtZeroAt (l : List AperiodicProcess) (i : ℕ) (hi : i < l.length) (k : ℕ)
     (s : SchedState) : Prop :=
   s.running = some { l[i] with remaining := l[i].burst - k } ∧ s.ready = l.drop (i + 1)
 
 /-- Step 0: FCFS dispatches the first job of the batch. -/
-theorem fcfs_start (l : List AperiodicProcess) (h_fresh : ∀ p ∈ l, p.remaining = p.burst)
-    (hl : 0 < l.length) :
-    FCFSAt l 0 hl 0 (runSteps (allArrivalsAtZeroStream l) stepFCFS 0) := by
+theorem fcfs_allArrivalsAtZero_start (l : List AperiodicProcess)
+    (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (hl : 0 < l.length) :
+    FCFSAllArrivalsAtZeroAt l 0 hl 0 (runSteps (allArrivalsAtZeroStream l) stepFCFS 0) := by
   cases l with
   | nil => simp at hl
   | cons p rest =>
@@ -73,9 +67,9 @@ theorem fcfs_start (l : List AperiodicProcess) (h_fresh : ∀ p ∈ l, p.remaini
       simp
 
 /-- Before its last tick, FCFS ticks the running job and leaves the queue alone. -/
-theorem fcfs_tick (l : List AperiodicProcess) (i : ℕ) (hi : i < l.length) (k : ℕ)
-    (s : SchedState) (h : FCFSAt l i hi k s) (hk : k + 1 < l[i].burst) :
-    FCFSAt l i hi (k + 1) (stepFCFS s) := by
+theorem fcfs_allArrivalsAtZero_tick (l : List AperiodicProcess) (i : ℕ) (hi : i < l.length) (k : ℕ)
+    (s : SchedState) (h : FCFSAllArrivalsAtZeroAt l i hi k s) (hk : k + 1 < l[i].burst) :
+    FCFSAllArrivalsAtZeroAt l i hi (k + 1) (stepFCFS s) := by
   obtain ⟨h_run, h_ready⟩ := h
   obtain ⟨h1, h2⟩ := stepNonPreemptive_tick selectFCFS s h_run (by simp; omega)
   refine ⟨?_, by rw [stepFCFS, h2, h_ready]⟩
@@ -83,10 +77,11 @@ theorem fcfs_tick (l : List AperiodicProcess) (i : ℕ) (hi : i < l.length) (k :
   simp [Nat.sub_sub]
 
 /-- On job `i`'s last tick, FCFS completes it and dispatches job `i + 1`. -/
-theorem fcfs_next (l : List AperiodicProcess) (h_fresh : ∀ p ∈ l, p.remaining = p.burst)
-    (i : ℕ) (hi : i < l.length) (hi1 : i + 1 < l.length) (s : SchedState)
-    (h : FCFSAt l i hi (l[i].burst - 1) s) :
-    FCFSAt l (i + 1) hi1 0 (stepFCFS s) := by
+theorem fcfs_allArrivalsAtZero_next (l : List AperiodicProcess)
+    (h_fresh : ∀ p ∈ l, p.remaining = p.burst) (i : ℕ) (hi : i < l.length)
+    (hi1 : i + 1 < l.length) (s : SchedState)
+    (h : FCFSAllArrivalsAtZeroAt l i hi (l[i].burst - 1) s) :
+    FCFSAllArrivalsAtZeroAt l (i + 1) hi1 0 (stepFCFS s) := by
   obtain ⟨h_run, h_ready⟩ := h
   rw [List.drop_eq_getElem_cons hi1] at h_ready
   have h_pos := l[i].burst_exceed_zero
@@ -101,7 +96,7 @@ FCFS is `k` ticks into job `i`. -/
 theorem fcfs_allArrivalsAtZero_at (l : List AperiodicProcess)
     (h_fresh : ∀ p ∈ l, p.remaining = p.burst) :
     ∀ (i : ℕ) (hi : i < l.length) (k : ℕ), k < l[i].burst →
-      FCFSAt l i hi k
+      FCFSAllArrivalsAtZeroAt l i hi k
         (runSteps (allArrivalsAtZeroStream l) stepFCFS (sumOfBurstsAhead l i + k)) := by
   intro i
   induction i with
@@ -111,11 +106,11 @@ theorem fcfs_allArrivalsAtZero_at (l : List AperiodicProcess)
     | zero =>
       intro _
       rw [show sumOfBurstsAhead l 0 + 0 = 0 by simp [sumOfBurstsAhead]]
-      exact fcfs_start l h_fresh hi
+      exact fcfs_allArrivalsAtZero_start l h_fresh hi
     | succ k ih =>
       intro hk
       rw [← Nat.add_assoc, runSteps_succ_of_nil stepFCFS _ _ rfl]
-      exact fcfs_tick l 0 hi k _ (ih (by omega)) hk
+      exact fcfs_allArrivalsAtZero_tick l 0 hi k _ (ih (by omega)) hk
   | succ i ih =>
     intro hi k
     have hi' : i < l.length := by omega
@@ -128,11 +123,11 @@ theorem fcfs_allArrivalsAtZero_at (l : List AperiodicProcess)
         rw [sumOfBurstsAhead_succ l hi']
         omega
       rw [h_step, runSteps_succ_of_nil stepFCFS _ _ rfl]
-      exact fcfs_next l h_fresh i hi' hi _ (ih hi' _ (by omega))
+      exact fcfs_allArrivalsAtZero_next l h_fresh i hi' hi _ (ih hi' _ (by omega))
     | succ k ihk =>
       intro hk
       rw [← Nat.add_assoc, runSteps_succ_of_nil stepFCFS _ _ rfl]
-      exact fcfs_tick l (i + 1) hi k _ (ihk (by omega)) hk
+      exact fcfs_allArrivalsAtZero_tick l (i + 1) hi k _ (ihk (by omega)) hk
 
 /-- Every step before `sumOfBurstsAhead l i` falls inside the burst of some earlier job. -/
 theorem sumOfBurstsAhead_decompose (l : List AperiodicProcess) :
@@ -166,9 +161,7 @@ theorem fcfs_allArrivalsAtZero_isFirstDispatchAt {l : List AperiodicProcess}
     simp only [runSchedule, scheduleOfRun,
       (fcfs_allArrivalsAtZero_at l h_fresh j (by omega) k hk).1, Option.map_some]
     intro h_id
-    have h_eq : (l.map (·.id))[j]'(by simp; omega) = (l.map (·.id))[i]'(by simp; omega) := by
-      simpa using h_id
-    have := (h_atZero.2.getElem_inj_iff).mp h_eq
+    have := h_atZero.getElem_id_inj (i := j) (by omega) hi (by simpa using h_id)
     omega
 
 /-- **FCFS's response time on a batch** is `sumOfBurstsAhead l i`. -/
@@ -184,7 +177,7 @@ theorem fcfs_allArrivalsAtZero_hasResponseTime {l : List AperiodicProcess}
 /-- **RR with a large quantum first dispatches like FCFS.** On a batch, once the quantum
 covers every burst, Round Robin first puts job `i` on the CPU at step `t` exactly when FCFS
 does. -/
-theorem rr_isFirstDispatchAt_iff_fcfs_of_large_quantum {quantum : ℕ}
+theorem rr_allArrivalsAtZero_isFirstDispatchAt_iff_fcfs_of_large_quantum {quantum : ℕ}
     {l : List AperiodicProcess} (h_atZero : AllArrivalsAtZero l)
     (h_large : ∀ p ∈ l, p.burst ≤ quantum) (i : ℕ) (hi : i < l.length) (t : ℕ) :
     IsFirstDispatchAt (scheduleOfRun (runRR quantum (allArrivalsAtZeroStream l))) l[i].id t ↔
@@ -193,7 +186,7 @@ theorem rr_isFirstDispatchAt_iff_fcfs_of_large_quantum {quantum : ℕ}
     Nat.lt_of_lt_of_le l[i].burst_exceed_zero (h_large _ (List.getElem_mem hi))
   have h_rr := rr_allArrivalsAtZero_isFirstDispatchAt quantum hq h_atZero i hi
   have h_fcfs := fcfs_allArrivalsAtZero_isFirstDispatchAt h_atZero i hi
-  rw [sumOfFirstSlicesAhead_eq_sumOfBurstsAhead h_large] at h_rr
+  rw [sumOfFirstSlicesAhead_of_large_quantum h_large] at h_rr
   constructor
   · intro h
     rw [h.unique h_rr]

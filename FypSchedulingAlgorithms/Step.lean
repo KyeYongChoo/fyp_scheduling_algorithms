@@ -173,6 +173,17 @@ the start of a well-formed run (`allArrivalsAtZeroStream_wf`). -/
 def AllArrivalsAtZero (ready : List AperiodicProcess) : Prop :=
   (∀ p ∈ ready, p.arrival = 0 ∧ p.remaining = p.burst) ∧ (ready.map (·.id)).Nodup
 
+/-- In a batch, ids name positions: two positions holding jobs with the same id are the
+same position. -/
+theorem AllArrivalsAtZero.getElem_id_inj {ready : List AperiodicProcess}
+    (h_atZero : AllArrivalsAtZero ready) {i j : ℕ} (hi : i < ready.length)
+    (hj : j < ready.length) (h_id : ready[i].id = ready[j].id) : i = j := by
+  have h_pw := List.pairwise_iff_getElem.mp (List.pairwise_map.mp h_atZero.2)
+  rcases Nat.lt_trichotomy i j with h_lt | h_eq | h_gt
+  · exact absurd h_id (h_pw i j hi hj h_lt)
+  · exact h_eq
+  · exact absurd h_id.symm (h_pw j i hj hi h_gt)
+
 /-- The arrival stream that releases `ready` at time 0 and nothing afterwards. -/
 def allArrivalsAtZeroStream (ready : List AperiodicProcess) : ℕ → List AperiodicProcess
   | 0 => ready

@@ -7,7 +7,6 @@ import FypSchedulingAlgorithms.AperiodicSchedulers.ResponseTime.ResponseTimeSpec
 import FypSchedulingAlgorithms.AperiodicSchedulers.AperiodicStep
 import FypSchedulingAlgorithms.ProcessSimpLemmas
 import FypSchedulingAlgorithms.SchedStateSimpLemmas
-import Mathlib.Data.List.Nodup
 
 /-! # Round Robin response time on a batch
 
@@ -312,9 +311,7 @@ theorem rr_allArrivalsAtZero_running_ne (quantum : ℕ) (hq : 0 < quantum)
     (rr_first_round quantum hq l (fun p hp => (h_atZero.1 p hp).2) j (by omega) k hk).1]
   intro h_id
   simp only [Option.map_some, Option.some.injEq] at h_id
-  have h_eq : (l.map (·.id))[j]'(by simp; omega) = (l.map (·.id))[i]'(by simp; omega) := by
-    simpa using h_id
-  have := (h_atZero.2.getElem_inj_iff).mp h_eq
+  have := h_atZero.getElem_id_inj (by omega) hi h_id
   omega
 
 /-! ## Response time -/
